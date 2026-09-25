@@ -39,10 +39,10 @@ static volatile bool want_name;          // read the PC's name after pairing
 static uint32_t passkey, pair_until_ms;
 static char host[33];
 
-static bool bonded() { return NimBLEDevice::getNumBonds() > 0; }
+bool ble_bonded() { return NimBLEDevice::getNumBonds() > 0; }
 
 static void update_advertising() {
-    bool adv = pairing || (bonded() && !user_off && !connected);
+    bool adv = pairing || (ble_bonded() && !user_off && !connected);
     NimBLEAdvertising *a = NimBLEDevice::getAdvertising();
     if (adv && !a->isAdvertising()) a->start();
     else if (!adv && a->isAdvertising()) a->stop();
@@ -147,7 +147,7 @@ void ble_poll() {
 
 bt_state_t ble_state() {
     if (pairing) return BT_PAIRING;
-    if (!bonded()) return BT_UNPAIRED;
+    if (!ble_bonded()) return BT_UNPAIRED;
     if (connected) return BT_CONNECTED;
     return user_off ? BT_OFF : BT_WAITING;
 }
@@ -174,7 +174,7 @@ void ble_pair_start() {
 
 void ble_pair_cancel() {
     pairing = false;
-    if (connected && !bonded()) server->disconnect(conn_handle);
+    if (connected && !ble_bonded()) server->disconnect(conn_handle);
     update_advertising();
 }
 

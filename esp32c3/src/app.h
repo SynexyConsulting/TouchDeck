@@ -15,6 +15,7 @@ struct app_t {
     volatile bool in_bt;            // Settings drilled into the Bluetooth page
     volatile uint32_t redraw_seq;   // bump to make the render task redraw
     volatile bool helper;           // PC helper is talking to us over USB
+    volatile uint8_t pc_leds;       // helper's lock-key state (LEDS)
     volatile int time_s = -1;       // seconds since midnight from the helper, -1 = unknown
     volatile uint32_t frames;
 

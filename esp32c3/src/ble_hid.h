@@ -24,6 +24,7 @@ void ble_poll();          // call from the logic loop: timeouts, host-name read
 
 bt_state_t ble_state();
 bool ble_connected();     // a host is connected
+bool ble_bonded();        // a bond exists
 bool ble_ready();         // connected and subscribed to our reports
 uint32_t ble_passkey();   // valid in BT_PAIRING
 int ble_pair_secs_left();
