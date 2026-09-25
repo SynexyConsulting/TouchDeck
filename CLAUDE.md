@@ -18,7 +18,7 @@ ninja -C build                                            # -> build/watch.uf2
 
 Flash: `python tools/flash.py` — sends `BOOT` over the firmware's serial port, waits for the UF2 drive (**J:** here, `INFO_UF2.TXT` says `RPI-RP2`), copies `build/watch.uf2`. No BOOT button needed. It fails if `clip_helper.py` is holding the port — stop the helper first. The firmware enumerates as `CAFE:4011` (composite: CDC + HID keyboard/mouse), not the SDK's `2E8A:000A`, so picotool's reset interface is *not* available; opening the port at 1200 baud also reboots to the bootloader.
 
-PC helper: `python tools/clip_helper.py` (needs `pyserial`, `uiautomation`). `--send TEXT` pushes a clip, `--boot` enters the bootloader.
+PC helper: `py tools\clip_helper.py` or `python tools/clip_helper.py`. On this PC those are **different interpreters**: `py` is Python 3.14 and `python` is 3.9, so install into the one you run with `<py|python> -m pip install -r tools/requirements.txt`. The committed `aa_fonts.*` were rendered with Pillow 11.3/FreeType 2.13 (the `python` 3.9 env). Regenerating under 3.14's FreeType 2.14 changes the glyph bitmaps slightly, so regenerate with `python`. `--send TEXT` pushes a clip, `--boot` enters the bootloader.
 
 There are no tests; verification is visual/audible on the device. The serial protocol can be exercised from Python without typing on the PC (HELLO→PONG, TIME, CLIP); PASTE and the jiggler inject real keystrokes/mouse input, so only trigger them deliberately.
 
