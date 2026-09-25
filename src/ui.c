@@ -91,8 +91,10 @@ static void draw_watch(int t) {
         polar(CX, CY, i * 6.f, R - 7.f, &x1, &y1);
         gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
     }
-    if (app.jig_on) gfx_text_centered((int)CX, 190, "JIGGLING", &Font12, COL_OK);
-    if (app.helper) gfx_text_centered((int)CX, 78, "PC", &Font12, COL_DIM);
+    if (app.jig_on)
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 196), "JIGGLING", &font_caps, COL_OK, 1);
+    if (app.helper)
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 84), "PC", &font_caps, COL_DIM, 1);
     draw_mute_icon(app.muted);
 
     hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
@@ -104,17 +106,26 @@ static void draw_watch(int t) {
 
 // ---------- shared pieces ----------
 
+static void text_c(int cx, int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing) {
+    gfx_text_aa_centered(cx, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
+}
+
+static void text_at(int x, int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing) {
+    gfx_text_aa(x, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
+}
+
 static void pill(int x, int y, int w, int h, uint16_t col) { gfx_rrect(x, y, w, h, h / 2.f, col); }
 
 // Pill button: optional leading/trailing icon around a centred label.
 static void button(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const char *label,
-                   const sFONT *f, icon_fn lead, icon_fn trail) {
+                   icon_fn lead, icon_fn trail) {
     pill(x, y, w, h, bg);
-    const int iw = 12, gap = 4, tw = (int)strlen(label) * f->Width;
+    const aa_font_t *f = &font_button;
+    const int iw = 10, gap = 4, tw = gfx_text_aa_width(label, f, 0);
     int total = tw + (lead ? iw + gap : 0) + (trail ? iw + gap : 0);
     int cx = x + (w - total) / 2, cy = y + h / 2;
     if (lead) { lead(cx + iw / 2.f, cy, iw, fg); cx += iw + gap; }
-    gfx_text(cx, cy - f->Height / 2, label, f, fg);
+    text_at(cx, cy, label, f, fg, 0);
     cx += tw + gap;
     if (trail) trail(cx + iw / 2.f, cy, iw, fg);
 }
@@ -132,36 +143,42 @@ static const char *msg_or(const char *normal, char *buf, int n) {
 static void frame_usb(void) {
     gfx_rrect_ring(0, 0, LCD_W, LCD_H, 38.f, 3.f, C_PC);
     const char *label = "USB";
-    int tw = 3 * 7, w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 5;
+    int tw = gfx_text_aa_width(label, &font_caps, 1), w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 5;
     pill(x, y, w, 18, C_PC_TINT);
     icon_monitor(x + 13.f, y + 9.f, 10.f, C_PC);
-    gfx_text(x + 22, y + 3, label, &Font12, C_PC);
+    text_at(x + 22, y + 9, label, &font_caps, C_PC, 1);
     gfx_disc(x + w - 10.5f, y + 9.f, 2.6f, app.usb_mounted ? C_OK : C_BAD);
 }
 
 // ---------- clipboard ----------
 
 static void draw_clip(void) {
-    enum { CX0 = 20, CY0 = 64, CW = 200, CH = 110, COLS = 26, ROWS = 8 };
+    enum { CX0 = 20, CY0 = 64, CW = 200, CH = 110, ROWS = 8, PITCH = 12 };
+    const int cols = (CW - 16) / font_mono.glyphs['M' - ' '].adv;
     char info[40], buf[40];
-    gfx_text_centered(LCD_W / 2, 40, "Clipboard", &Font16, C_TEXT);
+    text_c(LCD_W / 2, 48, "Clipboard", &font_title, C_TEXT, 0);
 
     mutex_enter_blocking(&clip_mtx);
     int len = app.clip_len;
     gfx_rrect(CX0, CY0, CW, CH, 12.f, len ? C_SURF : C_INNER);
     if (len == 0) {
-        gfx_text_centered(LCD_W / 2, CY0 + 38, "Select text on PC,", &Font12, C_DIM);
-        gfx_text_centered(LCD_W / 2, CY0 + 54, "then tap Copy", &Font12, C_DIM);
+        text_c(LCD_W / 2, CY0 + 44, "Select text on PC,", &font_body, C_DIM, 0);
+        text_c(LCD_W / 2, CY0 + 60, "then tap Copy", &font_body, C_DIM, 0);
     } else {
+        // Wrap into rows of monospaced text, drawn a row at a time.
+        char line[40];
         int row = 0, col = 0;
-        for (int i = 0; i < len && row < ROWS; i++) {
-            char c = app.clip[i];
+        for (int i = 0; i <= len && row < ROWS; i++) {
+            char c = i < len ? app.clip[i] : '\n';
             if (c == '\r') continue;
-            if (c == '\n') { row++; col = 0; continue; }
-            if (c == '\t') c = ' ';
-            if (col == COLS) { row++; col = 0; if (row >= ROWS) break; }
-            gfx_char(CX0 + 8 + col * 7, CY0 + 7 + row * 12, c, &Font12, C_CLIP);
-            col++;
+            if (c == '\n' || col == cols) {
+                line[col] = 0;
+                gfx_text_aa(CX0 + 8, CY0 + 5 + row * PITCH, line, &font_mono, C_CLIP, 0);
+                row++;
+                col = 0;
+                if (c == '\n') continue;
+            }
+            line[col++] = c == '\t' ? ' ' : c;
         }
     }
     snprintf(info, sizeof info, len ? "%d chars from %s" : "Empty", len, app.clip_src);
@@ -172,14 +189,14 @@ static void draw_clip(void) {
         gfx_rrect(40, 186, 160, 4, 2.f, C_SURF2);
         gfx_rrect(40, 186, 160 * app.paste_pos / len + 1, 4, 2.f, C_PC);
     } else {
-        gfx_text_centered(LCD_W / 2, 182, msg_or(info, buf, sizeof buf), &Font12, C_DIM);
+        text_c(LCD_W / 2, 188, msg_or(info, buf, sizeof buf), &font_body, C_DIM, 0);
     }
 
     button(BTN_COPY_X, BTN_Y, BTN_W, BTN_H, C_SURF2, C_TEXT,
-           app.clip_state == CLIP_COPYING ? "..." : "Copy", &Font16, icon_copy, NULL);
-    if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", &Font16, NULL, NULL);
+           app.clip_state == CLIP_COPYING ? "..." : "Copy", icon_copy, NULL);
+    if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", NULL, NULL);
     else button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, len ? C_PC : C_SURF2, len ? C_BG : C_FAINT,
-                "Paste", &Font16, NULL, icon_arrow_right);
+                "Paste", NULL, icon_arrow_right);
 }
 
 // ---------- jiggler ----------
@@ -187,13 +204,13 @@ static void draw_clip(void) {
 static void draw_jig(void) {
     char s[40], buf[40];
     bool on = app.jig_on;
-    gfx_text_centered(LCD_W / 2, 40, "Jiggler", &Font16, C_TEXT);
+    text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
     if (on)
         gfx_disc(JIG_CX + cosf(app.jig_angle) * 55.f, JIG_CY + sinf(app.jig_angle) * 55.f, 6.f, C_PC);
-    gfx_text_centered(JIG_CX, JIG_CY - 18, on ? "ON" : "OFF", &Font24, on ? C_PC : C_DIM);
-    gfx_text_centered(JIG_CX, JIG_CY + 7, on ? "TAP TO STOP" : "TAP TO START", &Font12, C_DIM);
+    text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
+    text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
@@ -206,7 +223,7 @@ static void draw_jig(void) {
     } else if (on && (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_MENU_OPEN)) status = "Right-click menu";
     else if (on && app.jig_phase == JIG_ESC_DOWN) status = "Esc";
     else if (on) status = "Pausing";
-    gfx_text_centered(LCD_W / 2, 214, status, &Font12, scol);
+    text_c(LCD_W / 2, 220, status, &font_label, scol, 0);
 
     char stats[40];
     if (on) {
@@ -216,7 +233,7 @@ static void draw_jig(void) {
     } else {
         strcpy(stats, "Menu every 45-150s");
     }
-    gfx_text_centered(LCD_W / 2, 232, msg_or(stats, buf, sizeof buf), &Font12, C_DIM);
+    text_c(LCD_W / 2, 238, msg_or(stats, buf, sizeof buf), &font_body, C_DIM, 0);
 }
 
 // ---------- frame loop ----------
