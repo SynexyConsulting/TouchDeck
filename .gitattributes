@@ -1,0 +1,7 @@
+# Store every text file with LF endings; Windows editors and the Edit tool
+# otherwise flip files to CRLF and turn one-line changes into whole-file diffs.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.pdf binary
