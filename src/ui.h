@@ -5,11 +5,11 @@
 void ui_core1_main(void);
 
 // Button hit areas, shared by drawing (core1) and touch handling (core0).
-#define BTN_Y      178
-#define BTN_H      58
-#define BTN_COPY_X 14
-#define BTN_PASTE_X 124
-#define BTN_W      102
+#define BTN_Y      204
+#define BTN_H      44
+#define BTN_COPY_X 20
+#define BTN_PASTE_X 122
+#define BTN_W      98
 
 // Mute toggle in the watch face's top-right corner, clear of the dial.
 #define MUTE_CX 211
@@ -18,5 +18,5 @@ void ui_core1_main(void);
 #define MUTE_HIT_Y 58
 
 #define JIG_CX 120
-#define JIG_CY 118
-#define JIG_R  74
+#define JIG_CY 140
+#define JIG_R  62

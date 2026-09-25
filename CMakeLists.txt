@@ -25,6 +25,7 @@ add_executable(watch
     src/typer.c
     src/jiggler.c
     src/settings.c
+    src/icons.c
     src/fonts/font12.c
     src/fonts/font16.c
     src/fonts/font24.c

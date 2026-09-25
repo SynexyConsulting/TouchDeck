@@ -7,6 +7,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "tusb.h"
 #include "app.h"
 #include "board.h"
 #include "buzzer.h"
@@ -154,6 +155,7 @@ int main(void) {
     uint32_t next_touch = 0;
     for (;;) {
         app.loops++;
+        app.usb_mounted = tud_mounted();
         usb_io_poll();
         clock_update();
 

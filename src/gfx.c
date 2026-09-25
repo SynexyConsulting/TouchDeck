@@ -5,6 +5,7 @@
 #include "gfx.h"
 #include "board.h"
 #include <math.h>
+#include <stdbool.h>
 #include <string.h>
 
 uint16_t fb[LCD_W * LCD_H];
@@ -149,4 +150,22 @@ void gfx_text(int x, int y, const char *s, const sFONT *font, uint16_t color) {
 
 void gfx_text_centered(int cx, int y, const char *s, const sFONT *font, uint16_t color) {
     gfx_text(cx - (int)strlen(s) * font->Width / 2, y, s, font, color);
+}
+
+void gfx_rrect_ring(int x, int y, int w, int h, float rad, float width, uint16_t color) {
+    float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
+    int band = (int)(rad + width + 2);
+    for (int py = y; py < y + h; py++) {
+        bool edge_row = py < y + band || py >= y + h - band;
+        for (int px = x; px < x + w; px++) {
+            if (!edge_row && px >= x + (int)width + 2 && px < x + w - (int)width - 2) {
+                px = x + w - (int)width - 3;          // skip the untouched middle
+                continue;
+            }
+            float qx = fabsf(px + 0.5f - cx) - (hx - rad), qy = fabsf(py + 0.5f - cy) - (hy - rad);
+            float d = (qx > 0.f && qy > 0.f) ? sqrtf(qx * qx + qy * qy) - rad : fmaxf(qx, qy) - rad;
+            float a = fminf(0.5f - d, d + width + 0.5f);   // inside the outer edge, outside the inner
+            plot(px, py, color, a > 1.f ? 1.f : a);
+        }
+    }
 }
