@@ -169,3 +169,36 @@ void gfx_rrect_ring(int x, int y, int w, int h, float rad, float width, uint16_t
         }
     }
 }
+
+static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
+    if (c < ' ' || c > '~') c = '?';
+    return &f->glyphs[c - ' '];
+}
+
+int gfx_text_aa_width(const char *s, const aa_font_t *f, int spacing) {
+    int w = 0, n = 0;
+    for (; *s; s++, n++) w += aa_glyph(f, *s)->adv;
+    return n ? w + spacing * (n - 1) : 0;
+}
+
+int gfx_text_aa(int x, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    for (; *s; s++) {
+        const aa_glyph_t *g = aa_glyph(f, *s);
+        const uint8_t *bits = f->bitmap + g->offset;
+        int bpr = (g->w + 1) / 2;
+        for (int r = 0; r < g->h; r++)
+            for (int col = 0; col < g->w; col++) {
+                uint8_t v = bits[r * bpr + col / 2];
+                int a = (col & 1) ? (v & 0x0F) : (v >> 4);
+                if (a) plot(x + g->x + col, y + g->y + r, color, a / 15.f);
+            }
+        x += g->adv + spacing;
+    }
+    return x;
+}
+
+void gfx_text_aa_centered(int cx, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    gfx_text_aa(cx - gfx_text_aa_width(s, f, spacing) / 2, y, s, f, color, spacing);
+}
+
+int gfx_text_aa_ytop(const aa_font_t *f, int cy) { return cy - f->cap_top - f->cap_h / 2; }

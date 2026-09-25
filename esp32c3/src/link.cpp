@@ -5,6 +5,7 @@
 //               LEDS <hex>             PC lock-key state (bit1 = Caps Lock)
 //               MODE PC|BT             set the output mode (scripting/tests)
 //               TAP x y | SWIPE L|R    inject a touch event (scripting/tests)
+//               TEXTW <font> <sp> <t>  reply LOG textw <px> (tests: C vs fontgen widths)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
 //               K <mod> <usage>        keyboard report, PC output mode (hex)
@@ -14,6 +15,7 @@
 #include "link.h"
 #include "output.h"
 #include "touch.h"
+#include "gfx.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -88,6 +90,20 @@ static void handle_line(char *s) {
         inject_touch(EV_SWIPE_L, 120, 120);
     } else if (!strcmp(s, "SWIPE R")) {
         inject_touch(EV_SWIPE_R, 120, 120);
+    } else if (!strncmp(s, "TEXTW ", 6)) {
+        static const struct { const char *name; const aa_font_t *f; } fonts[] = {
+            {"font_title", &font_title}, {"font_label", &font_label}, {"font_button", &font_button},
+            {"font_body", &font_body}, {"font_caps", &font_caps}, {"font_big", &font_big},
+            {"font_mono", &font_mono}, {"font_pin", &font_pin}};
+        char name[16];
+        int sp, used = 0;
+        if (sscanf(s + 6, "%15s %d %n", name, &sp, &used) == 2 && used)
+            for (auto &e : fonts)
+                if (!strcmp(e.name, name)) {
+                    char r[32];
+                    snprintf(r, sizeof r, "LOG textw %d", gfx_text_aa_width(s + 6 + used, e.f, sp));
+                    link_send_line(r);
+                }
     } else if (!strcmp(s, "DBG")) {
         debug_report();
     }
