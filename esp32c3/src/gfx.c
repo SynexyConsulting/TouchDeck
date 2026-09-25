@@ -128,29 +128,6 @@ void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
         }
 }
 
-void gfx_char(int x, int y, char c, const sFONT *font, uint16_t color) {
-    if (c < ' ' || c > '~') c = '?';
-    int bpr = (font->Width + 7) / 8;
-    const uint8_t *g = font->table + (c - ' ') * font->Height * bpr;
-    for (int row = 0; row < font->Height; row++, g += bpr) {
-        int yy = y + row;
-        if (yy < 0 || yy >= LCD_H) continue;
-        for (int col = 0; col < font->Width; col++) {
-            int xx = x + col;
-            if (xx < 0 || xx >= LCD_W) continue;
-            if (g[col >> 3] & (0x80 >> (col & 7))) fb[yy * LCD_W + xx] = color;
-        }
-    }
-}
-
-void gfx_text(int x, int y, const char *s, const sFONT *font, uint16_t color) {
-    for (; *s; s++, x += font->Width) gfx_char(x, y, *s, font, color);
-}
-
-void gfx_text_centered(int cx, int y, const char *s, const sFONT *font, uint16_t color) {
-    gfx_text(cx - (int)strlen(s) * font->Width / 2, y, s, font, color);
-}
-
 static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
     if (c < ' ' || c > '~') c = '?';
     return &f->glyphs[c - ' '];

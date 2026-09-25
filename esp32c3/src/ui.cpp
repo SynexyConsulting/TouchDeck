@@ -32,21 +32,27 @@
 
 static uint16_t accent() { return mode_get() == MODE_BT ? C_BT : C_PC; }
 
-static void text_c(int y, const char *s, const sFONT *f, uint16_t col) {
-    gfx_text_centered(LCD_W / 2, y, s, f, col);
+// Centred text with its capitals vertically centred on cy.
+static void text_c(int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing = 0) {
+    gfx_text_aa_centered(LCD_W / 2, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
+}
+
+static void text_at(int x, int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing = 0) {
+    gfx_text_aa(x, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
 }
 
 static void pill(int x, int y, int w, int h, uint16_t col) { gfx_rrect(x, y, w, h, h / 2.f, col); }
 
 // Pill button: optional leading/trailing icon around a centred label.
 static void button(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const char *label,
-                   const sFONT *f, icon_fn lead, icon_fn trail) {
+                   icon_fn lead, icon_fn trail) {
     pill(x, y, w, h, bg);
-    const int iw = 12, gap = 4, tw = (int)strlen(label) * f->Width;
+    const aa_font_t *f = &font_button;
+    const int iw = 10, gap = 4, tw = gfx_text_aa_width(label, f, 0);
     int total = tw + (lead ? iw + gap : 0) + (trail ? iw + gap : 0);
     int cx = x + (w - total) / 2, cy = y + h / 2;
     if (lead) { lead(cx + iw / 2.f, cy, iw, fg); cx += iw + gap; }
-    gfx_text(cx, cy - f->Height / 2, label, f, fg);
+    text_at(cx, cy, label, f, fg);
     cx += tw + gap;
     if (trail) trail(cx + iw / 2.f, cy, iw, fg);
 }
@@ -66,10 +72,10 @@ static void frame() {
     gfx_ring(120.f, 120.f, 118.5f, 3.f, accent());
     bool bt = mode_get() == MODE_BT;
     const char *label = bt ? "BLUETOOTH" : "PC";
-    int tw = (int)strlen(label) * 7, w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 16;
+    int tw = gfx_text_aa_width(label, &font_caps, 1), w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 16;
     pill(x, y, w, 18, bt ? C_BT_TINT : C_PC_TINT);
     (bt ? icon_bt : icon_monitor)(x + 13.f, y + 9.f, 10.f, accent());
-    gfx_text(x + 22, y + 3, label, &Font12, accent());
+    text_at(x + 22, y + 9, label, &font_caps, accent(), 1);
     gfx_disc(x + w - 10.5f, y + 9.f, 2.6f, out_ready() ? C_OK : C_BAD);
 }
 
@@ -79,26 +85,32 @@ static void dots(int count, int active) {
 }
 
 static void draw_clip() {
-    enum { CX0 = 32, CY0 = 58, CW = 176, CH = 86, COLS = 22, ROWS = 6 };
+    enum { CX0 = 32, CY0 = 58, CW = 176, CH = 86, ROWS = 6, PITCH = 12 };
+    const int cols = (CW - 16) / font_mono.glyphs['M' - ' '].adv;
     char info[40], buf[40];
-    text_c(38, "Clipboard", &Font16, C_TEXT);
+    text_c(46, "Clipboard", &font_title, C_TEXT);
 
     xSemaphoreTake(clip_mtx, portMAX_DELAY);
     int len = app.clip_len;
     gfx_rrect(CX0, CY0, CW, CH, 12.f, len ? C_SURF : C_INNER);
     if (len == 0) {
-        text_c(CY0 + 28, "Select text on PC,", &Font12, C_DIM);
-        text_c(CY0 + 44, "then tap Copy", &Font12, C_DIM);
+        text_c(CY0 + 34, "Select text on PC,", &font_body, C_DIM);
+        text_c(CY0 + 50, "then tap Copy", &font_body, C_DIM);
     } else {
+        // Wrap into rows of monospaced text, drawn a row at a time.
+        char line[40];
         int row = 0, col = 0;
-        for (int i = 0; i < len && row < ROWS; i++) {
-            char c = app.clip[i];
+        for (int i = 0; i <= len && row < ROWS; i++) {
+            char c = i < len ? app.clip[i] : '\n';
             if (c == '\r') continue;
-            if (c == '\n') { row++; col = 0; continue; }
-            if (c == '\t') c = ' ';
-            if (col == COLS) { row++; col = 0; if (row >= ROWS) break; }
-            gfx_char(CX0 + 8 + col * 7, CY0 + 7 + row * 12, c, &Font12, C_CLIP);
-            col++;
+            if (c == '\n' || col == cols) {
+                line[col] = 0;
+                gfx_text_aa(CX0 + 8, CY0 + 5 + row * PITCH, line, &font_mono, C_CLIP, 0);
+                row++;
+                col = 0;
+                if (c == '\n') continue;
+            }
+            line[col++] = c == '\t' ? ' ' : c;
         }
     }
     snprintf(info, sizeof info, len ? "%d chars from %s" : "Empty", len, app.clip_src);
@@ -109,26 +121,26 @@ static void draw_clip() {
         gfx_rrect(48, 152, 144, 4, 2.f, C_SURF2);
         gfx_rrect(48, 152, 144 * app.paste_pos / len + 1, 4, 2.f, accent());
     } else {
-        text_c(149, msg_or(info, buf, sizeof buf), &Font12, C_DIM);
+        text_c(155, msg_or(info, buf, sizeof buf), &font_body, C_DIM);
     }
 
     button(BTN_COPY_X, BTN_Y, BTN_W, BTN_H, C_SURF2, C_TEXT,
-           app.clip_state == CLIP_COPYING ? "..." : "Copy", &Font16, icon_copy, nullptr);
-    if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", &Font16, nullptr, nullptr);
+           app.clip_state == CLIP_COPYING ? "..." : "Copy", icon_copy, nullptr);
+    if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", nullptr, nullptr);
     else button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, len ? accent() : C_SURF2, len ? C_BG : C_FAINT,
-                "Paste", &Font16, nullptr, icon_arrow_right);
+                "Paste", nullptr, icon_arrow_right);
 }
 
 static void draw_jig() {
     char s[40], buf[40];
     bool on = app.jig_on;
-    text_c(38, "Jiggler", &Font16, C_TEXT);
+    text_c(46, "Jiggler", &font_title, C_TEXT);
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? accent() : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 44.f, C_INNER);
     if (on)
         gfx_disc(JIG_CX + cosf(app.jig_angle) * 50.f, JIG_CY + sinf(app.jig_angle) * 50.f, 6.f, accent());
-    text_c(JIG_CY - 18, on ? "ON" : "OFF", &Font24, on ? accent() : C_DIM);
-    text_c(JIG_CY + 7, on ? "TAP TO STOP" : "TAP TO START", &Font12, C_DIM);
+    text_c(JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? accent() : C_DIM);
+    text_c(JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
@@ -141,7 +153,7 @@ static void draw_jig() {
     } else if (on && (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_MENU_OPEN)) status = "Right-click menu";
     else if (on && app.jig_phase == JIG_ESC_DOWN) status = "Esc";
     else if (on) status = "Pausing";
-    text_c(184, status, &Font12, scol);
+    text_c(190, status, &font_label, scol);
 
     char stats[40];
     if (on) {
@@ -151,7 +163,7 @@ static void draw_jig() {
     } else {
         strcpy(stats, "Menu every 45-150s");
     }
-    text_c(200, msg_or(stats, buf, sizeof buf), &Font12, C_DIM);
+    text_c(206, msg_or(stats, buf, sizeof buf), &font_body, C_DIM);
 }
 
 static const char *bt_row_status(uint16_t *col) {
@@ -167,26 +179,27 @@ static const char *bt_row_status(uint16_t *col) {
 
 static void draw_settings() {
     char buf[40];
-    icon_cog(73.f, 46.f, 15.f, C_DIM);
-    gfx_text(85, 38, "Settings", &Font16, C_TEXT);
-    text_c(60, "OUTPUT", &Font12, C_DIM);
+    int tw = gfx_text_aa_width("Settings", &font_title, 0), x0 = 120 - (15 + 6 + tw) / 2;
+    icon_cog(x0 + 7.5f, 46.f, 15.f, C_DIM);
+    text_at(x0 + 21, 46, "Settings", &font_title, C_TEXT);
+    text_c(65, "OUTPUT", &font_caps, C_DIM, 2);
 
     bool avail = mode_bt_available(), bt = mode_get() == MODE_BT;
     pill(38, 74, 164, 40, C_SURF);
     button(SEG_BT_X, SEG_Y, SEG_W, SEG_H, bt ? C_BT : C_SURF, bt ? C_BG : (avail ? C_DIM : C_FAINT),
-           "Bluetooth", &Font12, avail ? icon_bt : icon_lock, nullptr);
+           "Bluetooth", avail ? icon_bt : icon_lock, nullptr);
     button(SEG_PC_X, SEG_Y, SEG_W, SEG_H, bt ? C_SURF : C_PC, bt ? C_DIM : C_BG,
-           "PC", &Font12, icon_monitor, nullptr);
+           "PC", icon_monitor, nullptr);
     const char *cap = !avail ? "Pair Bluetooth to switch" : (bt ? "Sends to Bluetooth host" : "Sends to this PC");
-    text_c(120, msg_or(cap, buf, sizeof buf), &Font12, C_DIM);
+    text_c(126, msg_or(cap, buf, sizeof buf), &font_body, C_DIM);
 
     uint16_t scol;
     const char *st = bt_row_status(&scol);
     gfx_rrect(ROW_X, ROW_Y, ROW_W, ROW_H, 14.f, C_SURF);
     gfx_disc(55.f, 162.f, 13.f, RGB(28, 42, 67));
     icon_bt(55.f, 162.f, 13.f, C_BT);
-    gfx_text(75, 147, "Bluetooth", &Font12, C_TEXT);
-    gfx_text(75, 163, st, &Font12, scol);
+    text_at(75, 154, "Bluetooth", &font_label, C_TEXT);
+    text_at(75, 170, st, &font_body, scol);
     icon_chevron_right(193.f, 162.f, 11.f, C_DIM);
 }
 
@@ -195,28 +208,29 @@ static void draw_bt() {
     bt_state_t st = ble_state();
     gfx_disc(BACK_CX, BACK_CY, 14.f, C_SURF);
     icon_chevron_left(BACK_CX - 1.f, BACK_CY, 12.f, C_TEXT);
-    text_c(41, "Bluetooth", &Font16, C_TEXT);
+    text_c(49, "Bluetooth", &font_title, C_TEXT);
 
     if (st == BT_UNPAIRED) {
         gfx_disc(120.f, 94.f, 26.f, C_BT_TINT);
         icon_bt(120.f, 94.f, 22.f, C_BT);
-        text_c(126, "Not paired", &Font16, C_TEXT);
-        text_c(146, "PC: Settings>Bluetooth", &Font12, C_DIM);
-        text_c(160, msg_or("Add device>Touch Deck", buf, sizeof buf), &Font12, C_DIM);
-        button(BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H, C_BT, C_BG, "Pair", &Font16, nullptr, nullptr);
+        text_c(134, "Not paired", &font_title, C_TEXT);
+        text_c(152, "PC: Settings > Bluetooth >", &font_body, C_DIM);
+        text_c(166, msg_or("Add device > Touch Deck", buf, sizeof buf), &font_body, C_DIM);
+        button(BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H, C_BT, C_BG, "Pair", nullptr, nullptr);
     } else if (st == BT_PAIRING) {
-        text_c(66, "Enter this PIN on PC", &Font12, C_DIM);
+        text_c(72, "Enter this PIN on your PC", &font_body, C_DIM);
         snprintf(s, sizeof s, "%06lu", (unsigned long)ble_passkey());
         for (int i = 0; i < 6; i++) {
             int bx = 47 + i * 24 + (i >= 3 ? 5 : 0);
             gfx_rrect(bx, 84, 21, 30, 6.f, C_SURF);
-            gfx_char(bx + 2, 87, s[i], &Font24, C_TEXT);
+            char d[2] = {s[i], 0};
+            gfx_text_aa_centered(bx + 11, gfx_text_aa_ytop(&font_pin, 99), d, &font_pin, C_TEXT, 0);
         }
-        text_c(124, msg_or("Pick Touch Deck", buf, sizeof buf), &Font12, C_DIM);
+        text_c(130, msg_or("Pick \"Touch Deck\" in Add device", buf, sizeof buf), &font_body, C_DIM);
         int left = ble_pair_secs_left();
         snprintf(s, sizeof s, "Expires in %d:%02d", left / 60, left % 60);
-        text_c(140, s, &Font12, C_BT);
-        button(BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H, C_SURF2, C_TEXT, "Cancel", &Font16, nullptr, nullptr);
+        text_c(146, s, &font_body, C_BT);
+        button(BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H, C_SURF2, C_TEXT, "Cancel", nullptr, nullptr);
     } else {
         bool conn = st == BT_CONNECTED, off = st == BT_OFF;
         uint16_t dot = conn ? C_OK : C_DIM;
@@ -224,18 +238,19 @@ static void draw_bt() {
         icon_monitor(120.f, 91.f, 22.f, C_TEXT);
         gfx_disc(139.f, 110.f, 6.5f, C_BG);
         gfx_disc(139.f, 110.f, 4.5f, dot);
-        text_c(122, conn ? "CONNECTED" : (off ? "DISCONNECTED" : "WAITING"), &Font12, dot);
+        text_c(127, conn ? "CONNECTED" : (off ? "DISCONNECTED" : "WAITING"), &font_caps, dot, 1);
         const char *host = ble_host_name();
         snprintf(s, sizeof s, "%.18s", host[0] ? host : "Paired PC");
-        text_c(138, s, &Font16, C_TEXT);
+        text_c(145, s, &font_title, C_TEXT);
         const char *sub = conn ? (ble_ready() ? "Keyboard + mouse" : "Connecting...")
                         : off ? "Tap Connect to resume" : "PC will reconnect";
-        text_c(158, msg_or(sub, buf, sizeof buf), &Font12, C_DIM);
-        if (off) button(BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H, C_OK, C_BG, "Connect", &Font12, nullptr, nullptr);
-        else button(BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H, C_SURF2, C_TEXT, "Disconnect", &Font12, nullptr, nullptr);
+        text_c(163, msg_or(sub, buf, sizeof buf), &font_body, C_DIM);
+        if (off) button(BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H, C_OK, C_BG, "Connect", nullptr, nullptr);
+        else button(BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H, C_SURF2, C_TEXT, "Disconnect", nullptr, nullptr);
         pill(BT_BTN_R_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H, C_BAD);
         pill(BT_BTN_R_X + 1, BT_BTN2_Y + 1, BT_BTN2_W - 2, BT_BTN2_H - 2, C_BG);
-        gfx_text_centered(BT_BTN_R_X + BT_BTN2_W / 2, BT_BTN2_Y + 11, "Forget", &Font12, C_BAD_TXT);
+        gfx_text_aa_centered(BT_BTN_R_X + BT_BTN2_W / 2, gfx_text_aa_ytop(&font_button, BT_BTN2_Y + BT_BTN2_H / 2),
+                             "Forget", &font_button, C_BAD_TXT, 0);
     }
 }
 
