@@ -41,6 +41,8 @@ class Injector:
         self.held_buttons = 0
 
     def key(self, mods, usage):
+        if usage and usage not in SCANCODES:
+            return                                                # unknown key: ignore the whole report
         events = []
         if self.held_key and self.held_key != usage:              # 1. old key up
             events.append(("key", *SCANCODES[self.held_key], True))

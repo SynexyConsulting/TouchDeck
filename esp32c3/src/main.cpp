@@ -87,8 +87,11 @@ static void on_touch_bt(const touch_event_t &e) {
         if (st == BT_OFF) ble_reconnect();
         else ble_disconnect();
     } else if (in_rect(e, BT_BTN_R_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H)) {
-        ble_forget();
+        // Switch first, while the bond still exists: mode_set only runs its
+        // cleanup (stop paste, release held BT keys, reset jiggler) when the
+        // effective mode changes, and forgetting the bond would pre-empt that.
         mode_set(MODE_PC);
+        ble_forget();
     }
     app_redraw();
 }

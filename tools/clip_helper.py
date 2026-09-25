@@ -136,6 +136,14 @@ def open_board(wait=True):
         time.sleep(1)
 
 
+def _byte(text):
+    """Parse one hex report byte; anything outside 0..FF is malformed."""
+    v = int(text, 16)
+    if not 0 <= v <= 0xFF:
+        raise ValueError(text)
+    return v
+
+
 def handle_line(line, ser, inj):
     """One line from the board. K/M are input reports for PC output mode."""
     parts = line.split()
@@ -146,11 +154,11 @@ def handle_line(line, ser, inj):
         elif line.startswith("LOG "):
             print(time.strftime("%H:%M:%S ") + f"board: {line[4:]}")
         elif parts[0] == "K" and len(parts) == 3:
-            inj.key(int(parts[1], 16), int(parts[2], 16))
+            inj.key(_byte(parts[1]), _byte(parts[2]))
         elif parts[0] == "M" and len(parts) == 4:
             dx = max(-127, min(127, int(parts[2])))
             dy = max(-127, min(127, int(parts[3])))
-            inj.mouse(int(parts[1], 16), dx, dy)
+            inj.mouse(_byte(parts[1]), dx, dy)
     except (ValueError, IndexError):
         print(f"  ignored malformed line: {line!r}")
 

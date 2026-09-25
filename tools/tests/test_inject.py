@@ -33,6 +33,11 @@ def test_unknown_usage_is_ignored():
     i.key(0, 0x99)
     assert i.log == []
 
+def test_unknown_usage_with_modifier_holds_nothing():
+    i = inj()
+    i.key(0x02, 0x99)                      # Shift + unknown key: whole report ignored
+    assert i.log == [] and i.held_mods == 0
+
 def test_mouse_move_and_right_button_edges():
     i = inj()
     i.mouse(0, 5, -3)

@@ -26,6 +26,12 @@ def test_malformed_lines_are_ignored():
         clip_helper.handle_line(bad, ser, inj)   # must not raise
     assert inj.log == []
 
+def test_out_of_range_values_are_ignored():
+    ser, inj = setup()
+    for bad in ["K -1 04", "K 100 04", "K 00 -4", "M -1 0 0", "M 1FF 0 0"]:
+        clip_helper.handle_line(bad, ser, inj)   # must not press modifiers/buttons
+    assert inj.log == []
+
 def test_copy_request_sends_clip(monkeypatch):
     ser, inj = setup()
     monkeypatch.setattr(clip_helper, "grab_text", lambda: ("hi", "select"))
