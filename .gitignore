@@ -1,0 +1,13 @@
+# Build output
+build/
+build.log
+esp32c3/.pio/
+esp32c3/.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local session memory (remember plugin)
+.remember/
