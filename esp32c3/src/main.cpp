@@ -44,7 +44,6 @@ void clock_set(int seconds_of_day) {
 static void clock_update() {
     if (clock_base_s < 0) return;
     int t = (int)((clock_base_s + (now_ms() - clock_base_ms) / 1000) % 86400);
-    if (t / 60 != app.time_s / 60) app_redraw();   // header shows HH:MM
     app.time_s = t;
 }
 
@@ -66,24 +65,28 @@ static bool in_rect(const touch_event_t &e, int x, int y, int w, int h) {
     return e.x >= x && e.x < x + w && e.y >= y && e.y < y + h;
 }
 
+static bool near(const touch_event_t &e, int cx, int cy, int r) {
+    int dx = e.x - cx, dy = e.y - cy;
+    return dx * dx + dy * dy <= r * r;
+}
+
 static void on_touch_bt(const touch_event_t &e) {
-    if (e.type == EV_SWIPE_R || (e.type == EV_TAP && e.x < BACK_HIT_X && e.y < BACK_HIT_Y)) {
+    if (e.type == EV_SWIPE_R || (e.type == EV_TAP && near(e, BACK_CX, BACK_CY, BACK_HIT_R))) {
         app.in_bt = false;   // back up to Settings
         app_redraw();
         return;
     }
-    if (e.type != EV_TAP || e.y < BT_BTN_Y || e.y >= BT_BTN_Y + BT_BTN_H) return;
-
+    if (e.type != EV_TAP) return;
     bt_state_t st = ble_state();
     if (st == BT_UNPAIRED || st == BT_PAIRING) {
-        if (e.x >= BT_BTN1_X && e.x < BT_BTN1_X + BT_BTN1_W) {
+        if (in_rect(e, BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H)) {
             if (st == BT_UNPAIRED) ble_pair_start();
             else ble_pair_cancel();
         }
-    } else if (in_rect(e, BTN_COPY_X, BT_BTN_Y, BTN_W, BT_BTN_H)) {
+    } else if (in_rect(e, BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H)) {
         if (st == BT_OFF) ble_reconnect();
         else ble_disconnect();
-    } else if (in_rect(e, BTN_PASTE_X, BT_BTN_Y, BTN_W, BT_BTN_H)) {
+    } else if (in_rect(e, BT_BTN_R_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H)) {
         ble_forget();
         mode_set(MODE_PC);
     }
@@ -120,14 +123,16 @@ static void on_touch(const touch_event_t &e) {
             app_redraw();
         }
     } else if (app.screen == SCR_JIG) {
-        int dx = e.x - JIG_CX, dy = e.y - JIG_CY;
-        if (dx * dx + dy * dy <= (JIG_R + 12) * (JIG_R + 12)) {
+        if (near(e, JIG_CX, JIG_CY, JIG_R + 10)) {
             jiggler_toggle();
             prefs.putBool("jig", app.jig_on);   // survives power-off
         }
     } else if (app.screen == SCR_SETTINGS) {
-        int dx = e.x - COG_CX, dy = e.y - COG_CY;
-        if (dx * dx + dy * dy <= COG_HIT_R * COG_HIT_R || (e.y > 140 && e.y < 205)) {
+        if (in_rect(e, SEG_BT_X, SEG_Y, SEG_W, SEG_H)) {
+            if (!mode_set(MODE_BT)) app_message("Pair Bluetooth first");
+        } else if (in_rect(e, SEG_PC_X, SEG_Y, SEG_W, SEG_H)) {
+            mode_set(MODE_PC);
+        } else if (in_rect(e, ROW_X, ROW_Y, ROW_W, ROW_H)) {
             app.in_bt = true;
             app_redraw();
         }
