@@ -55,21 +55,43 @@ def to_ascii(text):
 def selection_via_uia():
     """Selected text of the focused control, '' if none, None if unsupported."""
     try:
+        t0 = time.perf_counter()
         import uiautomation as auto
+        _timing(f"import uiautomation {_ms(t0)}")
     except ImportError:
         return None
     try:
+        t0 = time.perf_counter()
         ctrl = auto.GetFocusedControl()
-        for _ in range(4):                       # focus is sometimes on a child
+        _timing(f"focused control {_ms(t0)}: "
+                f"{ctrl.ControlTypeName if ctrl else None} '{(ctrl.Name if ctrl else '')[:40]}'")
+        for level in range(4):                   # focus is sometimes on a child
             if ctrl is None:
                 break
+            t0 = time.perf_counter()
             tp = ctrl.GetPattern(auto.PatternId.TextPattern)
+            _timing(f"level {level} {ctrl.ControlTypeName} TextPattern={bool(tp)} {_ms(t0)}")
             if tp:
-                return "".join(r.GetText(-1) for r in tp.GetSelection())
+                t0 = time.perf_counter()
+                text = "".join(r.GetText(-1) for r in tp.GetSelection())
+                _timing(f"selection read {_ms(t0)}: {len(text)} chars")
+                return text
             ctrl = ctrl.GetParentControl()
     except Exception as e:                       # UIA errors are app-specific
         print(f"  UIA: {e}")
     return None
+
+
+# Copy-path timing, printed with each COPY (diagnosing slow selection reads).
+_timings = []
+
+
+def _ms(t0):
+    return f"{(time.perf_counter() - t0) * 1000:.0f} ms"
+
+
+def _timing(line):
+    _timings.append(line)
 
 
 def clipboard_text():
@@ -98,10 +120,19 @@ def clipboard_text():
 
 
 def grab_text():
+    _timings.clear()
+    t_all = time.perf_counter()
     sel = selection_via_uia()
     if sel:
-        return sel, "select"
-    return clipboard_text(), "clipbd"
+        result = sel, "select"
+    else:
+        t0 = time.perf_counter()
+        result = clipboard_text(), "clipbd"
+        _timing(f"clipboard read {_ms(t0)}")
+    _timing(f"total {_ms(t_all)}")
+    for line in _timings:
+        print(f"    {line}")
+    return result
 
 
 # ---------- serial protocol ----------
