@@ -91,3 +91,22 @@ public class InjectorTests
         Assert.Equal(Environment.Is64BitProcess ? 40 : 28, SendInputSink.InputStructSize);
     }
 }
+
+public class SwitchableSinkTests
+{
+    [Fact]
+    public void Dry_run_describes_instead_of_injecting()
+    {
+        var real = new RecordingSink();
+        var sink = new SwitchableSink(real);
+        var described = new List<string>();
+        sink.DryRunEvent += described.Add;
+
+        sink.Send([new KeyStroke(0x1E, false, false)]);
+        sink.DryRun = true;
+        sink.Send([new KeyStroke(0x1D, true, true), new MouseMove(3, -2), new MouseButton(MouseAction.RightDown)]);
+
+        Assert.Single(real.Events);
+        Assert.Equal(["key 0x1D ext up", "mouse move +3 -2", "mouse RightDown"], described);
+    }
+}

@@ -39,3 +39,30 @@ public interface IKeyboardState
 {
     bool CapsLock { get; }
 }
+
+/// <summary>Real injection, or (dry run) a description of each event instead. Switchable live.</summary>
+public sealed class SwitchableSink(IInputSink real) : IInputSink
+{
+    public bool DryRun { get; set; }
+
+    /// <summary>Dry-run descriptions, e.g. "key 0x1E down".</summary>
+    public event Action<string>? DryRunEvent;
+
+    public void Send(IReadOnlyList<InputEvent> events)
+    {
+        if (!DryRun)
+        {
+            real.Send(events);
+            return;
+        }
+        foreach (var e in events) DryRunEvent?.Invoke(Describe(e));
+    }
+
+    public static string Describe(InputEvent e) => e switch
+    {
+        KeyStroke k => $"key 0x{k.Scan:X2}{(k.Extended ? " ext" : "")} {(k.Up ? "up" : "down")}",
+        MouseMove m => $"mouse move {m.Dx:+0;-0;0} {m.Dy:+0;-0;0}",
+        MouseButton b => $"mouse {b.Action}",
+        _ => e.ToString() ?? "",
+    };
+}
