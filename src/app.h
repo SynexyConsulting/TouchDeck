@@ -10,6 +10,9 @@ enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_COUNT };
 enum { CLIP_IDLE, CLIP_COPYING, CLIP_PASTING };
 enum { JIG_CIRCLE, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
 
+#define JIG_SCALE_COUNT 3
+static const float JIG_SCALES[JIG_SCALE_COUNT] = {1.0f, 1.5f, 2.0f};
+
 typedef struct {
     volatile int screen;
     volatile uint32_t redraw_seq;   // bump to make core1 redraw
@@ -38,6 +41,11 @@ typedef struct {
     volatile uint32_t jig_next_menu_ms;
     volatile uint32_t jig_menus;
     volatile uint32_t jig_started_ms;
+    volatile int jig_scale_idx;     // 0..2 -> JIG_SCALES[] (BOOT button on the Jiggler page)
+
+    // Watch stopwatch (BOOT button on the watch page). timer_s is what the face shows.
+    volatile bool timer_running;
+    volatile int timer_s;
 } app_t;
 
 extern app_t app;

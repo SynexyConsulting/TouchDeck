@@ -9,8 +9,8 @@ PORT = find_port(ESP_VID, ESP_PID)
 pytestmark = pytest.mark.skipif(PORT is None, reason="ESP32-C3 Touch Deck not connected")
 
 class Board:
-    def __init__(self):
-        self.s = open_serial(PORT, timeout=0.02)
+    def __init__(self, port=None):
+        self.s = open_serial(port or PORT, timeout=0.02)
         self.buf, self.lines, self.last_ping = b"", [], 0
         self.send("HELLO")
         self.pump(0.3)

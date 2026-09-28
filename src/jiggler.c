@@ -15,6 +15,7 @@
 static float t;                // circle "time", only advances while circling
 static float angle;
 static float sent_x, sent_y;   // position we have told the host so far
+static float scale = 1.f;      // eases toward JIG_SCALES[app.jig_scale_idx] so a change never jumps
 static uint32_t next_ms;
 
 static uint32_t rand_between(uint32_t lo, uint32_t hi) {
@@ -39,7 +40,8 @@ void jiggler_set(bool on) {
     if (app.jig_on) {
         t = 0.f;
         angle = 0.f;
-        float r = radius_at(t);
+        scale = JIG_SCALES[app.jig_scale_idx];
+        float r = radius_at(t) * scale;
         sent_x = r;       // start "on" the circle so the first step isn't a jump
         sent_y = 0.f;
         app.jig_phase = JIG_CIRCLE;
@@ -71,7 +73,8 @@ static void circle_step(void) {
     float omega = 6.2832f / 4.f * (1.f + 0.3f * sinf(t * 0.37f));
     angle += omega * dt;
     if (angle > 6.2832f) angle -= 6.2832f;
-    float r = radius_at(t);
+    scale += (JIG_SCALES[app.jig_scale_idx] - scale) * 0.03f;   // ~95% settled after 1 s of 10 ms steps
+    float r = radius_at(t) * scale;
     float tx = r * cosf(angle), ty = r * sinf(angle);
 
     int dx = (int)lroundf(tx - sent_x);

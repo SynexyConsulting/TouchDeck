@@ -4,6 +4,7 @@
 //               TIME hh:mm:ss          set the watch
 //               CLIP <n> <src>\n<n bytes>   new clip text
 //               DBG                    reply with a one-line LOG of liveness/touch stats
+//               SWIPE L|R, BTN [LONG]  inject a swipe / BOOT-button press (scripting/tests)
 //               BOOT                   reboot into the UF2 bootloader
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
@@ -92,6 +93,12 @@ static void handle_line(char *s) {
     } else if (!strcmp(s, "DBG")) {
         extern void debug_report(void);
         debug_report();
+    } else if (!strcmp(s, "SWIPE L") || !strcmp(s, "SWIPE R")) {   // scripting / tests
+        extern void inject_swipe(bool left);
+        inject_swipe(s[6] == 'L');
+    } else if (!strcmp(s, "BTN") || !strcmp(s, "BTN LONG")) {       // scripting / tests
+        extern void inject_button(bool long_press);
+        inject_button(s[3] == ' ');
     } else if (!strcmp(s, "BOOT")) {
         reset_usb_boot(0, 0);
     }

@@ -12,13 +12,15 @@
 
 #define SETTINGS_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
 #define PAGES (FLASH_SECTOR_SIZE / FLASH_PAGE_SIZE)
-#define MAGIC    0x324B4454u   // "TDK2"
+#define MAGIC    0x334B4454u   // "TDK3"
+#define MAGIC_V2 0x324B4454u   // "TDK2": {magic, muted, jig_on, check}, still readable
 #define MAGIC_V1 0x314B4454u   // "TDK1": {magic, muted, check}, still readable
 
 typedef struct {
     uint32_t magic;
     uint32_t muted;
     uint32_t jig_on;
+    uint32_t jig_scale;      // index into JIG_SCALES
     uint32_t check;          // guards against a page half-written at power loss
 } record_t;
 
@@ -30,11 +32,11 @@ static const record_t *page_at(int i) {
 }
 
 static uint32_t check_of(const record_t *r) {
-    return r->magic ^ r->muted ^ (r->jig_on << 1) ^ 0xA5A5A5A5u;
+    return r->magic ^ r->muted ^ (r->jig_on << 1) ^ (r->jig_scale << 2) ^ 0xA5A5A5A5u;
 }
 
 void settings_load(void) {
-    current = (record_t){MAGIC, 0, 0, 0};
+    current = (record_t){MAGIC, 0, 0, 0, 0};
     next_page = PAGES;
     for (int i = 0; i < PAGES; i++) {
         const record_t *r = page_at(i);
@@ -44,6 +46,13 @@ void settings_load(void) {
         }
         if (r->magic == MAGIC && r->check == check_of(r)) {
             current = *r;
+        } else if (r->magic == MAGIC_V2) {
+            const uint32_t *w = (const uint32_t *)r;   // v2 layout: check was word 3
+            if (w[3] == (MAGIC_V2 ^ w[1] ^ (w[2] << 1) ^ 0xA5A5A5A5u)) {
+                current.muted = w[1];
+                current.jig_on = w[2];
+                current.jig_scale = 0;
+            }
         } else if (r->magic == MAGIC_V1) {
             const uint32_t *w = (const uint32_t *)r;   // v1 layout: check was word 2
             if (w[2] == (MAGIC_V1 ^ w[1] ^ 0xA5A5A5A5u)) {
@@ -53,6 +62,7 @@ void settings_load(void) {
         }
     }
     app.muted = current.muted != 0;
+    app.jig_scale_idx = current.jig_scale < JIG_SCALE_COUNT ? (int)current.jig_scale : 0;
     app.jig_on = false;   // the caller starts the jiggler via jiggler_set()
 }
 
@@ -72,9 +82,11 @@ static void do_write(void *p) {
 }
 
 void settings_save(void) {
-    record_t r = {MAGIC, app.muted ? 1u : 0u, app.jig_on ? 1u : 0u, 0};
+    record_t r = {MAGIC, app.muted ? 1u : 0u, app.jig_on ? 1u : 0u, (uint32_t)app.jig_scale_idx, 0};
     r.check = check_of(&r);
-    if (current.magic == MAGIC && r.muted == current.muted && r.jig_on == current.jig_on) return;
+    if (current.magic == MAGIC && r.muted == current.muted && r.jig_on == current.jig_on &&
+        r.jig_scale == current.jig_scale)
+        return;
 
     static uint8_t page[FLASH_PAGE_SIZE];
     memset(page, 0xFF, sizeof page);

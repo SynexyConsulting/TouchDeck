@@ -10,6 +10,7 @@
 #include "tusb.h"
 #include "app.h"
 #include "board.h"
+#include "button.h"
 #include "buzzer.h"
 #include "jiggler.h"
 #include "lcd.h"
@@ -20,6 +21,7 @@
 #include "usb_io.h"
 
 #define TOUCH_POLL_MS 2
+#define BUTTON_POLL_MS 20
 #define COPY_TIMEOUT_MS 3000
 
 app_t app;
@@ -28,6 +30,7 @@ mutex_t clip_mtx;
 static int clock_base_s;
 static uint64_t clock_base_us;
 static uint32_t copy_deadline;
+static uint64_t timer_accum_us, timer_start_us;   // stopwatch: banked time + current run
 
 uint32_t now_ms(void) { return to_ms_since_boot(get_absolute_time()); }
 
@@ -54,6 +57,31 @@ static void clock_update(void) {
     }
 }
 
+// Stopwatch on the watch face. timer_s is what the face shows; a change on
+// the watch page requests a redraw (independently of the clock's second).
+static void timer_update(void) {
+    uint64_t us = timer_accum_us + (app.timer_running ? time_us_64() - timer_start_us : 0);
+    int s = (int)(us / 1000000);
+    if (s != app.timer_s) {
+        app.timer_s = s;
+        if (app.screen == SCR_WATCH) app_redraw();
+    }
+}
+
+static void timer_toggle(void) {
+    if (app.timer_running) timer_accum_us += time_us_64() - timer_start_us;
+    else timer_start_us = time_us_64();
+    app.timer_running = !app.timer_running;
+    app_redraw();
+}
+
+static void timer_reset(void) {
+    app.timer_running = false;
+    timer_accum_us = 0;
+    app.timer_s = 0;
+    app_redraw();
+}
+
 // __TIME__ is "HH:MM:SS"; used until the PC helper sends the real time.
 static int compile_seconds(void) {
     const char *t = __TIME__;
@@ -65,14 +93,15 @@ static int compile_seconds(void) {
 // Answer to the helper's DBG command: one line of liveness + touch state.
 // Deliberately does not read the touch chip (unsolicited reads wedge it).
 void debug_report(void) {
-    char s[200];
+    char s[256];
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
-             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d",
+             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f timer=%d trun=%d",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
-             touch_stats.last_x, touch_stats.last_y, touch_diag_lines());
+             touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
+             (double)JIG_SCALES[app.jig_scale_idx], app.timer_s, app.timer_running);
     usb_send_line(s);
 }
 
@@ -130,6 +159,28 @@ static void on_touch(touch_event_t e) {
     }
 }
 
+// The BOOT button: the one input every Touch Deck board has.
+static void on_button(btn_ev_t ev) {
+    if (app.screen == SCR_WATCH) {
+        if (ev == BTN_SHORT) timer_toggle();          // start / pause the stopwatch
+        else timer_reset();                           // long press: back to 00:00:00
+        feedback();
+    } else if (app.screen == SCR_JIG && ev == BTN_SHORT) {
+        app.jig_scale_idx = (app.jig_scale_idx + 1) % JIG_SCALE_COUNT;   // 1x -> 1.5x -> 2x -> 1x
+        feedback();
+        app_redraw();
+        settings_save();
+    }
+}
+
+// Serial TAP-free scripting (tests): SWIPE L|R and BTN / BTN LONG land here.
+void inject_swipe(bool left) {
+    touch_event_t e = {left ? EV_SWIPE_L : EV_SWIPE_R, 120, 140};
+    on_touch(e);
+}
+
+void inject_button(bool long_press) { on_button(long_press ? BTN_LONG : BTN_SHORT); }
+
 int main(void) {
     // Hold the power latch first so the board stays on when running from battery.
     gpio_init(SYS_EN_PIN);
@@ -147,17 +198,19 @@ int main(void) {
     buzzer_init();
     touch_init();
     usb_io_init();
+    button_init();   // before core1 starts: see button.c
     // Resume jiggling if it was on at power-off. It waits for USB to be
     // mounted before moving anything.
     if (settings_jig_on()) jiggler_set(true);
     multicore_launch_core1(ui_core1_main);
 
-    uint32_t next_touch = 0;
+    uint32_t next_touch = 0, next_button = 0;
     for (;;) {
         app.loops++;
         app.usb_mounted = tud_mounted();
         usb_io_poll();
         clock_update();
+        timer_update();
 
         if ((int32_t)(now_ms() - next_touch) >= 0) {
             next_touch = now_ms() + TOUCH_POLL_MS;
@@ -169,6 +222,12 @@ int main(void) {
                 usb_send_line(s);
                 on_touch(e);
             }
+        }
+
+        if ((int32_t)(now_ms() - next_button) >= 0) {
+            next_button = now_ms() + BUTTON_POLL_MS;
+            btn_ev_t b = button_poll();
+            if (b != BTN_NONE) on_button(b);
         }
 
         if (app.clip_state == CLIP_COPYING && (int32_t)(now_ms() - copy_deadline) >= 0) {

@@ -18,6 +18,7 @@ add_executable(watch
     src/lcd.c
     src/gfx.c
     src/buzzer.c
+    src/button.c
     src/touch.c
     src/ui.c
     src/usb_io.c

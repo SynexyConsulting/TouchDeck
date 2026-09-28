@@ -92,10 +92,22 @@ static void draw_watch(int t) {
         gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
     }
     if (app.jig_on)
-        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 196), "JIGGLING", &font_caps, COL_OK, 1);
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 224), "JIGGLING", &font_caps, COL_OK, 1);
     if (app.helper)
         gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 84), "PC", &font_caps, COL_DIM, 1);
     draw_mute_icon(app.muted);
+
+    // Stopwatch (BOOT button): black box below the centre, over the dial but
+    // under the hands. 7-segment digits at twice the chip label's size.
+    {
+        char st[12];
+        int ts = app.timer_s;
+        snprintf(st, sizeof st, "%02d:%02d:%02d", (ts / 3600) % 100, ts / 60 % 60, ts % 60);
+        int tw = gfx_text_aa_width("88:88:88", &font_timer, 0), bw = tw + 16, bh = font_timer.cap_h + 14;
+        int cy = (int)CY + 50;
+        gfx_rrect((int)CX - bw / 2, cy - bh / 2, bw, bh, 6.f, RGB(0, 0, 0));
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_timer, cy), st, &font_timer, RGB(255, 255, 255), 0);
+    }
 
     hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
     hand((m + s / 60.f) * 6.f, 14.f, 90.f, 5.f, COL_HAND);
@@ -208,10 +220,20 @@ static void draw_jig(void) {
     text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
-    if (on)
-        gfx_disc(JIG_CX + cosf(app.jig_angle) * 55.f, JIG_CY + sinf(app.jig_angle) * 55.f, 6.f, C_PC);
+    if (on) {
+        // The dot's orbit grows with the BOOT-button scale (1x inside, 2x at the ring).
+        float orbit = 40.f + 15.f * (JIG_SCALES[app.jig_scale_idx] - 1.f);
+        gfx_disc(JIG_CX + cosf(app.jig_angle) * orbit, JIG_CY + sinf(app.jig_angle) * orbit, 6.f, C_PC);
+    }
     text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
     text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
+    {
+        char sc[8];
+        snprintf(sc, sizeof sc, "%.1fX", (double)JIG_SCALES[app.jig_scale_idx]);
+        int w = gfx_text_aa_width(sc, &font_caps, 1) + 12;
+        pill(JIG_CX - w / 2, JIG_CY + 29, w, 15, C_SURF2);
+        text_c(JIG_CX, JIG_CY + 37, sc, &font_caps, C_PC, 1);
+    }
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
