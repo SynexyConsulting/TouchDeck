@@ -11,11 +11,11 @@ void ui_core1_main(void);
 #define BTN_PASTE_X 122
 #define BTN_W      98
 
-// Mute toggle in the watch face's top-right corner, clear of the dial.
-#define MUTE_CX 211
-#define MUTE_CY 30
-#define MUTE_HIT_X 186   // tap target: x >= MUTE_HIT_X, y < MUTE_HIT_Y
-#define MUTE_HIT_Y 58
+// Mute toggle in the watch face's top-right corner, inside the corner ticks.
+#define MUTE_CX 196
+#define MUTE_CY 54
+#define MUTE_HIT_X 176   // tap target: x >= MUTE_HIT_X, y < MUTE_HIT_Y
+#define MUTE_HIT_Y 76
 
 #define JIG_CX 120
 #define JIG_CY 140

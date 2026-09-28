@@ -6,6 +6,10 @@
 
 extern uint16_t fb[];
 
+// Clip rectangle for all drawing (default: whole screen). gfx_fill fills the clip.
+void gfx_set_clip(int x, int y, int w, int h);
+void gfx_clip_reset(void);
+
 void gfx_fill(uint16_t color);
 void gfx_rect(int x, int y, int w, int h, uint16_t color);
 // Anti-aliased primitives, blended against what is already in fb.

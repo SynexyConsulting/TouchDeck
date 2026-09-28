@@ -9,8 +9,8 @@ PORT = find_port(ESP_VID, ESP_PID)
 pytestmark = pytest.mark.skipif(PORT is None, reason="ESP32-C3 Touch Deck not connected")
 
 class Board:
-    def __init__(self):
-        self.s = open_serial(PORT, timeout=0.02)
+    def __init__(self, port=None):
+        self.s = open_serial(port or PORT, timeout=0.02)
         self.buf, self.lines, self.last_ping = b"", [], 0
         self.send("HELLO")
         self.pump(0.3)
@@ -81,3 +81,31 @@ def test_bluetooth_mode_refused_while_unpaired(board):
         pytest.skip("board has a Bluetooth bond; Forget it to run this check")
     board.send("MODE BT"); board.pump(0.3)
     assert board.field("mode") == "0"
+
+@pytest.mark.skip(reason="ESP32-C3 BOOT button not wired into the firmware yet (button.cpp is WIP)")
+def test_boot_button_cycles_jiggler_scale(board):
+    board.goto(1)
+    order = ["1.0", "1.5", "2.0"]
+    seen = [board.field("jscale")]
+    for _ in range(3):
+        board.send("BTN"); board.pump(0.2)
+        seen.append(board.field("jscale"))
+    i = order.index(seen[0])
+    assert seen == [order[(i + k) % 3] for k in range(4)]
+
+def _mean_step(board, secs):
+    board.take(); board.pump(secs)
+    steps = [l.split() for l in board.take() if l.startswith("M 00 ")]
+    return sum(abs(int(dx)) + abs(int(dy)) for _, _, dx, dy in steps) / max(1, len(steps))
+
+@pytest.mark.skip(reason="ESP32-C3 BOOT button not wired into the firmware yet (button.cpp is WIP)")
+def test_jiggler_scale_widens_the_movement(board):
+    board.goto(1)
+    while board.field("jscale") != "1.0":
+        board.send("BTN"); board.pump(0.2)
+    board.send("TAP 120 115"); board.pump(1.5)          # jiggler on at 1x, let it settle
+    small = _mean_step(board, 2.0)
+    board.send("BTN"); board.send("BTN"); board.pump(1.5)   # -> 2x, allow the easing
+    large = _mean_step(board, 2.0)
+    board.send("BTN"); board.pump(0.2)                  # back to 1x
+    assert large > 1.6 * small

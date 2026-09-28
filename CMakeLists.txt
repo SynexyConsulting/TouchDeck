@@ -18,6 +18,7 @@ add_executable(watch
     src/lcd.c
     src/gfx.c
     src/buzzer.c
+    src/button.c
     src/touch.c
     src/ui.c
     src/usb_io.c
@@ -28,6 +29,10 @@ add_executable(watch
     src/icons.c
     src/aa_fonts.c
 )
+
+# Keep clk_peri (SPI, I2C) on the overclocked system PLL; the SDK default
+# moves it to the 48 MHz USB clock, which slowed the LCD push 2.5x.
+target_compile_definitions(watch PRIVATE PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1)
 
 # tusb_config.h lives in src/
 target_include_directories(watch PRIVATE src)
@@ -43,6 +48,7 @@ target_link_libraries(watch
     hardware_dma
     hardware_pwm
     hardware_i2c
+    hardware_vreg
     tinyusb_device
 )
 

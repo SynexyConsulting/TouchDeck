@@ -1,7 +1,7 @@
 """Generate the Touch Deck's anti-aliased bitmap fonts (aa_fonts.h / aa_fonts.c).
 
 Renders printable ASCII from the design's real typefaces (Barlow, JetBrains
-Mono; SIL Open Font License, files in tools/fonts/) at exact pixel sizes into
+Mono, DSEG7; SIL Open Font License, files in tools/fonts/) at exact pixel sizes into
 4-bit alpha glyphs that gfx_text_aa() blends onto the framebuffer.
 
     python tools/fontgen.py      writes esp32c3/src/aa_fonts.* and src/aa_fonts.*
@@ -25,6 +25,7 @@ FONTS = [
     FontSpec("font_big", "Barlow-Bold.ttf", 26, None, "jiggler ON / OFF"),
     FontSpec("font_mono", "JetBrainsMono[wght].ttf", 10, 500, "clip preview"),
     FontSpec("font_pin", "JetBrainsMono[wght].ttf", 17, 500, "pairing PIN digits"),
+    FontSpec("font_timer", "DSEG7Classic-Bold.ttf", 18, None, "watch stopwatch (7-segment digits)"),
 ]
 
 Glyph = namedtuple("Glyph", "w h x y adv alpha")   # x,y: offset from pen / line top

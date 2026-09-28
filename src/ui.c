@@ -12,7 +12,11 @@
 
 #define CX (LCD_W / 2.f)
 #define CY (LCD_H / 2.f)
-#define R  116.f
+// Rounded-square watch face filling the 240x280 panel; its corners follow the
+// panel's 44 px glass radius (see frame_usb), inset by the face margin.
+#define FACE_M 6
+#define FACE_R (44.f - FACE_M)
+#define TICK_IN 9       // ticks start this far inside the face edge
 #define DEG2RAD 0.017453292f
 
 #define COL_DIAL   RGB(18, 24, 38)
@@ -49,6 +53,48 @@ static void polar(float cx, float cy, float deg, float len, float *x, float *y) 
     *y = cy - cosf(a) * len;
 }
 
+typedef struct { int x, y, w, h; } rect_t;
+
+static rect_t rect_union(rect_t a, rect_t b) {
+    int x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    int x1 = a.x + a.w > b.x + b.w ? a.x + a.w : b.x + b.w;
+    int y1 = a.y + a.h > b.y + b.h ? a.y + a.h : b.y + b.h;
+    return (rect_t){x0, y0, x1 - x0, y1 - y0};
+}
+
+// The three hands at time t (seconds of day): one definition for drawing them
+// and for working out what a per-second partial redraw has to cover.
+typedef struct { float deg, tail, len, thick; uint16_t col; } hand_t;
+
+static void watch_hands(int t, hand_t out[3]) {
+    int h = t / 3600, m = (t / 60) % 60, s = t % 60;
+    out[0] = (hand_t){((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND};
+    out[1] = (hand_t){(m + s / 60.f) * 6.f, 14.f, 90.f, 5.f, COL_HAND};
+    out[2] = (hand_t){s * 6.f, 22.f, 100.f, 2.f, COL_SECOND};
+}
+
+// Pixels the hands (and the centre cap) can touch at time t.
+static rect_t hands_rect(int t) {
+    hand_t hs[3];
+    watch_hands(t, hs);
+    float x0 = CX - 8.f, y0 = CY - 8.f, x1 = CX + 8.f, y1 = CY + 8.f;   // centre discs
+    for (int i = 0; i < 3; i++) {
+        float ax, ay, bx, by, m = hs[i].thick * 0.5f + 2.f;
+        polar(CX, CY, hs[i].deg + 180.f, hs[i].tail, &ax, &ay);
+        polar(CX, CY, hs[i].deg, hs[i].len, &bx, &by);
+        x0 = fminf(x0, fminf(ax, bx) - m); y0 = fminf(y0, fminf(ay, by) - m);
+        x1 = fmaxf(x1, fmaxf(ax, bx) + m); y1 = fmaxf(y1, fmaxf(ay, by) + m);
+    }
+    return (rect_t){(int)floorf(x0), (int)floorf(y0), (int)ceilf(x1 - x0) + 1, (int)ceilf(y1 - y0) + 1};
+}
+
+// The stopwatch's black box below the centre.
+static rect_t stopwatch_rect(void) {
+    int tw = gfx_text_aa_width("88:88:88", &font_timer, 0), bw = tw + 16, bh = font_timer.cap_h + 14;
+    int cy = (int)CY + 50;
+    return (rect_t){(int)CX - bw / 2, cy - bh / 2, bw, bh};
+}
+
 static void hand(float deg, float tail, float len, float thick, uint16_t col) {
     float x0, y0, x1, y1;
     polar(CX, CY, deg + 180.f, tail, &x0, &y0);
@@ -79,27 +125,64 @@ static void draw_mute_icon(bool muted) {
     }
 }
 
+// Distance from the centre, along the direction of minute i, to the rounded
+// square the ticks sit on (bisection on the rounded-box distance). Computed once.
+static float tick_reach[60];
+
+static float rounded_box_sd(float px, float py, float hx, float hy, float r) {
+    float qx = fabsf(px) - (hx - r), qy = fabsf(py) - (hy - r);
+    float ox = fmaxf(qx, 0.f), oy = fmaxf(qy, 0.f);
+    return sqrtf(ox * ox + oy * oy) + fminf(fmaxf(qx, qy), 0.f) - r;
+}
+
+static void tick_reach_init(void) {
+    float hx = LCD_W / 2.f - FACE_M - TICK_IN, hy = LCD_H / 2.f - FACE_M - TICK_IN, r = FACE_R - TICK_IN;
+    for (int i = 0; i < 60; i++) {
+        float a = i * 6.f * DEG2RAD, dx = sinf(a), dy = -cosf(a), lo = 0.f, hi = 200.f;
+        for (int k = 0; k < 24; k++) {
+            float mid = (lo + hi) * 0.5f;
+            if (rounded_box_sd(dx * mid, dy * mid, hx, hy, r) < 0.f) lo = mid; else hi = mid;
+        }
+        tick_reach[i] = lo;
+    }
+}
+
 static void draw_watch(int t) {
-    int h = t / 3600, m = (t / 60) % 60, s = t % 60;
-    gfx_disc(CX, CY, R, COL_DIAL);
-    gfx_ring(CX, CY, R - 1.5f, 3.f, COL_RIM);
+    static bool ticks_ready;
+    if (!ticks_ready) { tick_reach_init(); ticks_ready = true; }
+
+    gfx_rrect(FACE_M, FACE_M, LCD_W - 2 * FACE_M, LCD_H - 2 * FACE_M, FACE_R, COL_DIAL);
+    gfx_rrect_ring(FACE_M, FACE_M, LCD_W - 2 * FACE_M, LCD_H - 2 * FACE_M, FACE_R, 3.f, COL_RIM);
 
     for (int i = 0; i < 60; i++) {
         float x0, y0, x1, y1;
         int hour = (i % 5) == 0;
-        polar(CX, CY, i * 6.f, hour ? R - 22.f : R - 12.f, &x0, &y0);
-        polar(CX, CY, i * 6.f, R - 7.f, &x1, &y1);
+        polar(CX, CY, i * 6.f, tick_reach[i] - (hour ? 15.f : 6.f), &x0, &y0);
+        polar(CX, CY, i * 6.f, tick_reach[i], &x1, &y1);
         gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
     }
-    if (app.jig_on)
-        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 196), "JIGGLING", &font_caps, COL_OK, 1);
     if (app.helper)
         gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 84), "PC", &font_caps, COL_DIM, 1);
     draw_mute_icon(app.muted);
 
-    hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
-    hand((m + s / 60.f) * 6.f, 14.f, 90.f, 5.f, COL_HAND);
-    hand(s * 6.f, 22.f, 100.f, 2.f, COL_SECOND);
+    // Stopwatch (BOOT button): black box below the centre, over the dial but
+    // under the hands. 7-segment digits at twice the chip label's size.
+    {
+        char st[12];
+        int ts = app.timer_s;
+        snprintf(st, sizeof st, "%02d:%02d:%02d", (ts / 3600) % 100, ts / 60 % 60, ts % 60);
+        rect_t box = stopwatch_rect();
+        int bh = box.h, cy = box.y + box.h / 2;
+        gfx_rrect(box.x, box.y, box.w, box.h, 6.f, RGB(0, 0, 0));
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_timer, cy), st, &font_timer, RGB(255, 255, 255), 0);
+        if (app.jig_on)       // tucked just under the stopwatch
+            gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, cy + bh / 2 + 8), "JIGGLING",
+                                 &font_caps, COL_OK, 1);
+    }
+
+    hand_t hs[3];
+    watch_hands(t, hs);
+    for (int i = 0; i < 3; i++) hand(hs[i].deg, hs[i].tail, hs[i].len, hs[i].thick, hs[i].col);
     gfx_disc(CX, CY, 6.f, COL_SECOND);
     gfx_disc(CX, CY, 2.f, COL_DIAL);
 }
@@ -208,10 +291,20 @@ static void draw_jig(void) {
     text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
-    if (on)
-        gfx_disc(JIG_CX + cosf(app.jig_angle) * 55.f, JIG_CY + sinf(app.jig_angle) * 55.f, 6.f, C_PC);
+    if (on || app.anim_demo) {
+        // The dot's orbit grows with the BOOT-button scale (1x inside, 2x at the ring).
+        float orbit = 40.f + 15.f * (JIG_SCALES[app.jig_scale_idx] - 1.f);
+        gfx_disc(JIG_CX + cosf(app.jig_angle) * orbit, JIG_CY + sinf(app.jig_angle) * orbit, 6.f, C_PC);
+    }
     text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
     text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
+    {
+        char sc[8];
+        snprintf(sc, sizeof sc, "%.1fX", (double)JIG_SCALES[app.jig_scale_idx]);
+        int w = gfx_text_aa_width(sc, &font_caps, 1) + 12;
+        pill(JIG_CX - w / 2, JIG_CY + 29, w, 15, C_SURF2);
+        text_c(JIG_CX, JIG_CY + 37, sc, &font_caps, C_PC, 1);
+    }
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
@@ -244,43 +337,150 @@ static void page_dots(int screen) {
         gfx_disc(LCD_W / 2 + (i - 1) * 14, 268, 3.f, i == screen ? COL_TEXT : RGB(60, 64, 76));
 }
 
+// Regions that change on an animation frame (everything else is redrawn only
+// when core0 bumps redraw_seq): the jiggler's orbit + pill and status lines,
+// or the clipboard's progress line while pasting.
+static const rect_t JIG_ANIM[] = {
+    {JIG_CX - JIG_R - 3, JIG_CY - JIG_R - 3, 2 * (JIG_R + 3), 2 * (JIG_R + 3)},
+    {0, 206, LCD_W, 44},
+};
+static const rect_t CLIP_ANIM[] = {{0, 178, LCD_W, 20}};
+
+static void draw_page(int screen, int t) {
+    gfx_fill(C_BG);
+    if (screen == SCR_WATCH) draw_watch(t);
+    else if (screen == SCR_CLIP) draw_clip();
+    else draw_jig();
+    frame_usb();      // last: over the content (the watch face fills the screen)
+    page_dots(screen);
+}
+
+static bool msg_showing(void) { return (int32_t)(app.msg_until_ms - now_ms()) > 0; }
+
+static rect_t clamp_to_screen(rect_t r) {
+    if (r.x < 0) { r.w += r.x; r.x = 0; }
+    if (r.y < 0) { r.h += r.y; r.y = 0; }
+    if (r.x + r.w > LCD_W) r.w = LCD_W - r.x;
+    if (r.y + r.h > LCD_H) r.h = LCD_H - r.y;
+    return r;
+}
+
+// Draw the watch page for time t clipped to r (dial and ticks underneath come
+// back through the clip).
+static void draw_watch_region(rect_t r, int t) {
+    gfx_set_clip(r.x, r.y, r.w, r.h);
+    draw_page(SCR_WATCH, t);
+    gfx_clip_reset();
+}
+
 void ui_core1_main(void) {
     // Lets core0 park this core while it writes settings to flash.
     flash_safe_execute_core_init();
 
-    uint32_t drawn_seq = ~0u, last_frame = 0;
-    int last_watch_t = -1;
-    bool first = true;
+    uint32_t drawn_seq = ~0u, last_frame = 0, drawn_wtick = 0, seen_edge = 0;
+    int drawn_screen = -1;
+    bool first = true, msg_shown = false;
+
+    // Watch page: `shown_t` is the second on screen. Right after it is shown,
+    // the frame for the next second is drawn into fb ahead of time (`ready`),
+    // then pushed the moment core0's second alarm fires, so the hands move
+    // exactly with the tick.
+    int shown_t = -1, ready_t = -1;
+    bool ready = false;
+    rect_t ready_rect = {0, 0, 0, 0};
+    rect_t prev_hands = {0, 0, LCD_W, LCD_H};   // where the hands are on screen
 
     for (;;) {
         int screen = app.screen;
-        uint32_t seq = app.redraw_seq;
-        // Watch redraws on request (each second); other screens animate.
-        uint32_t period = (screen == SCR_JIG && app.jig_on) || app.clip_state != CLIP_IDLE ? 50 : 250;
-        bool due = seq != drawn_seq || (screen != SCR_WATCH && now_ms() - last_frame >= period);
-        if (!due) { sleep_ms(2); continue; }
-        drawn_seq = seq;
-        last_frame = now_ms();
-
-        int t = app.time_s;
-        gfx_fill(C_BG);
-        frame_usb();
-        if (screen == SCR_WATCH) draw_watch(t);
-        else if (screen == SCR_CLIP) draw_clip();
-        else draw_jig();
-        page_dots(screen);
-
-        lcd_push_frame(fb);
-        lcd_wait();
-        app.frames++;
-        if (first) { lcd_set_backlight(80); first = false; }
-
-        // Tick only when the second hand actually advanced on screen.
-        if (screen == SCR_WATCH) {
-            if (last_watch_t >= 0 && t != last_watch_t) app.tick_pending = true;
-            last_watch_t = t;
-        } else {
-            last_watch_t = -1;
+        bool on_watch = screen == SCR_WATCH;
+        uint32_t seq = app.redraw_seq, wtick = app.watch_tick, edge = app.second_edge;
+        bool anim_jig = screen == SCR_JIG && (app.jig_on || app.anim_demo);
+        bool anim_clip = screen == SCR_CLIP && app.clip_state == CLIP_PASTING;
+        bool msg = msg_showing();
+        bool full = seq != drawn_seq || screen != drawn_screen || msg != msg_shown;
+        bool edge_new = on_watch && edge != seen_edge;
+        bool stopwatch = on_watch && wtick != drawn_wtick;
+        bool prerender = on_watch && !ready && shown_t == app.time_s;
+        bool partial = (anim_jig || anim_clip) && now_ms() - last_frame >= 50;
+        if (!full && !edge_new && !stopwatch && !prerender && !partial) {
+            if (ready) sleep_us(200);    // a frame is waiting for its second: watch the edge closely
+            else sleep_ms(2);
+            continue;
         }
+        drawn_seq = seq;
+        drawn_screen = screen;
+        msg_shown = msg;
+        drawn_wtick = wtick;
+        last_frame = now_ms();
+        if (app.anim_demo && anim_jig) app.jig_angle += 0.12f;   // ANIM 1: spin the dot, no HID
+
+        uint64_t t_draw = time_us_64(), t_push = t_draw;
+        bool pushed = true;
+        if (full) {
+            int t = app.time_s;
+            draw_page(screen, t);
+            t_push = time_us_64();
+            lcd_push_frame(fb);
+            lcd_wait();
+            seen_edge = edge;
+            ready = false;
+            if (on_watch) { shown_t = t; prev_hands = hands_rect(t); }
+        } else if (edge_new) {
+            seen_edge = edge;
+            int t = app.time_s;
+            rect_t r;
+            if (ready && ready_t == t) {             // drawn ahead: just send it
+                r = ready_rect;
+                app.prerender_hits++;
+            } else {                                 // not ready in time: draw it now
+                r = clamp_to_screen(rect_union(rect_union(prev_hands, hands_rect(t)), stopwatch_rect()));
+                draw_watch_region(r, t);
+                app.prerender_misses++;
+            }
+            bool hit = ready && ready_t == t;
+            t_push = time_us_64();
+            lcd_push_rect(fb, r.x, r.y, r.w, r.h);
+            if (hit) {   // edge -> frame on screen, for drawn-ahead frames (misses are counted instead)
+                uint32_t lag = time_us_32() - app.edge_us;
+                app.perf_edge_lag_us += ((int32_t)lag - (int32_t)app.perf_edge_lag_us) / 4;
+            }
+            shown_t = t;
+            prev_hands = hands_rect(t);
+            ready = false;
+        } else if (stopwatch) {
+            // The stopwatch ticks on its own schedule: repaint just its box for
+            // the second on screen. That overwrites part of any drawn-ahead
+            // frame, so draw the next one again afterwards.
+            rect_t r = clamp_to_screen(stopwatch_rect());
+            draw_watch_region(r, shown_t);
+            t_push = time_us_64();
+            lcd_push_rect(fb, r.x, r.y, r.w, r.h);
+            ready = false;
+        } else if (prerender) {
+            int next = (shown_t + 1) % 86400;
+            ready_rect = clamp_to_screen(rect_union(rect_union(prev_hands, hands_rect(next)), stopwatch_rect()));
+            draw_watch_region(ready_rect, next);
+            ready_t = next;
+            ready = true;
+            pushed = false;
+        } else {
+            const rect_t *r = anim_jig ? JIG_ANIM : CLIP_ANIM;
+            int n = anim_jig ? 2 : 1;
+            for (int i = 0; i < n; i++) {           // draw each region clipped, then send just it
+                gfx_set_clip(r[i].x, r[i].y, r[i].w, r[i].h);
+                draw_page(screen, app.time_s);
+            }
+            gfx_clip_reset();
+            t_push = time_us_64();
+            for (int i = 0; i < n; i++) lcd_push_rect(fb, r[i].x, r[i].y, r[i].w, r[i].h);
+        }
+        // Frame timing for DBG: exponential averages (1/8) and the worst draw seen.
+        uint64_t t_end = time_us_64();
+        uint32_t draw_us = (uint32_t)((pushed ? t_push : t_end) - t_draw), push_us = (uint32_t)(t_end - t_push);
+        app.perf_draw_us += ((int32_t)draw_us - (int32_t)app.perf_draw_us) / 8;
+        if (pushed) app.perf_push_us += ((int32_t)push_us - (int32_t)app.perf_push_us) / 8;
+        if (draw_us > app.perf_draw_max_us) app.perf_draw_max_us = draw_us;
+        if (pushed) app.frames++;
+        if (first) { lcd_set_backlight(80); first = false; }
     }
 }

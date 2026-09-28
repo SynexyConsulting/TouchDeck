@@ -7,9 +7,12 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "hardware/clocks.h"
+#include "hardware/vreg.h"
 #include "tusb.h"
 #include "app.h"
 #include "board.h"
+#include "button.h"
 #include "buzzer.h"
 #include "jiggler.h"
 #include "lcd.h"
@@ -20,14 +23,15 @@
 #include "usb_io.h"
 
 #define TOUCH_POLL_MS 2
+#define BUTTON_POLL_MS 20
 #define COPY_TIMEOUT_MS 3000
 
 app_t app;
 mutex_t clip_mtx;
 
-static int clock_base_s;
-static uint64_t clock_base_us;
+static alarm_id_t second_alarm;
 static uint32_t copy_deadline;
+static uint64_t timer_accum_us, timer_start_us;   // stopwatch: banked time + current run
 
 uint32_t now_ms(void) { return to_ms_since_boot(get_absolute_time()); }
 
@@ -40,18 +44,51 @@ void app_message(const char *text) {
     app_redraw();
 }
 
+// The clock's second, from a hardware timer alarm (IRQ on core0). Returning
+// 1 s re-arms it relative to when it was *scheduled* to fire, so it never
+// drifts. The tick plays right here, exactly on the second; core1 has usually
+// drawn this second's frame already and pushes it when it sees the edge.
+static int64_t on_second(alarm_id_t id, void *user) {
+    (void)id; (void)user;
+    app.time_s = (app.time_s + 1) % 86400;
+    app.edge_us = time_us_32();
+    app.second_edge++;
+    if (app.screen == SCR_WATCH && !app.muted) buzzer_tick();
+    return 1000000;
+}
+
+// TIME from the helper (or the compile time at boot) sets the clock; its
+// second boundary starts now.
 void clock_set(int seconds_of_day) {
-    clock_base_s = seconds_of_day;
-    clock_base_us = time_us_64();
+    if (second_alarm > 0) cancel_alarm(second_alarm);
+    app.time_s = seconds_of_day;
+    second_alarm = add_alarm_in_us(1000000, on_second, NULL, true);
     app_redraw();
 }
 
-static void clock_update(void) {
-    int t = (int)((clock_base_s + (time_us_64() - clock_base_us) / 1000000) % 86400);
-    if (t != app.time_s) {
-        app.time_s = t;
-        if (app.screen == SCR_WATCH) app_redraw();
+// Stopwatch on the watch face. timer_s is what the face shows; a change on
+// the watch page requests a redraw (independently of the clock's second).
+static void timer_update(void) {
+    uint64_t us = timer_accum_us + (app.timer_running ? time_us_64() - timer_start_us : 0);
+    int s = (int)(us / 1000000);
+    if (s != app.timer_s) {
+        app.timer_s = s;
+        if (app.screen == SCR_WATCH) app.watch_tick++;   // hands/stopwatch only: partial redraw
     }
+}
+
+static void timer_toggle(void) {
+    if (app.timer_running) timer_accum_us += time_us_64() - timer_start_us;
+    else timer_start_us = time_us_64();
+    app.timer_running = !app.timer_running;
+    app_redraw();
+}
+
+static void timer_reset(void) {
+    app.timer_running = false;
+    timer_accum_us = 0;
+    app.timer_s = 0;
+    app_redraw();
 }
 
 // __TIME__ is "HH:MM:SS"; used until the PC helper sends the real time.
@@ -65,14 +102,20 @@ static int compile_seconds(void) {
 // Answer to the helper's DBG command: one line of liveness + touch state.
 // Deliberately does not read the touch chip (unsolicited reads wedge it).
 void debug_report(void) {
-    char s[200];
+    char s[320];
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
-             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d",
+             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f timer=%d trun=%d "
+             "| draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
-             touch_stats.last_x, touch_stats.last_y, touch_diag_lines());
+             touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
+             (double)JIG_SCALES[app.jig_scale_idx], app.timer_s, app.timer_running,
+             (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
+             (unsigned long)app.perf_draw_max_us, (unsigned long)app.perf_edge_lag_us,
+             (unsigned long)app.prerender_hits, (unsigned long)app.prerender_misses);
+    app.perf_draw_max_us = 0;   // worst case since the previous DBG
     usb_send_line(s);
 }
 
@@ -130,34 +173,64 @@ static void on_touch(touch_event_t e) {
     }
 }
 
+// The BOOT button: the one input every Touch Deck board has.
+static void on_button(btn_ev_t ev) {
+    if (app.screen == SCR_WATCH) {
+        if (ev == BTN_SHORT) timer_toggle();          // start / pause the stopwatch
+        else timer_reset();                           // long press: back to 00:00:00
+        feedback();
+    } else if (app.screen == SCR_JIG && ev == BTN_SHORT) {
+        app.jig_scale_idx = (app.jig_scale_idx + 1) % JIG_SCALE_COUNT;   // 1x -> 1.5x -> 2x -> 1x
+        feedback();
+        app_redraw();
+        settings_save();
+    }
+}
+
+// Serial TAP-free scripting (tests): SWIPE L|R and BTN / BTN LONG land here.
+void inject_swipe(bool left) {
+    touch_event_t e = {left ? EV_SWIPE_L : EV_SWIPE_R, 120, 140};
+    on_touch(e);
+}
+
+void inject_button(bool long_press) { on_button(long_press ? BTN_LONG : BTN_SHORT); }
+
 int main(void) {
     // Hold the power latch first so the board stays on when running from battery.
     gpio_init(SYS_EN_PIN);
     gpio_set_dir(SYS_EN_PIN, GPIO_OUT);
     gpio_put(SYS_EN_PIN, 1);
 
+    // 200 MHz instead of 125: drawing is pure software maths (no FPU), so it
+    // scales with the clock. 1.15 V is the usual core voltage for this speed.
+    // Peripherals re-derive their rates from the new clock (SPI lands at 50 MHz).
+    vreg_set_voltage(VREG_VOLTAGE_1_15);
+    sleep_ms(2);
+    set_sys_clock_khz(200000, true);
+
     mutex_init(&clip_mtx);
     strcpy(app.clip_src, "-");
     app.screen = SCR_WATCH;
     settings_load();
     clock_set(compile_seconds());
-    app.time_s = compile_seconds();
 
     lcd_init();
     buzzer_init();
     touch_init();
     usb_io_init();
+    button_init();   // before core1 starts: see button.c
     // Resume jiggling if it was on at power-off. It waits for USB to be
     // mounted before moving anything.
     if (settings_jig_on()) jiggler_set(true);
     multicore_launch_core1(ui_core1_main);
 
-    uint32_t next_touch = 0;
+    uint32_t next_touch = 0, next_button = 0;
     for (;;) {
         app.loops++;
-        app.usb_mounted = tud_mounted();
+        bool mounted = tud_mounted();
+        if (mounted != app.usb_mounted) { app.usb_mounted = mounted; app_redraw(); }   // chip dot
         usb_io_poll();
-        clock_update();
+        timer_update();
 
         if ((int32_t)(now_ms() - next_touch) >= 0) {
             next_touch = now_ms() + TOUCH_POLL_MS;
@@ -171,6 +244,12 @@ int main(void) {
             }
         }
 
+        if ((int32_t)(now_ms() - next_button) >= 0) {
+            next_button = now_ms() + BUTTON_POLL_MS;
+            btn_ev_t b = button_poll();
+            if (b != BTN_NONE) on_button(b);
+        }
+
         if (app.clip_state == CLIP_COPYING && (int32_t)(now_ms() - copy_deadline) >= 0) {
             app.clip_state = CLIP_IDLE;
             app_message("No reply from PC");
@@ -179,9 +258,5 @@ int main(void) {
         typer_step();
         jiggler_step();
 
-        if (app.tick_pending) {
-            app.tick_pending = false;
-            if (!app.muted) buzzer_tick();
-        }
     }
 }
