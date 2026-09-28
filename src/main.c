@@ -7,6 +7,8 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "hardware/clocks.h"
+#include "hardware/vreg.h"
 #include "tusb.h"
 #include "app.h"
 #include "board.h"
@@ -93,15 +95,19 @@ static int compile_seconds(void) {
 // Answer to the helper's DBG command: one line of liveness + touch state.
 // Deliberately does not read the touch chip (unsolicited reads wedge it).
 void debug_report(void) {
-    char s[256];
+    char s[320];
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
-             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f timer=%d trun=%d",
+             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f timer=%d trun=%d "
+             "| draw=%lu push=%lu drawmax=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
              touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
-             (double)JIG_SCALES[app.jig_scale_idx], app.timer_s, app.timer_running);
+             (double)JIG_SCALES[app.jig_scale_idx], app.timer_s, app.timer_running,
+             (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
+             (unsigned long)app.perf_draw_max_us);
+    app.perf_draw_max_us = 0;   // worst case since the previous DBG
     usb_send_line(s);
 }
 
@@ -186,6 +192,13 @@ int main(void) {
     gpio_init(SYS_EN_PIN);
     gpio_set_dir(SYS_EN_PIN, GPIO_OUT);
     gpio_put(SYS_EN_PIN, 1);
+
+    // 200 MHz instead of 125: drawing is pure software maths (no FPU), so it
+    // scales with the clock. 1.15 V is the usual core voltage for this speed.
+    // Peripherals re-derive their rates from the new clock (SPI lands at 50 MHz).
+    vreg_set_voltage(VREG_VOLTAGE_1_15);
+    sleep_ms(2);
+    set_sys_clock_khz(200000, true);
 
     mutex_init(&clip_mtx);
     strcpy(app.clip_src, "-");

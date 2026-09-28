@@ -315,6 +315,7 @@ void ui_core1_main(void) {
         last_frame = now_ms();
 
         int t = app.time_s;
+        uint64_t t_draw = time_us_64();
         gfx_fill(C_BG);
         if (screen == SCR_WATCH) draw_watch(t);
         else if (screen == SCR_CLIP) draw_clip();
@@ -322,8 +323,14 @@ void ui_core1_main(void) {
         frame_usb();      // last: over the content (the watch face fills the screen)
         page_dots(screen);
 
+        uint64_t t_push = time_us_64();
         lcd_push_frame(fb);
         lcd_wait();
+        // Frame timing for DBG: exponential averages (1/8) and the worst draw seen.
+        uint32_t draw_us = (uint32_t)(t_push - t_draw), push_us = (uint32_t)(time_us_64() - t_push);
+        app.perf_draw_us += ((int32_t)draw_us - (int32_t)app.perf_draw_us) / 8;
+        app.perf_push_us += ((int32_t)push_us - (int32_t)app.perf_push_us) / 8;
+        if (draw_us > app.perf_draw_max_us) app.perf_draw_max_us = draw_us;
         app.frames++;
         if (first) { lcd_set_backlight(80); first = false; }
 
