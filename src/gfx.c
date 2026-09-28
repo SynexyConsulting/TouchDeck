@@ -5,6 +5,7 @@
 #include "gfx.h"
 #include "board.h"
 #include <math.h>
+#include <stdbool.h>
 #include <string.h>
 
 uint16_t fb[LCD_W * LCD_H];
@@ -128,25 +129,53 @@ void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
         }
 }
 
-void gfx_char(int x, int y, char c, const sFONT *font, uint16_t color) {
-    if (c < ' ' || c > '~') c = '?';
-    int bpr = (font->Width + 7) / 8;
-    const uint8_t *g = font->table + (c - ' ') * font->Height * bpr;
-    for (int row = 0; row < font->Height; row++, g += bpr) {
-        int yy = y + row;
-        if (yy < 0 || yy >= LCD_H) continue;
-        for (int col = 0; col < font->Width; col++) {
-            int xx = x + col;
-            if (xx < 0 || xx >= LCD_W) continue;
-            if (g[col >> 3] & (0x80 >> (col & 7))) fb[yy * LCD_W + xx] = color;
+void gfx_rrect_ring(int x, int y, int w, int h, float rad, float width, uint16_t color) {
+    float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
+    int band = (int)(rad + width + 2);
+    for (int py = y; py < y + h; py++) {
+        bool edge_row = py < y + band || py >= y + h - band;
+        for (int px = x; px < x + w; px++) {
+            if (!edge_row && px >= x + (int)width + 2 && px < x + w - (int)width - 2) {
+                px = x + w - (int)width - 3;          // skip the untouched middle
+                continue;
+            }
+            float qx = fabsf(px + 0.5f - cx) - (hx - rad), qy = fabsf(py + 0.5f - cy) - (hy - rad);
+            float d = (qx > 0.f && qy > 0.f) ? sqrtf(qx * qx + qy * qy) - rad : fmaxf(qx, qy) - rad;
+            float a = fminf(0.5f - d, d + width + 0.5f);   // inside the outer edge, outside the inner
+            plot(px, py, color, a > 1.f ? 1.f : a);
         }
     }
 }
 
-void gfx_text(int x, int y, const char *s, const sFONT *font, uint16_t color) {
-    for (; *s; s++, x += font->Width) gfx_char(x, y, *s, font, color);
+static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
+    if (c < ' ' || c > '~') c = '?';
+    return &f->glyphs[c - ' '];
 }
 
-void gfx_text_centered(int cx, int y, const char *s, const sFONT *font, uint16_t color) {
-    gfx_text(cx - (int)strlen(s) * font->Width / 2, y, s, font, color);
+int gfx_text_aa_width(const char *s, const aa_font_t *f, int spacing) {
+    int w = 0, n = 0;
+    for (; *s; s++, n++) w += aa_glyph(f, *s)->adv;
+    return n ? w + spacing * (n - 1) : 0;
 }
+
+int gfx_text_aa(int x, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    for (; *s; s++) {
+        const aa_glyph_t *g = aa_glyph(f, *s);
+        const uint8_t *bits = f->bitmap + g->offset;
+        int bpr = (g->w + 1) / 2;
+        for (int r = 0; r < g->h; r++)
+            for (int col = 0; col < g->w; col++) {
+                uint8_t v = bits[r * bpr + col / 2];
+                int a = (col & 1) ? (v & 0x0F) : (v >> 4);
+                if (a) plot(x + g->x + col, y + g->y + r, color, a / 15.f);
+            }
+        x += g->adv + spacing;
+    }
+    return x;
+}
+
+void gfx_text_aa_centered(int cx, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    gfx_text_aa(cx - gfx_text_aa_width(s, f, spacing) / 2, y, s, f, color, spacing);
+}
+
+int gfx_text_aa_ytop(const aa_font_t *f, int cy) { return cy - f->cap_top - f->cap_h / 2; }

@@ -20,6 +20,7 @@ from ctypes import wintypes
 
 import serial
 
+from inject import Injector
 from touchdeck import find_port, open_serial
 
 CLIP_MAX = 8192
@@ -54,21 +55,43 @@ def to_ascii(text):
 def selection_via_uia():
     """Selected text of the focused control, '' if none, None if unsupported."""
     try:
+        t0 = time.perf_counter()
         import uiautomation as auto
+        _timing(f"import uiautomation {_ms(t0)}")
     except ImportError:
         return None
     try:
+        t0 = time.perf_counter()
         ctrl = auto.GetFocusedControl()
-        for _ in range(4):                       # focus is sometimes on a child
+        _timing(f"focused control {_ms(t0)}: "
+                f"{ctrl.ControlTypeName if ctrl else None} '{(ctrl.Name if ctrl else '')[:40]}'")
+        for level in range(4):                   # focus is sometimes on a child
             if ctrl is None:
                 break
+            t0 = time.perf_counter()
             tp = ctrl.GetPattern(auto.PatternId.TextPattern)
+            _timing(f"level {level} {ctrl.ControlTypeName} TextPattern={bool(tp)} {_ms(t0)}")
             if tp:
-                return "".join(r.GetText(-1) for r in tp.GetSelection())
+                t0 = time.perf_counter()
+                text = "".join(r.GetText(-1) for r in tp.GetSelection())
+                _timing(f"selection read {_ms(t0)}: {len(text)} chars")
+                return text
             ctrl = ctrl.GetParentControl()
     except Exception as e:                       # UIA errors are app-specific
         print(f"  UIA: {e}")
     return None
+
+
+# Copy-path timing, printed with each COPY (diagnosing slow selection reads).
+_timings = []
+
+
+def _ms(t0):
+    return f"{(time.perf_counter() - t0) * 1000:.0f} ms"
+
+
+def _timing(line):
+    _timings.append(line)
 
 
 def clipboard_text():
@@ -97,10 +120,19 @@ def clipboard_text():
 
 
 def grab_text():
+    _timings.clear()
+    t_all = time.perf_counter()
     sel = selection_via_uia()
     if sel:
-        return sel, "select"
-    return clipboard_text(), "clipbd"
+        result = sel, "select"
+    else:
+        t0 = time.perf_counter()
+        result = clipboard_text(), "clipbd"
+        _timing(f"clipboard read {_ms(t0)}")
+    _timing(f"total {_ms(t_all)}")
+    for line in _timings:
+        print(f"    {line}")
+    return result
 
 
 # ---------- serial protocol ----------
@@ -135,26 +167,56 @@ def open_board(wait=True):
         time.sleep(1)
 
 
-def run(debug=False):
+def _byte(text):
+    """Parse one hex report byte; anything outside 0..FF is malformed."""
+    v = int(text, 16)
+    if not 0 <= v <= 0xFF:
+        raise ValueError(text)
+    return v
+
+
+def handle_line(line, ser, inj):
+    """One line from the board. K/M are input reports for PC output mode."""
+    parts = line.split()
+    try:
+        if line == "COPY":
+            print("COPY requested")
+            send_clip(ser, *grab_text())
+        elif line.startswith("LOG "):
+            print(time.strftime("%H:%M:%S ") + f"board: {line[4:]}")
+        elif parts[0] == "K" and len(parts) == 3:
+            inj.key(_byte(parts[1]), _byte(parts[2]))
+        elif parts[0] == "M" and len(parts) == 4:
+            dx = max(-127, min(127, int(parts[2])))
+            dy = max(-127, min(127, int(parts[3])))
+            inj.mouse(_byte(parts[1]), dx, dy)
+    except (ValueError, IndexError):
+        print(f"  ignored malformed line: {line!r}")
+
+
+def run(debug=False, dry_run=False):
+    inj = Injector(dry_run=dry_run, echo=dry_run)
     while True:
         ser = open_board()
-        print(f"Connected on {ser.port}")
+        print(f"Connected on {ser.port}" + ("  (dry run: input is logged, not performed)" if dry_run else ""))
         try:
             ser.write(b"\nHELLO\n")
             send_time(ser)
-            last_ping = last_time = time.time()
+            last_ping = last_time = last_caps_poll = time.time()
+            caps = None                      # forces an initial LEDS
             buf = b""
             while True:
                 buf += ser.read(256)
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
-                    line = line.strip().decode(errors="replace")
-                    if line == "COPY":
-                        print("COPY requested")
-                        send_clip(ser, *grab_text())
-                    elif line.startswith("LOG "):
-                        print(time.strftime("%H:%M:%S ") + f"board: {line[4:]}")
+                    handle_line(line.strip().decode(errors="replace"), ser, inj)
                 now = time.time()
+                if now - last_caps_poll >= 0.25:
+                    last_caps_poll = now
+                    c = inj.caps_lock()
+                    if c != caps:
+                        caps = c
+                        ser.write(b"LEDS 02\n" if c else b"LEDS 00\n")
                 if now - last_ping >= PING_S:
                     ser.write(b"DBG\n" if debug else b"PING\n")
                     last_ping = now
@@ -165,6 +227,8 @@ def run(debug=False):
             print("Disconnected")
             ser.close()
             time.sleep(1)
+        finally:
+            inj.release_all()                # never leave a key or button held on the PC
 
 
 def main():
@@ -172,6 +236,7 @@ def main():
     ap.add_argument("--send", metavar="TEXT", help="push TEXT into the board's clip and exit")
     ap.add_argument("--boot", action="store_true", help="reboot the board into the UF2 bootloader")
     ap.add_argument("--debug", action="store_true", help="poll the board's diagnostics every 2 s")
+    ap.add_argument("--dry-run", action="store_true", help="log PC-mode keystrokes/mouse instead of performing them")
     args = ap.parse_args()
 
     if args.send is not None or args.boot:
@@ -185,7 +250,7 @@ def main():
             time.sleep(0.3)
         return
     try:
-        run(args.debug)
+        run(args.debug, args.dry_run)
     except KeyboardInterrupt:
         pass
 

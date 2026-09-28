@@ -12,6 +12,7 @@
 #include "display.h"
 #include "jiggler.h"
 #include "link.h"
+#include "output.h"
 #include "touch.h"
 #include "typer.h"
 #include "ui.h"
@@ -43,7 +44,6 @@ void clock_set(int seconds_of_day) {
 static void clock_update() {
     if (clock_base_s < 0) return;
     int t = (int)((clock_base_s + (now_ms() - clock_base_ms) / 1000) % 86400);
-    if (t / 60 != app.time_s / 60) app_redraw();   // header shows HH:MM
     app.time_s = t;
 }
 
@@ -52,12 +52,12 @@ void debug_report() {
     char s[300];
     snprintf(s, sizeof s,
              "LOG up=%lus frames=%lu screen=%d bt_page=%d heap=%u | ble state=%d conn=%d ready=%d host=%s | touch chip=%d ints=%u "
-             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d",
+             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.frames, app.screen, app.in_bt,
              (unsigned)ESP.getFreeHeap(), (int)ble_state(), ble_connected(), ble_ready(), ble_host_name(), touch_stats.chip_id,
              touch_stats.ints, touch_stats.reads, touch_stats.fails, touch_stats.recoveries,
              touch_stats.presses, touch_stats.events, touch_stats.last_x, touch_stats.last_y,
-             touch_diag_lines());
+             touch_diag_lines(), (int)mode_get(), app.jig_on, app.pc_leds);
     link_send_line(s);
 }
 
@@ -65,24 +65,32 @@ static bool in_rect(const touch_event_t &e, int x, int y, int w, int h) {
     return e.x >= x && e.x < x + w && e.y >= y && e.y < y + h;
 }
 
+static bool near(const touch_event_t &e, int cx, int cy, int r) {
+    int dx = e.x - cx, dy = e.y - cy;
+    return dx * dx + dy * dy <= r * r;
+}
+
 static void on_touch_bt(const touch_event_t &e) {
-    if (e.type == EV_SWIPE_R || (e.type == EV_TAP && e.x < BACK_HIT_X && e.y < BACK_HIT_Y)) {
+    if (e.type == EV_SWIPE_R || (e.type == EV_TAP && near(e, BACK_CX, BACK_CY, BACK_HIT_R))) {
         app.in_bt = false;   // back up to Settings
         app_redraw();
         return;
     }
-    if (e.type != EV_TAP || e.y < BT_BTN_Y || e.y >= BT_BTN_Y + BT_BTN_H) return;
-
+    if (e.type != EV_TAP) return;
     bt_state_t st = ble_state();
     if (st == BT_UNPAIRED || st == BT_PAIRING) {
-        if (e.x >= BT_BTN1_X && e.x < BT_BTN1_X + BT_BTN1_W) {
+        if (in_rect(e, BT_BTN1_X, BT_BTN1_Y, BT_BTN1_W, BT_BTN1_H)) {
             if (st == BT_UNPAIRED) ble_pair_start();
             else ble_pair_cancel();
         }
-    } else if (in_rect(e, BTN_COPY_X, BT_BTN_Y, BTN_W, BT_BTN_H)) {
+    } else if (in_rect(e, BT_BTN_L_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H)) {
         if (st == BT_OFF) ble_reconnect();
         else ble_disconnect();
-    } else if (in_rect(e, BTN_PASTE_X, BT_BTN_Y, BTN_W, BT_BTN_H)) {
+    } else if (in_rect(e, BT_BTN_R_X, BT_BTN2_Y, BT_BTN2_W, BT_BTN2_H)) {
+        // Switch first, while the bond still exists: mode_set only runs its
+        // cleanup (stop paste, release held BT keys, reset jiggler) when the
+        // effective mode changes, and forgetting the bond would pre-empt that.
+        mode_set(MODE_PC);
         ble_forget();
     }
     app_redraw();
@@ -118,18 +126,26 @@ static void on_touch(const touch_event_t &e) {
             app_redraw();
         }
     } else if (app.screen == SCR_JIG) {
-        int dx = e.x - JIG_CX, dy = e.y - JIG_CY;
-        if (dx * dx + dy * dy <= (JIG_R + 12) * (JIG_R + 12)) {
+        if (near(e, JIG_CX, JIG_CY, JIG_R + 10)) {
             jiggler_toggle();
             prefs.putBool("jig", app.jig_on);   // survives power-off
         }
     } else if (app.screen == SCR_SETTINGS) {
-        int dx = e.x - COG_CX, dy = e.y - COG_CY;
-        if (dx * dx + dy * dy <= COG_HIT_R * COG_HIT_R || (e.y > 140 && e.y < 205)) {
+        if (in_rect(e, SEG_BT_X, SEG_Y, SEG_W, SEG_H)) {
+            if (!mode_set(MODE_BT)) app_message("Pair Bluetooth first");
+        } else if (in_rect(e, SEG_PC_X, SEG_Y, SEG_W, SEG_H)) {
+            mode_set(MODE_PC);
+        } else if (in_rect(e, ROW_X, ROW_Y, ROW_W, ROW_H)) {
             app.in_bt = true;
             app_redraw();
         }
     }
+}
+
+// Serial TAP/SWIPE commands land here, so flows can be scripted.
+void inject_touch(int type, int x, int y) {
+    touch_event_t e = {(touch_ev_t)type, x, y};
+    on_touch(e);
 }
 
 void setup() {
@@ -138,6 +154,7 @@ void setup() {
     display_init();
     touch_init();
     ble_init();
+    mode_init();
 
     prefs.begin("touchdeck", false);
     // Resume jiggling if it was on at power-off; it waits for Bluetooth.

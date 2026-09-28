@@ -2,11 +2,20 @@
 //               TIME hh:mm:ss          set the clock shown at the top
 //               CLIP <n> <src>\n<n bytes>   new clip text
 //               DBG                    reply with a one-line LOG of diagnostics
+//               LEDS <hex>             PC lock-key state (bit1 = Caps Lock)
+//               MODE PC|BT             set the output mode (scripting/tests)
+//               TAP x y | SWIPE L|R    inject a touch event (scripting/tests)
+//               TEXTW <font> <sp> <t>  reply LOG textw <px> (tests: C vs fontgen widths)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
+//               K <mod> <usage>        keyboard report, PC output mode (hex)
+//               M <btn> <dx> <dy>      mouse report, PC output mode (hex, dec, dec)
 #include <Arduino.h>
 #include "app.h"
 #include "link.h"
+#include "output.h"
+#include "touch.h"
+#include "gfx.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -20,6 +29,7 @@ static int rx_want, rx_got;
 
 extern void debug_report();
 extern void clock_set(int seconds_of_day);
+extern void inject_touch(int type, int x, int y);
 
 void link_init() {
     Serial.begin(115200);
@@ -69,6 +79,31 @@ static void handle_line(char *s) {
         rx_got = 0;
         rx_want = n;
         if (n == 0) commit_clip();
+    } else if (!strncmp(s, "LEDS ", 5)) {
+        app.pc_leds = (uint8_t)strtol(s + 5, nullptr, 16);
+    } else if (!strncmp(s, "MODE ", 5)) {       // scripting / tests
+        mode_set(!strcmp(s + 5, "BT") ? MODE_BT : MODE_PC);
+    } else if (!strncmp(s, "TAP ", 4)) {        // scripting / tests: inject a tap
+        int x, y;
+        if (sscanf(s + 4, "%d %d", &x, &y) == 2) inject_touch(EV_TAP, x, y);
+    } else if (!strcmp(s, "SWIPE L")) {
+        inject_touch(EV_SWIPE_L, 120, 120);
+    } else if (!strcmp(s, "SWIPE R")) {
+        inject_touch(EV_SWIPE_R, 120, 120);
+    } else if (!strncmp(s, "TEXTW ", 6)) {
+        static const struct { const char *name; const aa_font_t *f; } fonts[] = {
+            {"font_title", &font_title}, {"font_label", &font_label}, {"font_button", &font_button},
+            {"font_body", &font_body}, {"font_caps", &font_caps}, {"font_big", &font_big},
+            {"font_mono", &font_mono}, {"font_pin", &font_pin}};
+        char name[16];
+        int sp, used = 0;
+        if (sscanf(s + 6, "%15s %d %n", name, &sp, &used) == 2 && used)
+            for (auto &e : fonts)
+                if (!strcmp(e.name, name)) {
+                    char r[32];
+                    snprintf(r, sizeof r, "LOG textw %d", gfx_text_aa_width(s + 6 + used, e.f, sp));
+                    link_send_line(r);
+                }
     } else if (!strcmp(s, "DBG")) {
         debug_report();
     }

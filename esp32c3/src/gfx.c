@@ -128,25 +128,35 @@ void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
         }
 }
 
-void gfx_char(int x, int y, char c, const sFONT *font, uint16_t color) {
+static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
     if (c < ' ' || c > '~') c = '?';
-    int bpr = (font->Width + 7) / 8;
-    const uint8_t *g = font->table + (c - ' ') * font->Height * bpr;
-    for (int row = 0; row < font->Height; row++, g += bpr) {
-        int yy = y + row;
-        if (yy < 0 || yy >= LCD_H) continue;
-        for (int col = 0; col < font->Width; col++) {
-            int xx = x + col;
-            if (xx < 0 || xx >= LCD_W) continue;
-            if (g[col >> 3] & (0x80 >> (col & 7))) fb[yy * LCD_W + xx] = color;
-        }
+    return &f->glyphs[c - ' '];
+}
+
+int gfx_text_aa_width(const char *s, const aa_font_t *f, int spacing) {
+    int w = 0, n = 0;
+    for (; *s; s++, n++) w += aa_glyph(f, *s)->adv;
+    return n ? w + spacing * (n - 1) : 0;
+}
+
+int gfx_text_aa(int x, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    for (; *s; s++) {
+        const aa_glyph_t *g = aa_glyph(f, *s);
+        const uint8_t *bits = f->bitmap + g->offset;
+        int bpr = (g->w + 1) / 2;
+        for (int r = 0; r < g->h; r++)
+            for (int col = 0; col < g->w; col++) {
+                uint8_t v = bits[r * bpr + col / 2];
+                int a = (col & 1) ? (v & 0x0F) : (v >> 4);
+                if (a) plot(x + g->x + col, y + g->y + r, color, a / 15.f);
+            }
+        x += g->adv + spacing;
     }
+    return x;
 }
 
-void gfx_text(int x, int y, const char *s, const sFONT *font, uint16_t color) {
-    for (; *s; s++, x += font->Width) gfx_char(x, y, *s, font, color);
+void gfx_text_aa_centered(int cx, int y, const char *s, const aa_font_t *f, uint16_t color, int spacing) {
+    gfx_text_aa(cx - gfx_text_aa_width(s, f, spacing) / 2, y, s, f, color, spacing);
 }
 
-void gfx_text_centered(int cx, int y, const char *s, const sFONT *font, uint16_t color) {
-    gfx_text(cx - (int)strlen(s) * font->Width / 2, y, s, font, color);
-}
+int gfx_text_aa_ytop(const aa_font_t *f, int cy) { return cy - f->cap_top - f->cap_h / 2; }

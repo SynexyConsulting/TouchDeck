@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-24-output-mode-design.md`
 
-**Repo note:** the project isn't under git, so each task ends with a **Checkpoint** (build and tests green) instead of a commit.
+**Git:** work on branch `feature/output-mode`. Every task ends Test → Pass → Verify → **Commit** (message says why, with the `Co-Authored-By` trailer). Defects found later are repaired forward with new commits, never rolled back.
 
 ## Global Constraints
 - Accent colours: PC `#F2A33A`, BT `#4C8DFF`. Link live `#3CCB7F`, link down `#E5484D`. Background `#07090D`.
@@ -252,7 +252,7 @@ else:
 Run: `python -m pytest tools/tests/test_inject.py -v`
 Expected: 7 passed
 
-- [ ] **Step 5: Checkpoint.** Tests green.
+- [ ] **Step 5: Commit** (tests green).
 
 ---
 
@@ -379,7 +379,7 @@ In `main()`, add `ap.add_argument("--dry-run", action="store_true", help="log PC
 Run: `python -m pytest tools/tests -v`
 Expected: 11 passed (7 inject + 4 helper)
 
-- [ ] **Step 5: Checkpoint.** Tests green.
+- [ ] **Step 5: Commit** (tests green).
 
 ---
 
@@ -661,7 +661,7 @@ uint32_t out_key_pace_ms() { return mode_get() == MODE_BT ? 12 : 4; }
 Run: `cd esp32c3 && python -m platformio run -t upload --upload-port COM7`, then `python -m pytest tools/tests -v`
 Expected: all pass (the Bluetooth-refused test skips if the board still has a bond).
 
-- [ ] **Step 6: Checkpoint.** Add to `CLAUDE.md`'s ESP32-C3 section: the output layer and mode rules, the `K`/`M`/`LEDS`/`MODE`/`TAP`/`SWIPE` lines, and `python -m pytest tools/tests -v` (hardware tests skip with no board).
+- [ ] **Step 6: Commit.** First update docs: Add to `CLAUDE.md`'s ESP32-C3 section: the output layer and mode rules, the `K`/`M`/`LEDS`/`MODE`/`TAP`/`SWIPE` lines, and `python -m pytest tools/tests -v` (hardware tests skip with no board).
 
 ---
 
@@ -1192,7 +1192,7 @@ Expected: all pass (the unpaired-only checks skip when a bond exists).
 
 - [ ] **Step 9: User visual check.** Ask the user to look at all four screens against the mockup. Colours, ring, chip and buttons must fit inside the circle with nothing clipped.
 
-- [ ] **Step 10: Checkpoint.** In `CLAUDE.md` ESP32-C3 section: the UI source of truth is the mockup link, `icons.c` is shared, and screen geometry lives in `ui.h`.
+- [ ] **Step 10: Commit.** First update docs: In `CLAUDE.md` ESP32-C3 section: the UI source of truth is the mockup link, `icons.c` is shared, and screen geometry lives in `ui.h`.
 
 ---
 
@@ -1271,4 +1271,4 @@ Then replace `draw_clip` and `draw_jig` in `ui.c` with the Task 4 versions adapt
 Run: `P=~/.pico-sdk; export PATH="$P/ninja/v1.12.1:$P/cmake/v3.31.5/bin:$PATH"; ninja -C build && python tools/flash.py`, then a `HELLO`/`DBG` probe (`frames` increasing, touch `fails=0`).
 Expected: `PONG`, frames increasing. The user confirms the look on the device.
 
-- [ ] **Step 5: Checkpoint.** In `CLAUDE.md`: the RP2040 uses the same visual language (fixed amber USB chip), and `icons.c` is duplicated in both trees and must be kept in sync.
+- [ ] **Step 5: Commit.** First update docs: in `CLAUDE.md`: the RP2040 uses the same visual language (fixed amber USB chip), and `icons.c` is duplicated in both trees and must be kept in sync.

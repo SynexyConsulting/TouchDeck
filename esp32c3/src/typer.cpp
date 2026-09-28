@@ -1,12 +1,10 @@
 #include "app.h"
-#include "ble_hid.h"
+#include "output.h"
 #include "jiggler.h"
 #include "typer.h"
 
-// BLE delivers reports once per connection interval (7.5-15 ms on Windows),
-// so pace keys slower than over USB or the host coalesces/drops them.
-#define HOLD_MS 12
-#define GAP_MS  12
+// Key hold/gap comes from out_key_pace_ms(): Bluetooth delivers reports once
+// per connection interval (7.5-15 ms), so it is paced slower than PC mode.
 
 static bool pending, active, key_down;
 static int pos;
@@ -38,7 +36,7 @@ static bool ascii_to_hid(char c, uint8_t *code, bool *shift) {
 
 void typer_start() {
     if (active || pending || app.clip_len == 0) return;
-    if (!ble_ready()) { app_message("Bluetooth not connected"); return; }
+    if (!out_ready()) { app_message(out_down_reason()); return; }
     pending = true;
     app.clip_state = CLIP_PASTING;
     app.paste_pos = 0;
@@ -51,7 +49,7 @@ static void finish() {
 }
 
 void typer_cancel() {
-    if (key_down) ble_key(0, 0);   // never leave a key stuck down
+    if (key_down) out_key(0, 0);   // never leave a key stuck down
     key_down = false;
     finish();
     app_message("Paste stopped");
@@ -83,13 +81,13 @@ void typer_step() {
         next_ms = now_ms();
     }
     if (!active) return;
-    if (!ble_ready()) { finish(); app_message("Bluetooth lost"); return; }
+    if (!out_ready()) { finish(); app_message(out_down_reason()); return; }
     if ((int32_t)(now_ms() - next_ms) < 0) return;
 
     if (key_down) {
-        ble_key(0, 0);
+        out_key(0, 0);
         key_down = false;
-        next_ms = now_ms() + GAP_MS;
+        next_ms = now_ms() + out_key_pace_ms();
         app.paste_pos = pos;
         if (pos >= app.clip_len) { finish(); app_message("Pasted"); }
         return;
@@ -100,8 +98,8 @@ void typer_step() {
     int c = next_char(&code, &shift);
     if (c < 0) { finish(); app_message("Pasted"); return; }
     // Caps Lock on the host flips letter case, so compensate.
-    if (ble_caps_lock() && isalpha(c)) shift = !shift;
-    ble_key(shift ? KEY_MOD_LSHIFT : 0, code);
+    if (out_caps_lock() && isalpha(c)) shift = !shift;
+    out_key(shift ? 0x02 : 0, code);   // 0x02 = left Shift
     key_down = true;
-    next_ms = now_ms() + HOLD_MS;
+    next_ms = now_ms() + out_key_pace_ms();
 }

@@ -39,10 +39,10 @@ static volatile bool want_name;          // read the PC's name after pairing
 static uint32_t passkey, pair_until_ms;
 static char host[33];
 
-static bool bonded() { return NimBLEDevice::getNumBonds() > 0; }
+bool ble_bonded() { return NimBLEDevice::getNumBonds() > 0; }
 
 static void update_advertising() {
-    bool adv = pairing || (bonded() && !user_off && !connected);
+    bool adv = pairing || (ble_bonded() && !user_off && !connected);
     NimBLEAdvertising *a = NimBLEDevice::getAdvertising();
     if (adv && !a->isAdvertising()) a->start();
     else if (!adv && a->isAdvertising()) a->stop();
@@ -86,13 +86,30 @@ class LedCB : public NimBLECharacteristicCallbacks {
     }
 };
 
+// PC/phone names arrive as UTF-8 (e.g. a curly apostrophe); the fonts are ASCII only.
+// Safe in place: the output is never longer than the input.
+static void fold_ascii(const uint8_t *in, int n, char *out, int cap) {
+    int o = 0;
+    for (int i = 0; i < n && o < cap - 1;) {
+        uint8_t c = in[i];
+        if (c < 0x80) { out[o++] = (c >= 32 && c < 127) ? (char)c : '?'; i++; continue; }
+        int len = (c >= 0xF0) ? 4 : (c >= 0xE0) ? 3 : (c >= 0xC0) ? 2 : 1;
+        uint32_t cp = 0;
+        if (len == 3 && i + 2 < n) cp = ((c & 0x0F) << 12) | ((in[i + 1] & 0x3F) << 6) | (in[i + 2] & 0x3F);
+        out[o++] = (cp == 0x2018 || cp == 0x2019) ? '\'' : (cp == 0x201C || cp == 0x201D) ? '"' : '?';
+        i += len;
+    }
+    out[o] = 0;
+}
+
 // GAP Device Name (0x2A00) read from the PC's own GATT server = its computer name.
 static int on_name(uint16_t conn, const struct ble_gatt_error *err, struct ble_gatt_attr *attr, void *) {
     if (err->status == 0 && attr) {
+        uint8_t raw[64];
         uint16_t n = OS_MBUF_PKTLEN(attr->om);
-        if (n > sizeof host - 1) n = sizeof host - 1;
-        os_mbuf_copydata(attr->om, 0, n, host);
-        host[n] = 0;
+        if (n > sizeof raw) n = sizeof raw;
+        os_mbuf_copydata(attr->om, 0, n, raw);
+        fold_ascii(raw, n, host, sizeof host);
         prefs.putString("host", host);
         app_redraw();
     }
@@ -102,6 +119,7 @@ static int on_name(uint16_t conn, const struct ble_gatt_error *err, struct ble_g
 void ble_init() {
     prefs.begin("touchdeck", false);
     prefs.getString("host", host, sizeof host);
+    fold_ascii((const uint8_t *)host, (int)strlen(host), host, sizeof host);   // names saved before folding
 
     NimBLEDevice::init("Touch Deck");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
@@ -147,7 +165,7 @@ void ble_poll() {
 
 bt_state_t ble_state() {
     if (pairing) return BT_PAIRING;
-    if (!bonded()) return BT_UNPAIRED;
+    if (!ble_bonded()) return BT_UNPAIRED;
     if (connected) return BT_CONNECTED;
     return user_off ? BT_OFF : BT_WAITING;
 }
@@ -174,7 +192,7 @@ void ble_pair_start() {
 
 void ble_pair_cancel() {
     pairing = false;
-    if (connected && !bonded()) server->disconnect(conn_handle);
+    if (connected && !ble_bonded()) server->disconnect(conn_handle);
     update_advertising();
 }
 

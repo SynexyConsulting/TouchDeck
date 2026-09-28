@@ -1,10 +1,10 @@
 // Moves the pointer in a loose, wobbling circle. Every so often it stops,
 // right-clicks to open a context menu, presses ESC to close it, and carries on.
-// Identical behaviour to the RP2040 version, sent as Bluetooth reports.
+// Identical behaviour to the RP2040 version, sent through the output layer.
 #include <math.h>
 #include "esp_random.h"
 #include "app.h"
-#include "ble_hid.h"
+#include "output.h"
 #include "jiggler.h"
 
 #define STEP_MS        15     // one BLE connection interval-ish per report
@@ -44,10 +44,19 @@ void jiggler_set(bool on) {
         next_ms = now_ms();
         schedule_menu();
     } else if (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_ESC_DOWN) {
-        ble_mouse(0, 0, 0);      // don't leave a button or key held
-        ble_key(0, 0);
+        out_mouse(0, 0, 0);      // don't leave a button or key held
+        out_key(0, 0);
     }
     app_redraw();
+}
+
+// The old destination's right-click/Esc sequence is abandoned (output.cpp
+// already released anything held there); start a fresh cycle.
+void jiggler_on_output_change() {
+    if (!app.jig_on) return;
+    app.jig_phase = JIG_CIRCLE;
+    schedule_menu();
+    next_ms = now_ms();
 }
 
 bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_CIRCLE; }
@@ -71,7 +80,7 @@ static void circle_step() {
     int dy = (int)lroundf(ty - sent_y);
     dx = dx > 127 ? 127 : (dx < -127 ? -127 : dx);
     dy = dy > 127 ? 127 : (dy < -127 ? -127 : dy);
-    if ((dx || dy) && !ble_mouse(0, (int8_t)dx, (int8_t)dy)) return;
+    if ((dx || dy) && !out_mouse(0, (int8_t)dx, (int8_t)dy)) return;
     sent_x += dx;
     sent_y += dy;
     app.jig_angle = angle;
@@ -80,7 +89,7 @@ static void circle_step() {
 
 void jiggler_step() {
     if (!app.jig_on || app.jig_paused) return;
-    if (!ble_ready() || (int32_t)(now_ms() - next_ms) < 0) return;
+    if (!out_ready() || (int32_t)(now_ms() - next_ms) < 0) return;
 
     switch (app.jig_phase) {
     case JIG_CIRCLE:
@@ -89,16 +98,16 @@ void jiggler_step() {
         else circle_step();
         break;
     case JIG_STOP:            // pointer has settled: open the context menu
-        if (ble_mouse(MOUSE_BTN_RIGHT, 0, 0)) set_phase(JIG_CLICK_DOWN, 60, 120);
+        if (out_mouse(0x02, 0, 0)) set_phase(JIG_CLICK_DOWN, 60, 120);   // right button
         break;
     case JIG_CLICK_DOWN:
-        if (ble_mouse(0, 0, 0)) set_phase(JIG_MENU_OPEN, 800, 2000);
+        if (out_mouse(0, 0, 0)) set_phase(JIG_MENU_OPEN, 800, 2000);
         break;
     case JIG_MENU_OPEN:       // menu has been visible a moment: close it
-        if (ble_key(0, 0x29 /* ESC */)) set_phase(JIG_ESC_DOWN, 50, 90);
+        if (out_key(0, 0x29 /* ESC */)) set_phase(JIG_ESC_DOWN, 50, 90);
         break;
     case JIG_ESC_DOWN:
-        if (ble_key(0, 0)) set_phase(JIG_RESUME, 300, 700);
+        if (out_key(0, 0)) set_phase(JIG_RESUME, 300, 700);
         break;
     case JIG_RESUME:
         app.jig_menus++;

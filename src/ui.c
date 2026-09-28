@@ -6,6 +6,7 @@
 #include "app.h"
 #include "board.h"
 #include "gfx.h"
+#include "icons.h"
 #include "lcd.h"
 #include "ui.h"
 
@@ -14,7 +15,6 @@
 #define R  116.f
 #define DEG2RAD 0.017453292f
 
-#define COL_BG     RGB(0, 0, 0)
 #define COL_DIAL   RGB(18, 24, 38)
 #define COL_RIM    RGB(90, 100, 120)
 #define COL_MARK   RGB(200, 205, 215)
@@ -22,11 +22,24 @@
 #define COL_SECOND RGB(255, 70, 40)
 #define COL_TEXT   RGB(230, 232, 238)
 #define COL_DIM    RGB(120, 128, 145)
-#define COL_PANEL  RGB(24, 30, 44)
-#define COL_COPY   RGB(40, 110, 220)
-#define COL_PASTE  RGB(30, 160, 90)
 #define COL_STOP   RGB(210, 60, 50)
 #define COL_OK     RGB(60, 200, 110)
+
+// Touch Deck design language (shared with esp32c3/src/ui.cpp). This board
+// only outputs over USB to this PC, so the accent is always amber (PC).
+#define C_BG      RGB(7, 9, 13)
+#define C_SURF    RGB(20, 26, 36)
+#define C_SURF2   RGB(28, 36, 50)
+#define C_INNER   RGB(16, 21, 30)
+#define C_TEXT    RGB(232, 236, 242)
+#define C_CLIP    RGB(201, 209, 220)
+#define C_DIM     RGB(138, 148, 166)
+#define C_FAINT   RGB(74, 83, 102)
+#define C_PC      RGB(242, 163, 58)
+#define C_OK      RGB(60, 203, 127)
+#define C_BAD     RGB(229, 72, 77)
+#define C_BAD_TXT RGB(255, 138, 141)
+#define C_PC_TINT RGB(45, 34, 20)     // 16% amber over C_BG
 
 // ---------- watch ----------
 
@@ -78,8 +91,10 @@ static void draw_watch(int t) {
         polar(CX, CY, i * 6.f, R - 7.f, &x1, &y1);
         gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
     }
-    if (app.jig_on) gfx_text_centered((int)CX, 190, "JIGGLING", &Font12, COL_OK);
-    if (app.helper) gfx_text_centered((int)CX, 78, "PC", &Font12, COL_DIM);
+    if (app.jig_on)
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 196), "JIGGLING", &font_caps, COL_OK, 1);
+    if (app.helper)
+        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 84), "PC", &font_caps, COL_DIM, 1);
     draw_mute_icon(app.muted);
 
     hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
@@ -89,96 +104,137 @@ static void draw_watch(int t) {
     gfx_disc(CX, CY, 2.f, COL_DIAL);
 }
 
-// ---------- clipboard ----------
+// ---------- shared pieces ----------
 
-static void button(int x, const char *label, uint16_t col) {
-    gfx_rrect(x, BTN_Y, BTN_W, BTN_H, 12.f, col);
-    gfx_text_centered(x + BTN_W / 2, BTN_Y + (BTN_H - 24) / 2, label, &Font24, COL_TEXT);
+static void text_c(int cx, int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing) {
+    gfx_text_aa_centered(cx, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
 }
 
-static void draw_clip(void) {
-    enum { BOX_X = 12, BOX_Y = 40, BOX_W = 216, BOX_H = 112, COLS = 29, ROWS = 8 };
-    char info[40], msg[40];
+static void text_at(int x, int cy, const char *s, const aa_font_t *f, uint16_t col, int spacing) {
+    gfx_text_aa(x, gfx_text_aa_ytop(f, cy), s, f, col, spacing);
+}
 
-    gfx_text_centered(LCD_W / 2, 14, "Clipboard", &Font16, COL_TEXT);
-    gfx_rrect(BOX_X, BOX_Y, BOX_W, BOX_H, 8.f, COL_PANEL);
+static void pill(int x, int y, int w, int h, uint16_t col) { gfx_rrect(x, y, w, h, h / 2.f, col); }
+
+// Pill button: optional leading/trailing icon around a centred label.
+static void button(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const char *label,
+                   icon_fn lead, icon_fn trail) {
+    pill(x, y, w, h, bg);
+    const aa_font_t *f = &font_button;
+    const int iw = 10, gap = 4, tw = gfx_text_aa_width(label, f, 0);
+    int total = tw + (lead ? iw + gap : 0) + (trail ? iw + gap : 0);
+    int cx = x + (w - total) / 2, cy = y + h / 2;
+    if (lead) { lead(cx + iw / 2.f, cy, iw, fg); cx += iw + gap; }
+    text_at(cx, cy, label, f, fg, 0);
+    cx += tw + gap;
+    if (trail) trail(cx + iw / 2.f, cy, iw, fg);
+}
+
+// Transient message (app_message) if one is showing, else the given text.
+static const char *msg_or(const char *normal, char *buf, int n) {
+    mutex_enter_blocking(&clip_mtx);
+    bool show = (int32_t)(app.msg_until_ms - now_ms()) > 0;
+    if (show) { strncpy(buf, app.msg, n - 1); buf[n - 1] = 0; }
+    mutex_exit(&clip_mtx);
+    return show ? buf : normal;
+}
+
+// Edge ring + top chip on every screen: output goes to USB, dot = enumerated.
+static void frame_usb(void) {
+    // Corner radius matched on the device to the panel's rounded glass (40 clipped, 46 was loose).
+    gfx_rrect_ring(0, 0, LCD_W, LCD_H, 44.f, 3.f, C_PC);
+    const char *label = "USB";
+    int tw = gfx_text_aa_width(label, &font_caps, 1), w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 5;
+    pill(x, y, w, 18, C_PC_TINT);
+    icon_monitor(x + 13.f, y + 9.f, 10.f, C_PC);
+    text_at(x + 22, y + 9, label, &font_caps, C_PC, 1);
+    gfx_disc(x + w - 10.5f, y + 9.f, 2.6f, app.usb_mounted ? C_OK : C_BAD);
+}
+
+// ---------- clipboard ----------
+
+static void draw_clip(void) {
+    enum { CX0 = 20, CY0 = 64, CW = 200, CH = 110, ROWS = 8, PITCH = 12 };
+    const int cols = (CW - 16) / font_mono.glyphs['M' - ' '].adv;
+    char info[40], buf[40];
+    text_c(LCD_W / 2, 48, "Clipboard", &font_title, C_TEXT, 0);
 
     mutex_enter_blocking(&clip_mtx);
     int len = app.clip_len;
+    gfx_rrect(CX0, CY0, CW, CH, 12.f, len ? C_SURF : C_INNER);
     if (len == 0) {
-        gfx_text_centered(LCD_W / 2, BOX_Y + 36, "Select text on PC,", &Font12, COL_DIM);
-        gfx_text_centered(LCD_W / 2, BOX_Y + 52, "then tap COPY", &Font12, COL_DIM);
+        text_c(LCD_W / 2, CY0 + 44, "Select text on PC,", &font_body, C_DIM, 0);
+        text_c(LCD_W / 2, CY0 + 60, "then tap Copy", &font_body, C_DIM, 0);
     } else {
+        // Wrap into rows of monospaced text, drawn a row at a time.
+        char line[40];
         int row = 0, col = 0;
-        for (int i = 0; i < len && row < ROWS; i++) {
-            char c = app.clip[i];
+        for (int i = 0; i <= len && row < ROWS; i++) {
+            char c = i < len ? app.clip[i] : '\n';
             if (c == '\r') continue;
-            if (c == '\n') { row++; col = 0; continue; }
-            if (c == '\t') c = ' ';
-            if (col == COLS) { row++; col = 0; if (row >= ROWS) break; }
-            gfx_char(BOX_X + 6 + col * 7, BOX_Y + 8 + row * 12, c, &Font12, COL_TEXT);
-            col++;
+            if (c == '\n' || col == cols) {
+                line[col] = 0;
+                gfx_text_aa(CX0 + 8, CY0 + 5 + row * PITCH, line, &font_mono, C_CLIP, 0);
+                row++;
+                col = 0;
+                if (c == '\n') continue;
+            }
+            line[col++] = c == '\t' ? ' ' : c;
         }
     }
-    snprintf(info, sizeof info, len ? "%d chars  (%s)" : "empty", len, app.clip_src);
-    bool show_msg = (int32_t)(app.msg_until_ms - now_ms()) > 0;
-    if (show_msg) strcpy(msg, app.msg);
+    snprintf(info, sizeof info, len ? "%d chars from %s" : "Empty", len, app.clip_src);
     mutex_exit(&clip_mtx);
 
-    if (app.clip_state == CLIP_PASTING && len) {
-        int w = (BOX_W - 16) * app.paste_pos / len;
-        gfx_rect(BOX_X + 8, BOX_Y + BOX_H + 6, BOX_W - 16, 4, COL_PANEL);
-        gfx_rect(BOX_X + 8, BOX_Y + BOX_H + 6, w, 4, COL_PASTE);
+    bool pasting = app.clip_state == CLIP_PASTING;
+    if (pasting && len) {
+        gfx_rrect(40, 186, 160, 4, 2.f, C_SURF2);
+        gfx_rrect(40, 186, 160 * app.paste_pos / len + 1, 4, 2.f, C_PC);
     } else {
-        gfx_text_centered(LCD_W / 2, BOX_Y + BOX_H + 6, info, &Font12, COL_DIM);
+        text_c(LCD_W / 2, 188, msg_or(info, buf, sizeof buf), &font_body, C_DIM, 0);
     }
 
-    button(BTN_COPY_X, app.clip_state == CLIP_COPYING ? "..." : "COPY", COL_COPY);
-    if (app.clip_state == CLIP_PASTING) button(BTN_PASTE_X, "STOP", COL_STOP);
-    else button(BTN_PASTE_X, "PASTE", len ? COL_PASTE : COL_PANEL);
-
-    if (show_msg) gfx_text_centered(LCD_W / 2, 246, msg, &Font12, COL_TEXT);
-    else gfx_text_centered(LCD_W / 2, 246, app.helper ? "PC helper connected" : "PC helper not running",
-                           &Font12, app.helper ? COL_OK : COL_DIM);
+    button(BTN_COPY_X, BTN_Y, BTN_W, BTN_H, C_SURF2, C_TEXT,
+           app.clip_state == CLIP_COPYING ? "..." : "Copy", icon_copy, NULL);
+    if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", NULL, NULL);
+    else button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, len ? C_PC : C_SURF2, len ? C_BG : C_FAINT,
+                "Paste", NULL, icon_arrow_right);
 }
 
 // ---------- jiggler ----------
 
 static void draw_jig(void) {
-    char s[40];
+    char s[40], buf[40];
     bool on = app.jig_on;
-    uint16_t accent = on ? COL_OK : COL_DIM;
+    text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
+    gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
+    gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
+    if (on)
+        gfx_disc(JIG_CX + cosf(app.jig_angle) * 55.f, JIG_CY + sinf(app.jig_angle) * 55.f, 6.f, C_PC);
+    text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
+    text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
 
-    gfx_text_centered(LCD_W / 2, 14, "Jiggler", &Font16, COL_TEXT);
-    gfx_disc(JIG_CX, JIG_CY, JIG_R - 4.f, COL_PANEL);
-    gfx_ring(JIG_CX, JIG_CY, JIG_R, 4.f, accent);
-    if (on) {
-        // Dot rides the ring at the pointer's current angle, nudged by radius.
-        float rr = JIG_R - 14.f + (app.jig_radius - 60.f) * 0.4f;
-        float x = JIG_CX + cosf(app.jig_angle) * rr, y = JIG_CY + sinf(app.jig_angle) * rr;
-        gfx_disc(x, y, 7.f, COL_TEXT);
-    }
-    gfx_text_centered(JIG_CX, JIG_CY - 12, on ? "ON" : "OFF", &Font24, accent);
-
-    const char *status;
-    if (!on) status = "Tap circle to start";
-    else if (app.jig_paused) status = "Paused for paste";
-    else if (app.jig_phase == JIG_CIRCLE) {
+    const char *status = "Tap to start";
+    uint16_t scol = C_TEXT;
+    if (on && !app.usb_mounted) { status = "Plug into USB"; scol = C_BAD_TXT; }
+    else if (on && app.jig_paused) status = "Paused: pasting";
+    else if (on && app.jig_phase == JIG_CIRCLE) {
         int secs = (int)((int32_t)(app.jig_next_menu_ms - now_ms()) / 1000);
-        snprintf(s, sizeof s, "Menu in %ds", secs < 0 ? 0 : secs);
+        snprintf(s, sizeof s, "Next menu in %ds", secs < 0 ? 0 : secs);
         status = s;
-    } else if (app.jig_phase == JIG_MENU_OPEN || app.jig_phase == JIG_CLICK_DOWN) status = "Right-click menu";
-    else if (app.jig_phase == JIG_ESC_DOWN) status = "ESC";
-    else status = "Pausing";
-    gfx_text_centered(LCD_W / 2, 206, status, &Font16, COL_TEXT);
+    } else if (on && (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_MENU_OPEN)) status = "Right-click menu";
+    else if (on && app.jig_phase == JIG_ESC_DOWN) status = "Esc";
+    else if (on) status = "Pausing";
+    text_c(LCD_W / 2, 220, status, &font_label, scol, 0);
 
+    char stats[40];
     if (on) {
         uint32_t up = (now_ms() - app.jig_started_ms) / 1000;
-        char st[40];
-        snprintf(st, sizeof st, "%lu menus  %02lu:%02lu:%02lu", (unsigned long)app.jig_menus,
+        snprintf(stats, sizeof stats, "%lu menus %02lu:%02lu:%02lu", (unsigned long)app.jig_menus,
                  (unsigned long)(up / 3600), (unsigned long)(up / 60 % 60), (unsigned long)(up % 60));
-        gfx_text_centered(LCD_W / 2, 228, st, &Font12, COL_DIM);
+    } else {
+        strcpy(stats, "Menu every 45-150s");
     }
+    text_c(LCD_W / 2, 238, msg_or(stats, buf, sizeof buf), &font_body, C_DIM, 0);
 }
 
 // ---------- frame loop ----------
@@ -207,7 +263,8 @@ void ui_core1_main(void) {
         last_frame = now_ms();
 
         int t = app.time_s;
-        gfx_fill(COL_BG);
+        gfx_fill(C_BG);
+        frame_usb();
         if (screen == SCR_WATCH) draw_watch(t);
         else if (screen == SCR_CLIP) draw_clip();
         else draw_jig();

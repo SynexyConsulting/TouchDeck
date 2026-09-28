@@ -25,9 +25,8 @@ add_executable(watch
     src/typer.c
     src/jiggler.c
     src/settings.c
-    src/fonts/font12.c
-    src/fonts/font16.c
-    src/fonts/font24.c
+    src/icons.c
+    src/aa_fonts.c
 )
 
 # tusb_config.h lives in src/

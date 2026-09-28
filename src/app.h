@@ -16,6 +16,7 @@ typedef struct {
     volatile int time_s;            // seconds since midnight
     volatile bool tick_pending;     // core1 -> core0: watch frame shown, play tick
     volatile bool helper;           // PC helper is talking to us
+    volatile bool usb_mounted;      // host has enumerated us (keyboard/mouse usable)
     volatile bool muted;            // silences the tick and touch clicks
     volatile uint32_t frames;       // core1 frame counter (diagnostics)
     volatile uint32_t loops;        // core0 main-loop counter (diagnostics)
