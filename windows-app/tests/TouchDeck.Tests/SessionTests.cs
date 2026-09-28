@@ -148,6 +148,18 @@ public class SessionTests
     }
 
     [Fact]
+    public void Remote_controls_map_to_scripting_commands()
+    {
+        var s = Make();
+        s.Swipe(left: true);
+        s.Swipe(left: false);
+        s.PressButton(longPress: false);
+        s.PressButton(longPress: true);
+        s.Step();
+        Assert.Equal(["SWIPE L", "SWIPE R", "BTN", "BTN LONG"], t.Written.Where(w => w.StartsWith("SWIPE") || w.StartsWith("BTN")).ToList());
+    }
+
+    [Fact]
     public void Unplugging_mid_paste_releases_every_held_key()
     {
         t.Incoming.Enqueue("PONG");

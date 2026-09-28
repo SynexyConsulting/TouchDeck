@@ -1,12 +1,201 @@
-﻿<Window x:Class="TouchDeck.App.MainWindow"
+<Window x:Class="TouchDeck.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:TouchDeck.App"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Touch Deck" Width="1000" Height="780" MinWidth="820" MinHeight="600"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}"
+        FontFamily="{StaticResource UiFont}" FontSize="14"
+        Icon="pack://application:,,,/Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="360" />
+            <ColumnDefinition Width="16" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
+        <!-- Header -->
+        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Margin="2,0,0,14">
+            <Image Source="pack://application:,,,/Assets/app-256.png" Width="30" Height="30" Margin="0,0,10,0" />
+            <TextBlock Text="Touch Deck" FontFamily="{StaticResource HeadFont}" FontSize="24" VerticalAlignment="Center" />
+            <TextBlock x:Name="AppVersionText" Foreground="{StaticResource Faint}" FontFamily="{StaticResource MonoFont}"
+                       FontSize="12" VerticalAlignment="Bottom" Margin="10,0,0,5" />
+        </StackPanel>
+
+        <!-- Left column -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,2,0">
+                <!-- Device -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Device" Style="{StaticResource CardTitle}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Ellipse x:Name="StatusDot" Width="12" Height="12" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding BoardName}" FontFamily="{StaticResource HeadFont}" FontSize="19" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Port" Style="{StaticResource Label}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Port}" Style="{StaticResource Value}" />
+                            <TextBlock Grid.Row="1" Text="Firmware" Style="{StaticResource Label}" />
+                            <TextBlock x:Name="FirmwareText" Grid.Row="1" Grid.Column="1" Text="{Binding FirmwareVersion}" Style="{StaticResource Value}" />
+                            <TextBlock Grid.Row="2" Text="Built" Style="{StaticResource Label}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FirmwareBuild}" Style="{StaticResource Value}" />
+                        </Grid>
+                        <TextBlock Text="{Binding UpdateText}" Foreground="{StaticResource Accent}" TextWrapping="Wrap" Margin="0,10,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <Trigger Property="Text" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <WrapPanel Margin="0,12,0,0">
+                            <Button x:Name="UpdateButton" Content="Install firmware" Click="OnUpdate" IsEnabled="{Binding CanUpdate}" Margin="0,0,8,6" />
+                            <Button Content="Bootloader" Click="OnBootloader" IsEnabled="{Binding IsConnected}" Margin="0,0,8,6"
+                                    ToolTip="Reboot the board into its UF2 drive (RPI-RP2)" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Remote -->
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
+                    <StackPanel>
+                        <TextBlock Text="Remote" Style="{StaticResource CardTitle}" />
+                        <WrapPanel>
+                            <Button Content="&#x25C0;  Page" Click="OnSwipeRight" Margin="0,0,6,6" Padding="11,6" ToolTip="Previous page" />
+                            <Button Content="Page  &#x25B6;" Click="OnSwipeLeft" Margin="0,0,6,6" Padding="11,6" ToolTip="Next page" />
+                            <Button Content="Button" Click="OnButton" Margin="0,0,6,6" Padding="11,6"
+                                    ToolTip="Press BOOT: start/pause the stopwatch, or change the jiggler size" />
+                            <Button Content="Long press" Click="OnLongButton" Margin="0,0,6,6" Padding="11,6" ToolTip="Hold BOOT: reset the stopwatch" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Settings -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Settings" Style="{StaticResource CardTitle}" />
+                        <CheckBox Content="Dry run (log keys, don't type)" IsChecked="{Binding DryRun}" />
+                        <CheckBox Content="Board diagnostics" IsChecked="{Binding DiagnosticsEnabled}" />
+                        <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
+                        <TextBlock Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13">
+                            <Run Text="Ctrl+Alt+C" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Accent}" />
+                            <Run Text="sends the selected text (or the clipboard) to the board, like tapping COPY." />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Right column -->
+        <Grid Grid.Row="1" Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" MinHeight="110" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="1.3*" MinHeight="120" />
+            </Grid.RowDefinitions>
+
+            <!-- Send text -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Send to board" Style="{StaticResource CardTitle}" />
+                    <TextBox x:Name="SendBox" Height="74" AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" TextChanged="OnSendTextChanged" />
+                    <DockPanel Margin="0,10,0,0">
+                        <Button x:Name="SendButton" DockPanel.Dock="Right" Content="Send" Tag="Primary" Click="OnSend" Margin="0" />
+                        <TextBlock x:Name="SendInfo" Foreground="{StaticResource Dim}" VerticalAlignment="Center" FontSize="13"
+                                   TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- History -->
+            <Border Grid.Row="1" Style="{StaticResource Card}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top">
+                        <Button DockPanel.Dock="Right" Content="Clear" Style="{StaticResource SmallButton}" Click="OnClearHistory"
+                                VerticalAlignment="Top" />
+                        <TextBlock Text="Recent clips (kept in memory only)" Style="{StaticResource CardTitle}" />
+                    </DockPanel>
+                    <Grid>
+                        <TextBlock Text="Clips you send appear here." Foreground="{StaticResource Faint}" x:Name="HistoryEmpty" />
+                        <ListBox x:Name="HistoryList" ItemsSource="{Binding HistoryItems}" Style="{StaticResource PlainList}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource Inner}" CornerRadius="10" Padding="10,6" Margin="0,0,0,6">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="Copy" Style="{StaticResource SmallButton}"
+                                                    Click="OnHistoryCopy" Tag="{Binding}" ToolTip="Put on the Windows clipboard" />
+                                            <Button DockPanel.Dock="Right" Content="Resend" Style="{StaticResource SmallButton}"
+                                                    Click="OnHistoryResend" Tag="{Binding}" />
+                                            <TextBlock Text="{Binding}" FontFamily="{StaticResource MonoFont}" FontSize="13"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding}" />
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <!-- Diagnostics -->
+            <Border x:Name="DiagCard" Grid.Row="2" Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Board diagnostics" Style="{StaticResource CardTitle}" />
+                    <ItemsControl ItemsSource="{Binding DiagnosticItems}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource Inner}" CornerRadius="8" Padding="8,3" Margin="0,0,6,6">
+                                    <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="12">
+                                        <Run Text="{Binding Key, Mode=OneWay}" Foreground="{StaticResource Dim}" />
+                                        <Run Text="{Binding Value, Mode=OneWay}" Foreground="{StaticResource Text}" />
+                                    </TextBlock>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Log -->
+            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top">
+                        <Button DockPanel.Dock="Right" Content="Copy log" Style="{StaticResource SmallButton}" Click="OnCopyLog"
+                                VerticalAlignment="Top" />
+                        <TextBlock Text="Activity" Style="{StaticResource CardTitle}" />
+                    </DockPanel>
+                    <ListBox x:Name="LogList" ItemsSource="{Binding LogLines}" Style="{StaticResource PlainList}"
+                             FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Dim}" />
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <TextBlock x:Name="Footer" Grid.Row="2" Grid.ColumnSpan="3" Foreground="{StaticResource Faint}" FontSize="12" Margin="2,12,0,0" />
     </Grid>
 </Window>

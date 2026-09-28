@@ -140,6 +140,12 @@ public sealed class DeviceSession(
     /// <summary>Reboot the board into its bootloader (RP2040: UF2 drive).</summary>
     public void RequestBootloader() => requests.Enqueue(() => transport.WriteLine("BOOT"));
 
+    /// <summary>Change the board's page, as a finger swipe would.</summary>
+    public void Swipe(bool left) => requests.Enqueue(() => transport.WriteLine(left ? "SWIPE L" : "SWIPE R"));
+
+    /// <summary>Press the board's BOOT button (stopwatch on the watch, scale on the jiggler).</summary>
+    public void PressButton(bool longPress) => requests.Enqueue(() => transport.WriteLine(longPress ? "BTN LONG" : "BTN"));
+
     private void Handle(BoardMessage message)
     {
         switch (message)

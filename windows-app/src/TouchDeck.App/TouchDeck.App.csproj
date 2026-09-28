@@ -7,11 +7,23 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>TouchDeck</AssemblyName>
     <RootNamespace>TouchDeck.App</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <!-- WinForms is only for NotifyIcon: keep its types out of the global usings. -->
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\*.ico" />
+    <Resource Include="Assets\app-256.png" />
+    <Resource Include="Assets\Fonts\*.ttf" />
+    <None Include="Assets\Fonts\OFL-*.txt" CopyToOutputDirectory="PreserveNewest" Link="licenses\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Bundled board firmware (build.ps1 refreshes it from the firmware repo). -->
+    <None Include="..\..\firmware\**" LinkBase="firmware" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TouchDeck.Core\TouchDeck.Core.csproj" />
