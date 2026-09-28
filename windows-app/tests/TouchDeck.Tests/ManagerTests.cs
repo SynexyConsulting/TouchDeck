@@ -54,7 +54,9 @@ public class ManagerTests
         Assert.Equal(LinkStatus.Connected, m.State.Status);
         Assert.Equal("1.5.0", m.State.Firmware!.Version);
         Assert.Equal(Rp, m.State.Device);
+        Thread.Sleep(100);                            // let Run() start on its thread
         m.Dispose();
+        Assert.Single(ports["COM6"].Written, w => w == "HELLO");   // handshake happens once
     }
 
     [Fact]

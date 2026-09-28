@@ -43,6 +43,14 @@ public partial class App : Application
             return;
         }
 
+        // Backstop: log and keep running rather than vanish from the tray (the session's
+        // own finally has already released any held input).
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}");
+            ex.Handled = true;
+        };
+
         controller = new AppController(Dispatcher);
         window = new MainWindow(controller);
         window.Attach();

@@ -299,6 +299,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             AddLog(result.Message);
             Notify?.Invoke(result.Ok ? "Firmware updated" : "Firmware update failed", result.Message);
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // e.g. antivirus holding the new file on the boot drive: the board is still in its
+            // bootloader, and the app offers the install again from there.
+            var msg = $"Firmware update failed: {e.Message}";
+            AddLog(msg);
+            Notify?.Invoke("Firmware update failed", msg);
+        }
         finally
         {
             Busy = false;

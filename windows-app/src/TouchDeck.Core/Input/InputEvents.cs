@@ -41,21 +41,66 @@ public interface IKeyboardState
 }
 
 /// <summary>Real injection, or (dry run) a description of each event instead. Switchable live.</summary>
+/// <remarks>
+/// Tracks what is down on the real desktop, so turning dry run on mid-paste releases it there;
+/// otherwise the matching key-up (and Run's final ReleaseAll) would only be logged and the key would stick.
+/// </remarks>
 public sealed class SwitchableSink(IInputSink real) : IInputSink
 {
-    public bool DryRun { get; set; }
+    private readonly HashSet<(int Scan, bool Extended)> keysDown = [];
+    private readonly HashSet<MouseAction> buttonsDown = [];
+    private readonly object gate = new();
+    private bool dryRun;
+
+    public bool DryRun
+    {
+        get => dryRun;
+        set
+        {
+            lock (gate)
+            {
+                if (value && !dryRun) ReleaseReal();
+                dryRun = value;
+            }
+        }
+    }
 
     /// <summary>Dry-run descriptions, e.g. "key 0x1E down".</summary>
     public event Action<string>? DryRunEvent;
 
     public void Send(IReadOnlyList<InputEvent> events)
     {
-        if (!DryRun)
+        lock (gate)
         {
-            real.Send(events);
-            return;
+            if (!dryRun)
+            {
+                foreach (var e in events) Track(e);
+                real.Send(events);
+                return;
+            }
         }
         foreach (var e in events) DryRunEvent?.Invoke(Describe(e));
+    }
+
+    private void Track(InputEvent e)
+    {
+        switch (e)
+        {
+            case KeyStroke k when k.Up: keysDown.Remove((k.Scan, k.Extended)); break;
+            case KeyStroke k: keysDown.Add((k.Scan, k.Extended)); break;
+            case MouseButton { Action: MouseAction.LeftDown or MouseAction.RightDown or MouseAction.MiddleDown } b: buttonsDown.Add(b.Action); break;
+            case MouseButton b: buttonsDown.Remove(b.Action - 1); break;   // each Up follows its Down
+        }
+    }
+
+    private void ReleaseReal()
+    {
+        var ups = new List<InputEvent>();
+        ups.AddRange(keysDown.Select(k => new KeyStroke(k.Scan, k.Extended, Up: true)));
+        ups.AddRange(buttonsDown.Select(b => new MouseButton(b + 1)));
+        keysDown.Clear();
+        buttonsDown.Clear();
+        if (ups.Count > 0) real.Send(ups);
     }
 
     public static string Describe(InputEvent e) => e switch

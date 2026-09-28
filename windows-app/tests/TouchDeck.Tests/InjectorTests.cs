@@ -106,7 +106,27 @@ public class SwitchableSinkTests
         sink.DryRun = true;
         sink.Send([new KeyStroke(0x1D, true, true), new MouseMove(3, -2), new MouseButton(MouseAction.RightDown)]);
 
-        Assert.Single(real.Events);
+        Assert.Equal([new KeyStroke(0x1E, false, false), new KeyStroke(0x1E, false, true)], real.Events);  // released on switch
         Assert.Equal(["key 0x1D ext up", "mouse move +3 -2", "mouse RightDown"], described);
+    }
+}
+
+public class SwitchableSinkReleaseTests
+{
+    [Fact]
+    public void Turning_dry_run_on_releases_what_the_real_sink_holds()
+    {
+        var real = new RecordingSink();
+        var sink = new SwitchableSink(real);
+        var inj = new Injector(sink);
+        inj.Key(0x02, 0x04);                 // Shift+A down, for real
+        inj.Mouse(0x02, 0, 0);               // right button down, for real
+        sink.DryRun = true;
+        Assert.Contains(new KeyStroke(0x1E, false, Up: true), real.Events);
+        Assert.Contains(new KeyStroke(0x2A, false, Up: true), real.Events);
+        Assert.Contains(new MouseButton(MouseAction.RightUp), real.Events);
+        real.Events.Clear();
+        inj.ReleaseAll();                    // now logged only; nothing more on the desktop
+        Assert.Empty(real.Events);
     }
 }

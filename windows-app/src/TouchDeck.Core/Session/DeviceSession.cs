@@ -53,6 +53,7 @@ public sealed class DeviceSession(
     private DateTime lastHeartbeat, lastCapsPoll, lastTimeSync;
     private bool? caps;                      // null forces the first LEDS report
     private bool started;
+    private bool handshaken;
 
     public Injector Injector => injector;
     public FirmwareInfo? Firmware { get; private set; }
@@ -77,6 +78,7 @@ public sealed class DeviceSession(
             ? new FirmwareInfo(v!.Board, v.Version, v.Build)
             : FirmwareInfo.Unknown;
         SendTime();
+        handshaken = true;
         return true;
     }
 
@@ -85,7 +87,7 @@ public sealed class DeviceSession(
     {
         try
         {
-            if (!started && !Handshake()) throw new IOException("no PONG: not a Touch Deck");
+            if (!handshaken && !Handshake()) throw new IOException("no PONG: not a Touch Deck");
             while (!ct.IsCancellationRequested) Step(ReadSlice);
         }
         finally
