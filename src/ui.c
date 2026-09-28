@@ -53,6 +53,48 @@ static void polar(float cx, float cy, float deg, float len, float *x, float *y) 
     *y = cy - cosf(a) * len;
 }
 
+typedef struct { int x, y, w, h; } rect_t;
+
+static rect_t rect_union(rect_t a, rect_t b) {
+    int x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    int x1 = a.x + a.w > b.x + b.w ? a.x + a.w : b.x + b.w;
+    int y1 = a.y + a.h > b.y + b.h ? a.y + a.h : b.y + b.h;
+    return (rect_t){x0, y0, x1 - x0, y1 - y0};
+}
+
+// The three hands at time t (seconds of day): one definition for drawing them
+// and for working out what a per-second partial redraw has to cover.
+typedef struct { float deg, tail, len, thick; uint16_t col; } hand_t;
+
+static void watch_hands(int t, hand_t out[3]) {
+    int h = t / 3600, m = (t / 60) % 60, s = t % 60;
+    out[0] = (hand_t){((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND};
+    out[1] = (hand_t){(m + s / 60.f) * 6.f, 14.f, 90.f, 5.f, COL_HAND};
+    out[2] = (hand_t){s * 6.f, 22.f, 100.f, 2.f, COL_SECOND};
+}
+
+// Pixels the hands (and the centre cap) can touch at time t.
+static rect_t hands_rect(int t) {
+    hand_t hs[3];
+    watch_hands(t, hs);
+    float x0 = CX - 8.f, y0 = CY - 8.f, x1 = CX + 8.f, y1 = CY + 8.f;   // centre discs
+    for (int i = 0; i < 3; i++) {
+        float ax, ay, bx, by, m = hs[i].thick * 0.5f + 2.f;
+        polar(CX, CY, hs[i].deg + 180.f, hs[i].tail, &ax, &ay);
+        polar(CX, CY, hs[i].deg, hs[i].len, &bx, &by);
+        x0 = fminf(x0, fminf(ax, bx) - m); y0 = fminf(y0, fminf(ay, by) - m);
+        x1 = fmaxf(x1, fmaxf(ax, bx) + m); y1 = fmaxf(y1, fmaxf(ay, by) + m);
+    }
+    return (rect_t){(int)floorf(x0), (int)floorf(y0), (int)ceilf(x1 - x0) + 1, (int)ceilf(y1 - y0) + 1};
+}
+
+// The stopwatch's black box below the centre.
+static rect_t stopwatch_rect(void) {
+    int tw = gfx_text_aa_width("88:88:88", &font_timer, 0), bw = tw + 16, bh = font_timer.cap_h + 14;
+    int cy = (int)CY + 50;
+    return (rect_t){(int)CX - bw / 2, cy - bh / 2, bw, bh};
+}
+
 static void hand(float deg, float tail, float len, float thick, uint16_t col) {
     float x0, y0, x1, y1;
     polar(CX, CY, deg + 180.f, tail, &x0, &y0);
@@ -106,7 +148,6 @@ static void tick_reach_init(void) {
 }
 
 static void draw_watch(int t) {
-    int h = t / 3600, m = (t / 60) % 60, s = t % 60;
     static bool ticks_ready;
     if (!ticks_ready) { tick_reach_init(); ticks_ready = true; }
 
@@ -130,18 +171,18 @@ static void draw_watch(int t) {
         char st[12];
         int ts = app.timer_s;
         snprintf(st, sizeof st, "%02d:%02d:%02d", (ts / 3600) % 100, ts / 60 % 60, ts % 60);
-        int tw = gfx_text_aa_width("88:88:88", &font_timer, 0), bw = tw + 16, bh = font_timer.cap_h + 14;
-        int cy = (int)CY + 50;
-        gfx_rrect((int)CX - bw / 2, cy - bh / 2, bw, bh, 6.f, RGB(0, 0, 0));
+        rect_t box = stopwatch_rect();
+        int bh = box.h, cy = box.y + box.h / 2;
+        gfx_rrect(box.x, box.y, box.w, box.h, 6.f, RGB(0, 0, 0));
         gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_timer, cy), st, &font_timer, RGB(255, 255, 255), 0);
         if (app.jig_on)       // tucked just under the stopwatch
             gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, cy + bh / 2 + 8), "JIGGLING",
                                  &font_caps, COL_OK, 1);
     }
 
-    hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
-    hand((m + s / 60.f) * 6.f, 14.f, 90.f, 5.f, COL_HAND);
-    hand(s * 6.f, 22.f, 100.f, 2.f, COL_SECOND);
+    hand_t hs[3];
+    watch_hands(t, hs);
+    for (int i = 0; i < 3; i++) hand(hs[i].deg, hs[i].tail, hs[i].len, hs[i].thick, hs[i].col);
     gfx_disc(CX, CY, 6.f, COL_SECOND);
     gfx_disc(CX, CY, 2.f, COL_DIAL);
 }
@@ -296,8 +337,6 @@ static void page_dots(int screen) {
         gfx_disc(LCD_W / 2 + (i - 1) * 14, 268, 3.f, i == screen ? COL_TEXT : RGB(60, 64, 76));
 }
 
-typedef struct { int x, y, w, h; } rect_t;
-
 // Regions that change on an animation frame (everything else is redrawn only
 // when core0 bumps redraw_seq): the jiggler's orbit + pill and status lines,
 // or the clipboard's progress line while pasting.
@@ -324,6 +363,8 @@ void ui_core1_main(void) {
 
     uint32_t drawn_seq = ~0u, last_frame = 0;
     int last_watch_t = -1, drawn_screen = -1;
+    uint32_t drawn_wtick = 0;
+    rect_t prev_hands = {0, 0, LCD_W, LCD_H};   // where the hands were on the last watch frame
     bool first = true, msg_shown = false;
 
     for (;;) {
@@ -334,7 +375,10 @@ void ui_core1_main(void) {
         bool msg = msg_showing();
         bool full = seq != drawn_seq || screen != drawn_screen || msg != msg_shown;
         bool partial = !full && (anim_jig || anim_clip) && now_ms() - last_frame >= 50;
-        if (!full && !partial) { sleep_ms(2); continue; }
+        uint32_t wtick = app.watch_tick;
+        bool watch_partial = !full && screen == SCR_WATCH && wtick != drawn_wtick;
+        if (!full && !partial && !watch_partial) { sleep_ms(2); continue; }
+        drawn_wtick = wtick;
         drawn_seq = seq;
         drawn_screen = screen;
         msg_shown = msg;
@@ -348,6 +392,22 @@ void ui_core1_main(void) {
             t_push = time_us_64();
             lcd_push_frame(fb);
             lcd_wait();
+            if (screen == SCR_WATCH) prev_hands = hands_rect(t);
+        } else if (watch_partial) {
+            // New second: repaint where the hands were and where they are now
+            // (dial and ticks underneath come back via the clip), plus the stopwatch.
+            rect_t now_hands = hands_rect(t);
+            rect_t r = rect_union(rect_union(prev_hands, now_hands), stopwatch_rect());
+            gfx_set_clip(r.x, r.y, r.w, r.h);
+            draw_page(screen, t);
+            gfx_clip_reset();
+            t_push = time_us_64();
+            if (r.x < 0) { r.w += r.x; r.x = 0; }
+            if (r.y < 0) { r.h += r.y; r.y = 0; }
+            if (r.x + r.w > LCD_W) r.w = LCD_W - r.x;
+            if (r.y + r.h > LCD_H) r.h = LCD_H - r.y;
+            lcd_push_rect(fb, r.x, r.y, r.w, r.h);
+            prev_hands = now_hands;
         } else {
             const rect_t *r = anim_jig ? JIG_ANIM : CLIP_ANIM;
             int n = anim_jig ? 2 : 1;

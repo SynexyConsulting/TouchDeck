@@ -55,7 +55,7 @@ static void clock_update(void) {
     int t = (int)((clock_base_s + (time_us_64() - clock_base_us) / 1000000) % 86400);
     if (t != app.time_s) {
         app.time_s = t;
-        if (app.screen == SCR_WATCH) app_redraw();
+        if (app.screen == SCR_WATCH) app.watch_tick++;   // hands/stopwatch only: partial redraw
     }
 }
 
@@ -66,7 +66,7 @@ static void timer_update(void) {
     int s = (int)(us / 1000000);
     if (s != app.timer_s) {
         app.timer_s = s;
-        if (app.screen == SCR_WATCH) app_redraw();
+        if (app.screen == SCR_WATCH) app.watch_tick++;   // hands/stopwatch only: partial redraw
     }
 }
 
