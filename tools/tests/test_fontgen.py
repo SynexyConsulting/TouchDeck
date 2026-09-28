@@ -20,6 +20,11 @@ def test_glyphs_are_antialiased():
     o = FONTS["font_title"].glyphs["O"].alpha
     assert any(0 < a < 15 for a in o) and max(o) == 15
 
+def test_timer_font_has_seven_segment_digits():
+    g = FONTS["font_timer"].glyphs
+    assert all(g[c].w and g[c].h for c in "0123456789:")
+    assert FONTS["font_timer"].spec.size == 2 * next(s.size for s in fontgen.FONTS if s.name == "font_caps")
+
 def test_mono_font_has_fixed_advance():
     g = FONTS["font_mono"].glyphs
     assert len({g[c].adv for c in "iW.m0"}) == 1
@@ -60,6 +65,8 @@ LABELS = [
     ("font_body", 'Pick "Touch Deck" in Add device', 225, 0),  # pairing page, y 130
     ("font_body", "Enter this PIN on your PC", 190, 0),        # pairing page, y 72
     ("font_caps", "DISCONNECTED", 120, 1),
+    ("font_timer", "88:88:88", 104, 0),                        # stopwatch box on the watch face
+    ("font_caps", "2.0X", 36 - 8, 1),                          # jiggler scale pill
 ]
 
 @pytest.mark.parametrize("font,text,avail,spacing", LABELS)

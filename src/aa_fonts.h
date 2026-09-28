@@ -28,6 +28,7 @@ extern const aa_font_t font_caps;   // Barlow-Bold.ttf 9px: chip and small-caps 
 extern const aa_font_t font_big;   // Barlow-Bold.ttf 26px: jiggler ON / OFF
 extern const aa_font_t font_mono;   // JetBrainsMono[wght].ttf 10px: clip preview
 extern const aa_font_t font_pin;   // JetBrainsMono[wght].ttf 17px: pairing PIN digits
+extern const aa_font_t font_timer;   // DSEG7Classic-Bold.ttf 18px: watch stopwatch (7-segment digits)
 
 #ifdef __cplusplus
 }
