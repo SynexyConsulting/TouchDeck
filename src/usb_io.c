@@ -4,6 +4,7 @@
 //               TIME hh:mm:ss          set the watch
 //               CLIP <n> <src>\n<n bytes>   new clip text
 //               DBG                    reply with a one-line LOG of liveness/touch stats
+//               VER                    reply VERSION <board> <version> <build date>
 //               SWIPE L|R, BTN [LONG]  inject a swipe / BOOT-button press (scripting/tests)
 //               ANIM 1|0               spin the jiggler page's dot without HID (perf tests)
 //               BOOT                   reboot into the UF2 bootloader
@@ -16,6 +17,7 @@
 #include "pico/bootrom.h"
 #include "app.h"
 #include "usb_io.h"
+#include "version.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -91,6 +93,8 @@ static void handle_line(char *s) {
         rx_got = 0;
         rx_want = n;
         if (n == 0) commit_clip();
+    } else if (!strcmp(s, "VER")) {
+        usb_send_line("VERSION " FW_BOARD " " FW_VERSION " " __DATE__);
     } else if (!strcmp(s, "DBG")) {
         extern void debug_report(void);
         debug_report();

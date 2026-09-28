@@ -2,6 +2,7 @@
 //               TIME hh:mm:ss          set the clock shown at the top
 //               CLIP <n> <src>\n<n bytes>   new clip text
 //               DBG                    reply with a one-line LOG of diagnostics
+//               VER                    reply VERSION <board> <version> <build date>
 //               LEDS <hex>             PC lock-key state (bit1 = Caps Lock)
 //               MODE PC|BT             set the output mode (scripting/tests)
 //               TAP x y | SWIPE L|R    inject a touch event (scripting/tests)
@@ -16,6 +17,7 @@
 #include "output.h"
 #include "touch.h"
 #include "gfx.h"
+#include "version.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -104,6 +106,8 @@ static void handle_line(char *s) {
                     snprintf(r, sizeof r, "LOG textw %d", gfx_text_aa_width(s + 6 + used, e.f, sp));
                     link_send_line(r);
                 }
+    } else if (!strcmp(s, "VER")) {
+        link_send_line("VERSION " FW_BOARD " " FW_VERSION " " __DATE__);
     } else if (!strcmp(s, "DBG")) {
         debug_report();
     }

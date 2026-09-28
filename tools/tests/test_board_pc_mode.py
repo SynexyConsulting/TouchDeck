@@ -109,3 +109,8 @@ def test_jiggler_scale_widens_the_movement(board):
     large = _mean_step(board, 2.0)
     board.send("BTN"); board.pump(0.2)                  # back to 1x
     assert large > 1.6 * small
+
+def test_ver_reports_board_and_firmware_version(board):
+    board.take(); board.send("VER"); board.pump(0.4)
+    replies = [l for l in board.take() if l.startswith("VERSION ")]
+    assert replies and replies[-1].split()[1] == "esp32c3-128"
