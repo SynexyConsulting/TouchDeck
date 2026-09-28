@@ -141,7 +141,8 @@ static const char *msg_or(const char *normal, char *buf, int n) {
 
 // Edge ring + top chip on every screen: output goes to USB, dot = enumerated.
 static void frame_usb(void) {
-    gfx_rrect_ring(0, 0, LCD_W, LCD_H, 37.f, 3.f, C_PC);   // radius tuned on the device to the panel corners
+    // Corner radius matched on the device to the panel's rounded glass (40 clipped, 46 was loose).
+    gfx_rrect_ring(0, 0, LCD_W, LCD_H, 44.f, 3.f, C_PC);
     const char *label = "USB";
     int tw = gfx_text_aa_width(label, &font_caps, 1), w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 5;
     pill(x, y, w, 18, C_PC_TINT);
