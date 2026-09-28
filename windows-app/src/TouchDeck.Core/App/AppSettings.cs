@@ -80,6 +80,13 @@ public sealed class Autostart(string keyPath = Autostart.RunKey, string valueNam
         return key?.GetValue(valueName) as string == CommandFor(exePath);
     }
 
+    /// <summary>Uninstall: drop the entry whatever path it points at.</summary>
+    public void Remove()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(keyPath, writable: true);
+        key?.DeleteValue(valueName, throwOnMissingValue: false);
+    }
+
     public void Set(bool enabled, string exePath)
     {
         using var key = Registry.CurrentUser.CreateSubKey(keyPath);

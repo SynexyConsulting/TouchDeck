@@ -8,9 +8,12 @@ public partial class App : Application
 {
     private const string MutexName = @"Local\TouchDeck.App";
     private const string ShowEventName = @"Local\TouchDeck.App.Show";
+    private const string QuitEventName = @"Local\TouchDeck.App.Quit";
 
     private Mutex? single;
+    private bool ownsMutex;
     private EventWaitHandle? showRequest;
+    private EventWaitHandle? quitRequest;
     private AppController? controller;
     private TrayIcon? tray;
     private MainWindow? window;
@@ -19,8 +22,19 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Installer hooks: --quit closes a running instance (before files are replaced);
+        // --cleanup also removes the autostart entry (uninstall).
+        if (e.Args.Contains("--quit") || e.Args.Contains("--cleanup"))
+        {
+            QuitRunningInstance();
+            if (e.Args.Contains("--cleanup")) new Core.App.Autostart().Remove();
+            Shutdown();
+            return;
+        }
+
         // One instance owns the serial port; a second launch just brings the first forward.
         single = new Mutex(true, MutexName, out bool first);
+        ownsMutex = first;
         showRequest = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         if (!first)
         {
@@ -35,6 +49,8 @@ public partial class App : Application
         tray = new TrayIcon(controller, ShowWindow, Quit);
 
         ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => Dispatcher.BeginInvoke(ShowWindow), null, -1, executeOnlyOnce: false);
+        quitRequest = new EventWaitHandle(false, EventResetMode.AutoReset, QuitEventName);
+        ThreadPool.RegisterWaitForSingleObject(quitRequest, (_, _) => Dispatcher.BeginInvoke(Quit), null, -1, executeOnlyOnce: true);
 
         controller.Start();
         if (!e.Args.Contains("--minimized")) ShowWindow();
@@ -69,6 +85,22 @@ public partial class App : Application
 
     private void ShowWindow() => window?.ShowFromTray();
 
+    /// <summary>Asks a running instance to quit and waits (up to 5 s) until it has.</summary>
+    private static void QuitRunningInstance()
+    {
+        if (!Mutex.TryOpenExisting(MutexName, out var running)) return;
+        using (running)
+        using (var quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitEventName))
+        {
+            quit.Set();
+            try
+            {
+                if (running.WaitOne(TimeSpan.FromSeconds(5))) running.ReleaseMutex();
+            }
+            catch (AbandonedMutexException) { }   // it exited without releasing: also gone
+        }
+    }
+
     private void Quit()
     {
         controller?.Dispose();                   // releases any key or button held for the board
@@ -85,6 +117,7 @@ public partial class App : Application
     {
         controller?.Dispose();
         tray?.Dispose();
+        if (ownsMutex) single?.ReleaseMutex();     // lets a waiting --quit return at once
         single?.Dispose();
         base.OnExit(e);
     }

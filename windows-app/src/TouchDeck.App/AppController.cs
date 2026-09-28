@@ -60,6 +60,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             foreach (var h in History.Items) HistoryItems.Add(h);
         });
 
+        // The installer drops the Run entry on upgrade/uninstall and the path can move: re-assert it.
+        if (settings.StartWithWindows && !autostart.IsEnabled(Environment.ProcessPath!))
+            autostart.Set(true, Environment.ProcessPath!);
+
         bootDriveWatch = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => CheckBootDrive(), ui);
         ApplyState(LinkState.Searching);
     }

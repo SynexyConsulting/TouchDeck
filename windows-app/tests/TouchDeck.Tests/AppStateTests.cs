@@ -75,5 +75,15 @@ public sealed class AutostartTests : IDisposable
         Assert.False(autostart.IsEnabled(exe));
     }
 
+    [Fact]
+    public void Remove_drops_an_entry_for_any_path()
+    {
+        autostart.Set(true, @"C:\old\TouchDeck.exe");
+        autostart.Remove();
+        autostart.Remove();
+        using var key = Registry.CurrentUser.OpenSubKey(TestKey);
+        Assert.Null(key?.GetValue("TouchDeck"));
+    }
+
     public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(TestKey, throwOnMissingSubKey: false);
 }

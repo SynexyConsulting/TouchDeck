@@ -9,6 +9,8 @@
     <RootNamespace>TouchDeck.App</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- English UI only: skips ~20 folders of framework resource translations. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>
     <!-- WinForms is only for NotifyIcon: keep its types out of the global usings. -->
