@@ -12,7 +12,11 @@
 
 #define CX (LCD_W / 2.f)
 #define CY (LCD_H / 2.f)
-#define R  116.f
+// Rounded-square watch face filling the 240x280 panel; its corners follow the
+// panel's 44 px glass radius (see frame_usb), inset by the face margin.
+#define FACE_M 6
+#define FACE_R (44.f - FACE_M)
+#define TICK_IN 9       // ticks start this far inside the face edge
 #define DEG2RAD 0.017453292f
 
 #define COL_DIAL   RGB(18, 24, 38)
@@ -79,20 +83,43 @@ static void draw_mute_icon(bool muted) {
     }
 }
 
+// Distance from the centre, along the direction of minute i, to the rounded
+// square the ticks sit on (bisection on the rounded-box distance). Computed once.
+static float tick_reach[60];
+
+static float rounded_box_sd(float px, float py, float hx, float hy, float r) {
+    float qx = fabsf(px) - (hx - r), qy = fabsf(py) - (hy - r);
+    float ox = fmaxf(qx, 0.f), oy = fmaxf(qy, 0.f);
+    return sqrtf(ox * ox + oy * oy) + fminf(fmaxf(qx, qy), 0.f) - r;
+}
+
+static void tick_reach_init(void) {
+    float hx = LCD_W / 2.f - FACE_M - TICK_IN, hy = LCD_H / 2.f - FACE_M - TICK_IN, r = FACE_R - TICK_IN;
+    for (int i = 0; i < 60; i++) {
+        float a = i * 6.f * DEG2RAD, dx = sinf(a), dy = -cosf(a), lo = 0.f, hi = 200.f;
+        for (int k = 0; k < 24; k++) {
+            float mid = (lo + hi) * 0.5f;
+            if (rounded_box_sd(dx * mid, dy * mid, hx, hy, r) < 0.f) lo = mid; else hi = mid;
+        }
+        tick_reach[i] = lo;
+    }
+}
+
 static void draw_watch(int t) {
     int h = t / 3600, m = (t / 60) % 60, s = t % 60;
-    gfx_disc(CX, CY, R, COL_DIAL);
-    gfx_ring(CX, CY, R - 1.5f, 3.f, COL_RIM);
+    static bool ticks_ready;
+    if (!ticks_ready) { tick_reach_init(); ticks_ready = true; }
+
+    gfx_rrect(FACE_M, FACE_M, LCD_W - 2 * FACE_M, LCD_H - 2 * FACE_M, FACE_R, COL_DIAL);
+    gfx_rrect_ring(FACE_M, FACE_M, LCD_W - 2 * FACE_M, LCD_H - 2 * FACE_M, FACE_R, 3.f, COL_RIM);
 
     for (int i = 0; i < 60; i++) {
         float x0, y0, x1, y1;
         int hour = (i % 5) == 0;
-        polar(CX, CY, i * 6.f, hour ? R - 22.f : R - 12.f, &x0, &y0);
-        polar(CX, CY, i * 6.f, R - 7.f, &x1, &y1);
+        polar(CX, CY, i * 6.f, tick_reach[i] - (hour ? 15.f : 6.f), &x0, &y0);
+        polar(CX, CY, i * 6.f, tick_reach[i], &x1, &y1);
         gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
     }
-    if (app.jig_on)
-        gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 224), "JIGGLING", &font_caps, COL_OK, 1);
     if (app.helper)
         gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, 84), "PC", &font_caps, COL_DIM, 1);
     draw_mute_icon(app.muted);
@@ -107,6 +134,9 @@ static void draw_watch(int t) {
         int cy = (int)CY + 50;
         gfx_rrect((int)CX - bw / 2, cy - bh / 2, bw, bh, 6.f, RGB(0, 0, 0));
         gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_timer, cy), st, &font_timer, RGB(255, 255, 255), 0);
+        if (app.jig_on)       // tucked just under the stopwatch
+            gfx_text_aa_centered((int)CX, gfx_text_aa_ytop(&font_caps, cy + bh / 2 + 8), "JIGGLING",
+                                 &font_caps, COL_OK, 1);
     }
 
     hand(((h % 12) + m / 60.f + s / 3600.f) * 30.f, 12.f, 58.f, 8.f, COL_HAND);
@@ -286,10 +316,10 @@ void ui_core1_main(void) {
 
         int t = app.time_s;
         gfx_fill(C_BG);
-        frame_usb();
         if (screen == SCR_WATCH) draw_watch(t);
         else if (screen == SCR_CLIP) draw_clip();
         else draw_jig();
+        frame_usb();      // last: over the content (the watch face fills the screen)
         page_dots(screen);
 
         lcd_push_frame(fb);

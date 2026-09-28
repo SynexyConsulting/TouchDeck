@@ -117,35 +117,61 @@ void gfx_line(float ax, float ay, float bx, float by, float thick, uint16_t colo
 }
 
 void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
+    // Same coverage as the per-pixel rounded-box distance, but only corner rows
+    // need maths: between the corners every pixel of a row is fully covered.
     float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
-    for (int py = y; py < y + h; py++)
-        for (int px = x; px < x + w; px++) {
-            float qx = fabsf(px + 0.5f - cx) - (hx - rad);
-            float qy = fabsf(py + 0.5f - cy) - (hy - rad);
-            float d;
-            if (qx > 0.f && qy > 0.f) d = sqrtf(qx * qx + qy * qy) - rad;
-            else d = fmaxf(qx, qy) - rad;
-            plot(px, py, color, 0.5f - d);
+    int in0 = (int)ceilf(cx - (hx - rad) - 0.5f);    // columns whose centre is between the corners
+    int in1 = (int)floorf(cx + (hx - rad) - 0.5f);
+    for (int py = y; py < y + h; py++) {
+        float qy = fabsf(py + 0.5f - cy) - (hy - rad);
+        if (qy <= 0.f) {                             // straight band: solid
+            gfx_rect(x, py, w, 1, color);
+            continue;
         }
+        float band = 0.5f - (qy - rad);              // coverage between the corners on this row
+        for (int px = x; px < x + w; px++) {
+            if (px >= in0 && px <= in1) {
+                if (band >= 1.f) { gfx_rect(px, py, in1 - px + 1, 1, color); px = in1; }
+                else plot(px, py, color, band);
+                continue;
+            }
+            float qx = fabsf(px + 0.5f - cx) - (hx - rad);
+            plot(px, py, color, 0.5f - (sqrtf(qx * qx + qy * qy) - rad));
+        }
+    }
 }
 
 void gfx_rrect_ring(int x, int y, int w, int h, float rad, float width, uint16_t color) {
+    // Only pixels near the outline are touched. Between the corners the
+    // coverage along a row is constant, so only corner pixels need a sqrt.
     float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
-    int band = (int)(rad + width + 2);
+    int in0 = (int)ceilf(cx - (hx - rad) - 0.5f), in1 = (int)floorf(cx + (hx - rad) - 0.5f);
+    int edge = (int)width + 2;
     for (int py = y; py < y + h; py++) {
-        bool edge_row = py < y + band || py >= y + h - band;
+        float qy = fabsf(py + 0.5f - cy) - (hy - rad);
         for (int px = x; px < x + w; px++) {
-            if (!edge_row && px >= x + (int)width + 2 && px < x + w - (int)width - 2) {
-                px = x + w - (int)width - 3;          // skip the untouched middle
+            bool middle = px >= in0 && px <= in1;
+            if (qy <= 0.f && px >= x + edge && px < x + w - edge) {
+                px = x + w - edge - 1;               // side band: skip the untouched middle
                 continue;
             }
-            float qx = fabsf(px + 0.5f - cx) - (hx - rad), qy = fabsf(py + 0.5f - cy) - (hy - rad);
-            float d = (qx > 0.f && qy > 0.f) ? sqrtf(qx * qx + qy * qy) - rad : fmaxf(qx, qy) - rad;
+            float d;
+            if (middle) {
+                d = qy - rad;                         // constant along this row
+                float a = fminf(0.5f - d, d + width + 0.5f);
+                if (a <= 0.f) { px = in1; continue; }  // row is inside or outside the outline
+                if (a >= 1.f) { gfx_rect(px, py, in1 - px + 1, 1, color); px = in1; continue; }
+                plot(px, py, color, a);
+                continue;
+            }
+            float qx = fabsf(px + 0.5f - cx) - (hx - rad);
+            d = (qx > 0.f && qy > 0.f) ? sqrtf(qx * qx + qy * qy) - rad : fmaxf(qx, qy) - rad;
             float a = fminf(0.5f - d, d + width + 0.5f);   // inside the outer edge, outside the inner
             plot(px, py, color, a > 1.f ? 1.f : a);
         }
     }
 }
+
 
 static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
     if (c < ' ' || c > '~') c = '?';

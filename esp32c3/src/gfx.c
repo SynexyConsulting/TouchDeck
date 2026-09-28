@@ -116,16 +116,28 @@ void gfx_line(float ax, float ay, float bx, float by, float thick, uint16_t colo
 }
 
 void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
+    // Same coverage as the per-pixel rounded-box distance, but only corner rows
+    // need maths: between the corners every pixel of a row is fully covered.
     float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
-    for (int py = y; py < y + h; py++)
-        for (int px = x; px < x + w; px++) {
-            float qx = fabsf(px + 0.5f - cx) - (hx - rad);
-            float qy = fabsf(py + 0.5f - cy) - (hy - rad);
-            float d;
-            if (qx > 0.f && qy > 0.f) d = sqrtf(qx * qx + qy * qy) - rad;
-            else d = fmaxf(qx, qy) - rad;
-            plot(px, py, color, 0.5f - d);
+    int in0 = (int)ceilf(cx - (hx - rad) - 0.5f);    // columns whose centre is between the corners
+    int in1 = (int)floorf(cx + (hx - rad) - 0.5f);
+    for (int py = y; py < y + h; py++) {
+        float qy = fabsf(py + 0.5f - cy) - (hy - rad);
+        if (qy <= 0.f) {                             // straight band: solid
+            gfx_rect(x, py, w, 1, color);
+            continue;
         }
+        float band = 0.5f - (qy - rad);              // coverage between the corners on this row
+        for (int px = x; px < x + w; px++) {
+            if (px >= in0 && px <= in1) {
+                if (band >= 1.f) { gfx_rect(px, py, in1 - px + 1, 1, color); px = in1; }
+                else plot(px, py, color, band);
+                continue;
+            }
+            float qx = fabsf(px + 0.5f - cx) - (hx - rad);
+            plot(px, py, color, 0.5f - (sqrtf(qx * qx + qy * qy) - rad));
+        }
+    }
 }
 
 static const aa_glyph_t *aa_glyph(const aa_font_t *f, char c) {
