@@ -7,3 +7,5 @@ void lcd_set_backlight(uint8_t percent);
 // call lcd_wait() before touching the buffer again.
 void lcd_push_frame(const uint16_t *fb);
 void lcd_wait(void);
+// Push only a window of the framebuffer (blocking). Used for partial redraws.
+void lcd_push_rect(const uint16_t *fb, int x, int y, int w, int h);

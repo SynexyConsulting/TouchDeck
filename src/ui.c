@@ -250,7 +250,7 @@ static void draw_jig(void) {
     text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
-    if (on) {
+    if (on || app.anim_demo) {
         // The dot's orbit grows with the BOOT-button scale (1x inside, 2x at the ring).
         float orbit = 40.f + 15.f * (JIG_SCALES[app.jig_scale_idx] - 1.f);
         gfx_disc(JIG_CX + cosf(app.jig_angle) * orbit, JIG_CY + sinf(app.jig_angle) * orbit, 6.f, C_PC);
@@ -296,36 +296,69 @@ static void page_dots(int screen) {
         gfx_disc(LCD_W / 2 + (i - 1) * 14, 268, 3.f, i == screen ? COL_TEXT : RGB(60, 64, 76));
 }
 
+typedef struct { int x, y, w, h; } rect_t;
+
+// Regions that change on an animation frame (everything else is redrawn only
+// when core0 bumps redraw_seq): the jiggler's orbit + pill and status lines,
+// or the clipboard's progress line while pasting.
+static const rect_t JIG_ANIM[] = {
+    {JIG_CX - JIG_R - 3, JIG_CY - JIG_R - 3, 2 * (JIG_R + 3), 2 * (JIG_R + 3)},
+    {0, 206, LCD_W, 44},
+};
+static const rect_t CLIP_ANIM[] = {{0, 178, LCD_W, 20}};
+
+static void draw_page(int screen, int t) {
+    gfx_fill(C_BG);
+    if (screen == SCR_WATCH) draw_watch(t);
+    else if (screen == SCR_CLIP) draw_clip();
+    else draw_jig();
+    frame_usb();      // last: over the content (the watch face fills the screen)
+    page_dots(screen);
+}
+
+static bool msg_showing(void) { return (int32_t)(app.msg_until_ms - now_ms()) > 0; }
+
 void ui_core1_main(void) {
     // Lets core0 park this core while it writes settings to flash.
     flash_safe_execute_core_init();
 
     uint32_t drawn_seq = ~0u, last_frame = 0;
-    int last_watch_t = -1;
-    bool first = true;
+    int last_watch_t = -1, drawn_screen = -1;
+    bool first = true, msg_shown = false;
 
     for (;;) {
         int screen = app.screen;
         uint32_t seq = app.redraw_seq;
-        // Watch redraws on request (each second); other screens animate.
-        uint32_t period = (screen == SCR_JIG && app.jig_on) || app.clip_state != CLIP_IDLE ? 50 : 250;
-        bool due = seq != drawn_seq || (screen != SCR_WATCH && now_ms() - last_frame >= period);
-        if (!due) { sleep_ms(2); continue; }
+        bool anim_jig = screen == SCR_JIG && (app.jig_on || app.anim_demo);
+        bool anim_clip = screen == SCR_CLIP && app.clip_state == CLIP_PASTING;
+        bool msg = msg_showing();
+        bool full = seq != drawn_seq || screen != drawn_screen || msg != msg_shown;
+        bool partial = !full && (anim_jig || anim_clip) && now_ms() - last_frame >= 50;
+        if (!full && !partial) { sleep_ms(2); continue; }
         drawn_seq = seq;
+        drawn_screen = screen;
+        msg_shown = msg;
         last_frame = now_ms();
+        if (app.anim_demo && anim_jig) app.jig_angle += 0.12f;   // ANIM 1: spin the dot, no HID
 
         int t = app.time_s;
-        uint64_t t_draw = time_us_64();
-        gfx_fill(C_BG);
-        if (screen == SCR_WATCH) draw_watch(t);
-        else if (screen == SCR_CLIP) draw_clip();
-        else draw_jig();
-        frame_usb();      // last: over the content (the watch face fills the screen)
-        page_dots(screen);
-
-        uint64_t t_push = time_us_64();
-        lcd_push_frame(fb);
-        lcd_wait();
+        uint64_t t_draw = time_us_64(), t_push;
+        if (full) {
+            draw_page(screen, t);
+            t_push = time_us_64();
+            lcd_push_frame(fb);
+            lcd_wait();
+        } else {
+            const rect_t *r = anim_jig ? JIG_ANIM : CLIP_ANIM;
+            int n = anim_jig ? 2 : 1;
+            for (int i = 0; i < n; i++) {           // draw each region clipped, then send just it
+                gfx_set_clip(r[i].x, r[i].y, r[i].w, r[i].h);
+                draw_page(screen, t);
+            }
+            gfx_clip_reset();
+            t_push = time_us_64();
+            for (int i = 0; i < n; i++) lcd_push_rect(fb, r[i].x, r[i].y, r[i].w, r[i].h);
+        }
         // Frame timing for DBG: exponential averages (1/8) and the worst draw seen.
         uint32_t draw_us = (uint32_t)(t_push - t_draw), push_us = (uint32_t)(time_us_64() - t_push);
         app.perf_draw_us += ((int32_t)draw_us - (int32_t)app.perf_draw_us) / 8;

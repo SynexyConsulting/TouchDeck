@@ -102,3 +102,28 @@ void lcd_push_frame(const uint16_t *fb) {
     channel_config_set_dreq(&c, spi_get_dreq(LCD_SPI, true));
     dma_channel_configure(dma_chan, &c, &spi_get_hw(LCD_SPI)->dr, fb, LCD_W * LCD_H, true);
 }
+
+// Push just the w x h window at (x, y) of the full-screen framebuffer. Rows of
+// the window aren't contiguous in fb, so it is one DMA per row; blocking, but a
+// 130-pixel row takes ~40 us at 50 MHz SPI.
+void lcd_push_rect(const uint16_t *fb, int x, int y, int w, int h) {
+    lcd_wait();
+    const uint16_t x1 = x + w - 1, y0 = Y_OFFSET + y, y1 = Y_OFFSET + y + h - 1;
+    const uint8_t caset[] = {x >> 8, x & 0xFF, x1 >> 8, x1 & 0xFF};
+    const uint8_t raset[] = {y0 >> 8, y0 & 0xFF, y1 >> 8, y1 & 0xFF};
+    cmd(0x2A, caset, 4);
+    cmd(0x2B, raset, 4);
+    cmd(0x2C, 0, 0);
+
+    spi_set_format(LCD_SPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    gpio_put(LCD_PIN_CS, 0);
+    gpio_put(LCD_PIN_DC, 1);
+    dma_channel_config c = dma_channel_get_default_config(dma_chan);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
+    channel_config_set_dreq(&c, spi_get_dreq(LCD_SPI, true));
+    for (int r = 0; r < h; r++) {
+        dma_channel_configure(dma_chan, &c, &spi_get_hw(LCD_SPI)->dr, fb + (y + r) * LCD_W + x, w, true);
+        dma_channel_wait_for_finish_blocking(dma_chan);
+    }
+    lcd_wait();
+}

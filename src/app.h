@@ -24,6 +24,7 @@ typedef struct {
     volatile uint32_t frames;       // core1 frame counter (diagnostics)
     volatile uint32_t loops;        // core0 main-loop counter (diagnostics)
     volatile uint32_t perf_draw_us, perf_push_us, perf_draw_max_us;   // frame timing (DBG)
+    volatile bool anim_demo;        // ANIM 1: animate the jiggler page without sending HID (perf tests)
 
     // Clipboard. clip/clip_src are guarded by clip_mtx.
     char clip[CLIP_MAX + 1];

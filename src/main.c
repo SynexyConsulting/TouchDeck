@@ -220,7 +220,8 @@ int main(void) {
     uint32_t next_touch = 0, next_button = 0;
     for (;;) {
         app.loops++;
-        app.usb_mounted = tud_mounted();
+        bool mounted = tud_mounted();
+        if (mounted != app.usb_mounted) { app.usb_mounted = mounted; app_redraw(); }   // chip dot
         usb_io_poll();
         clock_update();
         timer_update();
