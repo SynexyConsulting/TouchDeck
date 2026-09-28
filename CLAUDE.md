@@ -6,6 +6,8 @@ Firmware (Pico SDK, C) for the **Waveshare RP2040-Touch-LCD-1.69** ("Touch Deck"
 
 A second port lives in `esp32c3/` for the **ESP32-2424S012C** (see "ESP32-C3 port" below).
 
+The Windows companion app (C# .NET 8 WPF, per-user MSI) is in `windows-app/`. It's a **separate git repo** that this repo ignores, and it has its own CLAUDE.md. It replaces `clip_helper.py` and bundles `build/watch.uf2` for in-app firmware updates. When you change the protocol in `usb_io.c`/`link.cpp`, update the app's `TouchDeck.Core/Protocol` too. Bump `FW_VERSION` in both `version.h` files so the app offers the update. Both the app and `clip_helper.py` want the serial port, so run only one at a time.
+
 ## Build & flash
 
 Toolchain comes from the VS Code Pico extension in `~/.pico-sdk` (SDK 2.1.1, GCC 14.2, picotool 2.1.1); `CMakeLists.txt` points at it directly, so no `PICO_SDK_PATH` env var is needed. cmake/ninja are not on PATH by default:
