@@ -59,3 +59,12 @@ def test_watch_second_is_pushed_on_the_timer_edge(board):
     assert hits >= 3, (hits, misses)
     assert hits > misses
     assert lag_us < 20000
+
+def test_ver_reports_board_and_firmware_version(board):
+    board.take(); board.send("VER"); board.pump(0.4)
+    replies = [l for l in board.take() if l.startswith("VERSION ")]
+    assert replies, "no VERSION reply"
+    _, name, semver, *build = replies[-1].split()
+    assert name == "rp2040-169"
+    assert len(semver.split(".")) == 3 and all(p.isdigit() for p in semver.split("."))
+    assert build                                          # compile date

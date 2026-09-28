@@ -22,6 +22,8 @@ PC helper: `py tools\clip_helper.py` or `python tools/clip_helper.py`. On this P
 
 **Tests:** `py -m pytest tools/tests -q`. The unit tests (helper protocol, SendInput injector, font generator, and that every UI label fits its button or circle chord) always run. The board tests in `test_board_*.py` drive the **ESP32-C3** over its serial port and skip when it isn't connected; see the ESP32-C3 section. The RP2040 firmware has no automated tests. Verify it by building, then with the serial protocol from Python (HELLO→PONG, DBG liveness: `frames` rising, touch `fails=0`), then by looking at the device. PASTE and the jiggler inject real keystrokes/mouse input on the PC (RP2040: always, over USB HID; ESP32-C3: in PC mode through the helper), so trigger them deliberately, or use `clip_helper.py --dry-run`.
 
+**Firmware version:** `src/version.h` and `esp32c3/src/version.h` define `FW_BOARD` and `FW_VERSION`, and the `VER` serial command replies `VERSION <board> <version> <build date>`. Bump `FW_VERSION` on every firmware change that ships. The Windows app (`windows-app/`, its **own git repository**, ignored here) shows it and offers an RP2040 update when its bundled firmware is newer.
+
 ## Hardware facts (from the schematic, not the demo code)
 
 Pin map lives in `src/board.h`. Non-obvious points:
