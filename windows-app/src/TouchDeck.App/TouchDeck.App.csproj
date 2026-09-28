@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WPF shell; WinForms only for the tray NotifyIcon. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>TouchDeck</AssemblyName>
+    <RootNamespace>TouchDeck.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- WinForms is only for NotifyIcon: keep its types out of the global usings. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TouchDeck.Core\TouchDeck.Core.csproj" />
+  </ItemGroup>
+</Project>
