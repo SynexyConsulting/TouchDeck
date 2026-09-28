@@ -357,82 +357,130 @@ static void draw_page(int screen, int t) {
 
 static bool msg_showing(void) { return (int32_t)(app.msg_until_ms - now_ms()) > 0; }
 
+static rect_t clamp_to_screen(rect_t r) {
+    if (r.x < 0) { r.w += r.x; r.x = 0; }
+    if (r.y < 0) { r.h += r.y; r.y = 0; }
+    if (r.x + r.w > LCD_W) r.w = LCD_W - r.x;
+    if (r.y + r.h > LCD_H) r.h = LCD_H - r.y;
+    return r;
+}
+
+// Draw the watch page for time t clipped to r (dial and ticks underneath come
+// back through the clip).
+static void draw_watch_region(rect_t r, int t) {
+    gfx_set_clip(r.x, r.y, r.w, r.h);
+    draw_page(SCR_WATCH, t);
+    gfx_clip_reset();
+}
+
 void ui_core1_main(void) {
     // Lets core0 park this core while it writes settings to flash.
     flash_safe_execute_core_init();
 
-    uint32_t drawn_seq = ~0u, last_frame = 0;
-    int last_watch_t = -1, drawn_screen = -1;
-    uint32_t drawn_wtick = 0;
-    rect_t prev_hands = {0, 0, LCD_W, LCD_H};   // where the hands were on the last watch frame
+    uint32_t drawn_seq = ~0u, last_frame = 0, drawn_wtick = 0, seen_edge = 0;
+    int drawn_screen = -1;
     bool first = true, msg_shown = false;
+
+    // Watch page: `shown_t` is the second on screen. Right after it is shown,
+    // the frame for the next second is drawn into fb ahead of time (`ready`),
+    // then pushed the moment core0's second alarm fires, so the hands move
+    // exactly with the tick.
+    int shown_t = -1, ready_t = -1;
+    bool ready = false;
+    rect_t ready_rect = {0, 0, 0, 0};
+    rect_t prev_hands = {0, 0, LCD_W, LCD_H};   // where the hands are on screen
 
     for (;;) {
         int screen = app.screen;
-        uint32_t seq = app.redraw_seq;
+        bool on_watch = screen == SCR_WATCH;
+        uint32_t seq = app.redraw_seq, wtick = app.watch_tick, edge = app.second_edge;
         bool anim_jig = screen == SCR_JIG && (app.jig_on || app.anim_demo);
         bool anim_clip = screen == SCR_CLIP && app.clip_state == CLIP_PASTING;
         bool msg = msg_showing();
         bool full = seq != drawn_seq || screen != drawn_screen || msg != msg_shown;
-        bool partial = !full && (anim_jig || anim_clip) && now_ms() - last_frame >= 50;
-        uint32_t wtick = app.watch_tick;
-        bool watch_partial = !full && screen == SCR_WATCH && wtick != drawn_wtick;
-        if (!full && !partial && !watch_partial) { sleep_ms(2); continue; }
-        drawn_wtick = wtick;
+        bool edge_new = on_watch && edge != seen_edge;
+        bool stopwatch = on_watch && wtick != drawn_wtick;
+        bool prerender = on_watch && !ready && shown_t == app.time_s;
+        bool partial = (anim_jig || anim_clip) && now_ms() - last_frame >= 50;
+        if (!full && !edge_new && !stopwatch && !prerender && !partial) {
+            if (ready) sleep_us(200);    // a frame is waiting for its second: watch the edge closely
+            else sleep_ms(2);
+            continue;
+        }
         drawn_seq = seq;
         drawn_screen = screen;
         msg_shown = msg;
+        drawn_wtick = wtick;
         last_frame = now_ms();
         if (app.anim_demo && anim_jig) app.jig_angle += 0.12f;   // ANIM 1: spin the dot, no HID
 
-        int t = app.time_s;
-        uint64_t t_draw = time_us_64(), t_push;
+        uint64_t t_draw = time_us_64(), t_push = t_draw;
+        bool pushed = true;
         if (full) {
+            int t = app.time_s;
             draw_page(screen, t);
             t_push = time_us_64();
             lcd_push_frame(fb);
             lcd_wait();
-            if (screen == SCR_WATCH) prev_hands = hands_rect(t);
-        } else if (watch_partial) {
-            // New second: repaint where the hands were and where they are now
-            // (dial and ticks underneath come back via the clip), plus the stopwatch.
-            rect_t now_hands = hands_rect(t);
-            rect_t r = rect_union(rect_union(prev_hands, now_hands), stopwatch_rect());
-            gfx_set_clip(r.x, r.y, r.w, r.h);
-            draw_page(screen, t);
-            gfx_clip_reset();
+            seen_edge = edge;
+            ready = false;
+            if (on_watch) { shown_t = t; prev_hands = hands_rect(t); }
+        } else if (edge_new) {
+            seen_edge = edge;
+            int t = app.time_s;
+            rect_t r;
+            if (ready && ready_t == t) {             // drawn ahead: just send it
+                r = ready_rect;
+                app.prerender_hits++;
+            } else {                                 // not ready in time: draw it now
+                r = clamp_to_screen(rect_union(rect_union(prev_hands, hands_rect(t)), stopwatch_rect()));
+                draw_watch_region(r, t);
+                app.prerender_misses++;
+            }
+            bool hit = ready && ready_t == t;
             t_push = time_us_64();
-            if (r.x < 0) { r.w += r.x; r.x = 0; }
-            if (r.y < 0) { r.h += r.y; r.y = 0; }
-            if (r.x + r.w > LCD_W) r.w = LCD_W - r.x;
-            if (r.y + r.h > LCD_H) r.h = LCD_H - r.y;
             lcd_push_rect(fb, r.x, r.y, r.w, r.h);
-            prev_hands = now_hands;
+            if (hit) {   // edge -> frame on screen, for drawn-ahead frames (misses are counted instead)
+                uint32_t lag = time_us_32() - app.edge_us;
+                app.perf_edge_lag_us += ((int32_t)lag - (int32_t)app.perf_edge_lag_us) / 4;
+            }
+            shown_t = t;
+            prev_hands = hands_rect(t);
+            ready = false;
+        } else if (stopwatch) {
+            // The stopwatch ticks on its own schedule: repaint just its box for
+            // the second on screen. That overwrites part of any drawn-ahead
+            // frame, so draw the next one again afterwards.
+            rect_t r = clamp_to_screen(stopwatch_rect());
+            draw_watch_region(r, shown_t);
+            t_push = time_us_64();
+            lcd_push_rect(fb, r.x, r.y, r.w, r.h);
+            ready = false;
+        } else if (prerender) {
+            int next = (shown_t + 1) % 86400;
+            ready_rect = clamp_to_screen(rect_union(rect_union(prev_hands, hands_rect(next)), stopwatch_rect()));
+            draw_watch_region(ready_rect, next);
+            ready_t = next;
+            ready = true;
+            pushed = false;
         } else {
             const rect_t *r = anim_jig ? JIG_ANIM : CLIP_ANIM;
             int n = anim_jig ? 2 : 1;
             for (int i = 0; i < n; i++) {           // draw each region clipped, then send just it
                 gfx_set_clip(r[i].x, r[i].y, r[i].w, r[i].h);
-                draw_page(screen, t);
+                draw_page(screen, app.time_s);
             }
             gfx_clip_reset();
             t_push = time_us_64();
             for (int i = 0; i < n; i++) lcd_push_rect(fb, r[i].x, r[i].y, r[i].w, r[i].h);
         }
         // Frame timing for DBG: exponential averages (1/8) and the worst draw seen.
-        uint32_t draw_us = (uint32_t)(t_push - t_draw), push_us = (uint32_t)(time_us_64() - t_push);
+        uint64_t t_end = time_us_64();
+        uint32_t draw_us = (uint32_t)((pushed ? t_push : t_end) - t_draw), push_us = (uint32_t)(t_end - t_push);
         app.perf_draw_us += ((int32_t)draw_us - (int32_t)app.perf_draw_us) / 8;
-        app.perf_push_us += ((int32_t)push_us - (int32_t)app.perf_push_us) / 8;
+        if (pushed) app.perf_push_us += ((int32_t)push_us - (int32_t)app.perf_push_us) / 8;
         if (draw_us > app.perf_draw_max_us) app.perf_draw_max_us = draw_us;
-        app.frames++;
+        if (pushed) app.frames++;
         if (first) { lcd_set_backlight(80); first = false; }
-
-        // Tick only when the second hand actually advanced on screen.
-        if (screen == SCR_WATCH) {
-            if (last_watch_t >= 0 && t != last_watch_t) app.tick_pending = true;
-            last_watch_t = t;
-        } else {
-            last_watch_t = -1;
-        }
     }
 }

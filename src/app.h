@@ -17,13 +17,15 @@ typedef struct {
     volatile int screen;
     volatile uint32_t redraw_seq;   // bump to make core1 redraw
     volatile int time_s;            // seconds since midnight
-    volatile bool tick_pending;     // core1 -> core0: watch frame shown, play tick
+    volatile uint32_t second_edge;  // bumped by the second-alarm IRQ (core0) on every clock second
+    volatile uint32_t edge_us;      // time_us_32() of the latest second edge
     volatile bool helper;           // PC helper is talking to us
     volatile bool usb_mounted;      // host has enumerated us (keyboard/mouse usable)
     volatile bool muted;            // silences the tick and touch clicks
     volatile uint32_t frames;       // core1 frame counter (diagnostics)
     volatile uint32_t loops;        // core0 main-loop counter (diagnostics)
     volatile uint32_t perf_draw_us, perf_push_us, perf_draw_max_us;   // frame timing (DBG)
+    volatile uint32_t perf_edge_lag_us, prerender_hits, prerender_misses;   // watch second timing (DBG)
     volatile uint32_t watch_tick;   // core0 -> core1: the watch's second/stopwatch changed (partial redraw)
     volatile bool anim_demo;        // ANIM 1: animate the jiggler page without sending HID (perf tests)
 

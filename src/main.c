@@ -29,8 +29,7 @@
 app_t app;
 mutex_t clip_mtx;
 
-static int clock_base_s;
-static uint64_t clock_base_us;
+static alarm_id_t second_alarm;
 static uint32_t copy_deadline;
 static uint64_t timer_accum_us, timer_start_us;   // stopwatch: banked time + current run
 
@@ -45,18 +44,26 @@ void app_message(const char *text) {
     app_redraw();
 }
 
-void clock_set(int seconds_of_day) {
-    clock_base_s = seconds_of_day;
-    clock_base_us = time_us_64();
-    app_redraw();
+// The clock's second, from a hardware timer alarm (IRQ on core0). Returning
+// 1 s re-arms it relative to when it was *scheduled* to fire, so it never
+// drifts. The tick plays right here, exactly on the second; core1 has usually
+// drawn this second's frame already and pushes it when it sees the edge.
+static int64_t on_second(alarm_id_t id, void *user) {
+    (void)id; (void)user;
+    app.time_s = (app.time_s + 1) % 86400;
+    app.edge_us = time_us_32();
+    app.second_edge++;
+    if (app.screen == SCR_WATCH && !app.muted) buzzer_tick();
+    return 1000000;
 }
 
-static void clock_update(void) {
-    int t = (int)((clock_base_s + (time_us_64() - clock_base_us) / 1000000) % 86400);
-    if (t != app.time_s) {
-        app.time_s = t;
-        if (app.screen == SCR_WATCH) app.watch_tick++;   // hands/stopwatch only: partial redraw
-    }
+// TIME from the helper (or the compile time at boot) sets the clock; its
+// second boundary starts now.
+void clock_set(int seconds_of_day) {
+    if (second_alarm > 0) cancel_alarm(second_alarm);
+    app.time_s = seconds_of_day;
+    second_alarm = add_alarm_in_us(1000000, on_second, NULL, true);
+    app_redraw();
 }
 
 // Stopwatch on the watch face. timer_s is what the face shows; a change on
@@ -99,14 +106,15 @@ void debug_report(void) {
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
              "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f timer=%d trun=%d "
-             "| draw=%lu push=%lu drawmax=%lu",
+             "| draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
              touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
              (double)JIG_SCALES[app.jig_scale_idx], app.timer_s, app.timer_running,
              (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
-             (unsigned long)app.perf_draw_max_us);
+             (unsigned long)app.perf_draw_max_us, (unsigned long)app.perf_edge_lag_us,
+             (unsigned long)app.prerender_hits, (unsigned long)app.prerender_misses);
     app.perf_draw_max_us = 0;   // worst case since the previous DBG
     usb_send_line(s);
 }
@@ -205,7 +213,6 @@ int main(void) {
     app.screen = SCR_WATCH;
     settings_load();
     clock_set(compile_seconds());
-    app.time_s = compile_seconds();
 
     lcd_init();
     buzzer_init();
@@ -223,7 +230,6 @@ int main(void) {
         bool mounted = tud_mounted();
         if (mounted != app.usb_mounted) { app.usb_mounted = mounted; app_redraw(); }   // chip dot
         usb_io_poll();
-        clock_update();
         timer_update();
 
         if ((int32_t)(now_ms() - next_touch) >= 0) {
@@ -252,9 +258,5 @@ int main(void) {
         typer_step();
         jiggler_step();
 
-        if (app.tick_pending) {
-            app.tick_pending = false;
-            if (!app.muted) buzzer_tick();
-        }
     }
 }

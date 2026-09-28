@@ -48,3 +48,14 @@ def test_button_is_ignored_on_clipboard_page(board):
     before = (board.field("jscale"), board.field("trun"))
     board.send("BTN"); board.pump(0.2)
     assert (board.field("jscale"), board.field("trun")) == before
+
+def test_watch_second_is_pushed_on_the_timer_edge(board):
+    """The tick plays from a hardware-timer alarm on the second; the frame for
+    that second is drawn ahead and pushed right away, so screen and sound agree."""
+    board.goto(0)
+    board.pump(4.5)                                       # a few seconds on the watch page
+    lag_us = int(board.field("lag"))                      # edge -> drawn-ahead frame on screen (avg)
+    hits, misses = int(board.field("hits")), int(board.field("miss"))
+    assert hits >= 3, (hits, misses)
+    assert hits > misses
+    assert lag_us < 20000
