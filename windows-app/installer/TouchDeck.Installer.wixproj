@@ -1,0 +1,16 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <!-- Per-user MSI around the self-contained publish output (build.ps1 fills PublishDir). -->
+  <PropertyGroup>
+    <OutputName>TouchDeck-$(Version)</OutputName>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\out\publish\</PublishDir>
+    <DefineConstants>Version=$(Version);PublishDir=$(PublishDir)</DefineConstants>
+    <!-- Per-user components keep file key paths (the Files element); ICE38/64/91 assume
+         registry key paths and per-machine folders, so they are not meaningful here. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+  </ItemGroup>
+</Project>
