@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- All Touch Deck logic: protocol, devices, input injection. No UI. -->
+  <!-- All Touch Deck logic: protocol, devices, input injection. No UI
+       (UseWPF only for the UI Automation client assemblies). -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
