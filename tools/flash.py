@@ -4,7 +4,7 @@ Gets the board into its UF2 bootloader by whichever route is available:
   1. already in bootloader  -> just copy
   2. Touch Deck firmware    -> send BOOT over its serial port
   3. stock SDK firmware     -> picotool reboot -u
-Close clip_helper.py first; it holds the serial port.
+Quit the Touch Deck app first; it holds the serial port.
 """
 import os
 import shutil
@@ -28,7 +28,7 @@ def enter_bootloader():
             with serial.Serial(port, 115200, timeout=1) as s:
                 s.write(b"\nBOOT\n")
         except serial.SerialException as e:
-            sys.exit(f"Can't open {port} ({e}). Is clip_helper.py running? Stop it and retry.")
+            sys.exit(f"Can't open {port} ({e}). Is the Touch Deck app running? Quit it (tray > Quit) and retry.")
         return
     if find_port(SDK_VID, SDK_PID):
         print("Stock SDK firmware: picotool reboot -u")

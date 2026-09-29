@@ -1,6 +1,6 @@
 """Frame-time report for the RP2040 Touch Deck: per page, average draw and
 push time (ms) and the worst draw, from the firmware's DBG counters.
-    py tools/perf_rp2040.py        (stop clip_helper.py first)"""
+    py tools/perf_rp2040.py        (quit the Touch Deck app first)"""
 import os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests"))
 from test_board_pc_mode import Board

@@ -54,7 +54,17 @@ public partial class App : Application
             ex.Handled = true;
         };
 
-        controller = new AppController(Dispatcher);
+        Core.Updates.UpdateSource? feed = null;
+#if UPDATE_TEST_HOOKS
+        // Test builds only (build.ps1 -UpdateTestHooks): a loopback feed signed with a test key.
+        int f = Array.IndexOf(e.Args, "--update-feed"), k = Array.IndexOf(e.Args, "--update-key");
+        if (f >= 0 && f + 1 < e.Args.Length && k >= 0 && k + 1 < e.Args.Length &&
+            Uri.TryCreate(e.Args[f + 1], UriKind.Absolute, out var feedUri))
+            feed = Core.Updates.UpdateSource.ForTest(feedUri, e.Args[k + 1]);
+#endif
+
+        controller = new AppController(Dispatcher, null, feed);
+        controller.QuitForUpdate += Quit;
         window = new MainWindow(controller);
         window.Attach();
         tray = new TrayIcon(controller, ShowWindow, Quit);
@@ -68,7 +78,37 @@ public partial class App : Application
 
         int smoke = Array.IndexOf(e.Args, "--smoke");
         if (smoke >= 0 && smoke + 1 < e.Args.Length) _ = RunSmokeAsync(e.Args[smoke + 1]);
+#if UPDATE_TEST_HOOKS
+        int smokeUpdate = Array.IndexOf(e.Args, "--smoke-update");
+        if (smokeUpdate >= 0 && smokeUpdate + 1 < e.Args.Length) _ = RunSmokeUpdateAsync(e.Args[smokeUpdate + 1]);
+#endif
     }
+
+#if UPDATE_TEST_HOOKS
+    /// <summary>
+    /// --smoke-update DIR: check the feed, write DIR\update.txt, and install an app update if one
+    /// is offered (the installer restarts the app). Used by the end-to-end update test.
+    /// </summary>
+    private async Task RunSmokeUpdateAsync(string dir)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (!controller!.IsConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
+        var outcome = await controller.CheckForUpdatesAsync(manual: true);
+        Directory.CreateDirectory(dir);
+        File.WriteAllLines(Path.Combine(dir, "update.txt"),
+        [
+            $"app={AppController.AppVersion}",
+            $"feed={(controller.UpdateSourceIsTest ? "test" : "official")}",
+            $"error={outcome.Error}",
+            $"nothing={outcome.NothingPublished}",
+            $"offer_app={outcome.Choice?.App?.Version.ToString(3)}",
+            $"offer_fw={outcome.Choice?.Firmware?.Version.ToString(3)}",
+            $"app_text={controller.AppUpdateText}",
+        ]);
+        if (controller.CanInstallApp) await controller.InstallAppUpdateAsync();   // quits for the installer
+        else Quit();
+    }
+#endif
 
     /// <summary>
     /// --smoke DIR: wait for a board (up to 10 s), then write DIR\smoke.png (the window) and
@@ -81,6 +121,11 @@ public partial class App : Application
         await Task.Delay(2500);                     // one heartbeat: the first diagnostics arrive
         Directory.CreateDirectory(dir);
         window!.SaveSnapshot(Path.Combine(dir, "smoke.png"));
+        var settingsWin = new SettingsWindow(controller, window);   // the dialog too, for the design check
+        settingsWin.Show();
+        await Task.Delay(400);
+        SettingsWindow.SaveCardSnapshot(settingsWin, Path.Combine(dir, "settings.png"));
+        settingsWin.Close();
         File.WriteAllLines(Path.Combine(dir, "smoke.txt"),
         [
             $"app={AppController.AppVersion}",

@@ -1,8 +1,10 @@
 # Touch Deck for Windows
 
-The Windows companion app for the Touch Deck boards. It replaces `tools/clip_helper.py` in the firmware repo.
+The Windows companion app for the Touch Deck boards (it replaced the old Python helper).
 
 ![Main window](docs/img/main-window.png)
+
+![Settings](docs/img/settings.png)
 
 ## What it does
 
@@ -22,6 +24,14 @@ The Windows companion app for the Touch Deck boards. It replaces `tools/clip_hel
 - **Board diagnostics.** Optionally polls the live `DBG` counters every 2 s.
 - **Firmware update (RP2040).** The app bundles the RP2040 firmware. It reboots the board into its UF2 drive, checks that the image really is an RP2040 UF2, copies it, and waits for the board to report its new version. It also notices a board already sitting in its bootloader. ESP32-C3 firmware is still flashed with PlatformIO.
 - **Tray.** The tray icon's colour shows the link state. Closing the window keeps the app running in the tray. Only one instance runs at a time, and a second launch brings the first to the front.
+- **Settings** (cog in the header):
+  - **Versions:** App Version, and Device Firmware (dimmed when no board is attached).
+  - **Startup:** Launch at startup, and Start minimized in tray under it.
+  - **Updates:**
+    - Check for updates automatically, at start and daily.
+    - **Check for updates now**, with separate App and Firmware results and an **Install** button for each.
+    - An app update downloads, is verified, installs itself and restarts the app. A firmware update downloads, is verified and is flashed.
+  - **Advanced:** Dry run, Board diagnostics.
 - **Error log.** Unexpected errors go to `%APPDATA%\TouchDeck\errors.log`, useful in a bug report.
 - **Settings.** Dry run (log the keys and mouse input instead of performing them), diagnostics, and Start with Windows. They're stored in `%APPDATA%\TouchDeck\settings.json`.
 
@@ -33,7 +43,7 @@ Run `TouchDeck-<version>.msi`. It installs for the current user, needs no admin 
 - **Downgrading:** installing an older MSI over a newer one is refused.
 - **Uninstalling:** use Apps & Features. It also removes the Start with Windows entry.
 
-Stop the Python helper before starting the app, because only one program can hold the board's serial port. The app shows "COMx is in use" when that happens.
+Only one program can hold the board's serial port. The app shows "COMx is in use" when another program has it.
 
 ## Build
 
@@ -44,6 +54,7 @@ You need the .NET 8 SDK. WiX v5 comes through NuGet, so there's nothing to insta
 .\build.ps1 -SkipTests -Smoke
 .\build.ps1 -Version 1.0.1  # override the version (default: Directory.Build.props)
 .\tools\install-smoke.ps1   # install the MSI, verify, run the installed app, uninstall
+.\tools\update-e2e.ps1     # real in-app update 1.1.98 -> 1.1.99 from a loopback feed
 ```
 
 - Tests: `dotnet test`. Hardware tests skip when no board is plugged in, or when its port is busy.

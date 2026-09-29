@@ -15,10 +15,11 @@ A small touch-screen board that sits on your desk and works as a **clipboard tha
 | [`src/`](src) | Firmware for the **Waveshare RP2040-Touch-LCD-1.69** | C, Pico SDK 2.1.1, TinyUSB, dual core |
 | [`esp32c3/`](esp32c3) | Firmware for the **ESP32-2424S012C** (1.28" round) | Arduino-ESP32 on PlatformIO, LovyanGFX, NimBLE |
 | [`windows-app/`](windows-app) | **Touch Deck for Windows**: companion app and MSI installer | C# .NET 8 WPF, WiX v5 |
-| [`tools/`](tools) | Python helper (the app's predecessor), flasher, font generator, perf script, tests | Python 3, pyserial, Pillow, pytest |
+| [`tools/`](tools) | Flasher, font and letter generators, release publisher, perf script, tests | Python 3, pyserial, Pillow, pytest |
+| [`.github/workflows/`](.github/workflows) | Release pipeline: a tag builds firmware and the MSI and publishes them | GitHub Actions |
 | [`docs/`](docs) | Design specs and implementation plans | Markdown |
 
-Both boards speak the same serial line protocol, which is documented at the top of [`src/usb_io.c`](src/usb_io.c). Any PC-side tool (the Windows app, `clip_helper.py`, and a future macOS app) talks to either board the same way.
+Both boards speak the same serial line protocol, which is documented at the top of [`src/usb_io.c`](src/usb_io.c). Any PC-side tool (the Windows app, and a future macOS app) talks to either board the same way.
 
 ## The boards
 
@@ -86,19 +87,39 @@ cd windows-app
 .\build.ps1          # bundle firmware from ../build, test, publish, MSI -> out\TouchDeck-<ver>.msi
 ```
 
-**Python helper (optional, instead of the app):**
+Only one program can hold the board's serial port at a time. Quit the app (tray → Quit) before using `flash.py` or the board tests.
+
+## Releases and updates
+
+The app updates itself. **Settings** (the cog in the header) shows the app version and the connected board's firmware. It checks for updates at start and once a day, or when you press **Check for updates now**. App and firmware updates are offered and installed separately.
+
+To ship a release:
 
 ```bash
-pip install -r tools/requirements.txt
-python tools/clip_helper.py            # --send TEXT, --boot, --debug, --dry-run
+# bump <Version> in windows-app/Directory.Build.props (and/or FW_VERSION in src/version.h), commit, then:
+git tag app-v1.3.0 && git push origin app-v1.3.0     # app (+ its bundled RP2040 firmware)
+git tag fw-v1.7.0  && git push origin fw-v1.7.0      # firmware only
 ```
 
-Only one program can hold the board's serial port at a time. Quit the app before using `clip_helper.py`, `flash.py` or the board tests, and the other way round.
+- **Build and publish:** GitHub Actions (`.github/workflows/release.yml`) builds and tests everything. It then publishes the MSI, the UF2 and a complete `updates.json` as a release in the public repo [SynexyConsulting/TouchDeckUpdates](https://github.com/SynexyConsulting/TouchDeckUpdates).
+- **Signed feed:**
+  - Every `updates.json` is signed (`updates.json.sig`, ECDSA P-256).
+  - The app has the public key built in and refuses any feed whose signature doesn't verify, so a leaked publish token alone can't ship an update.
+  - The private key is `%USERPROFILE%\.touchdeck\feed-signing-key.pem`. It is **never** committed. **Back it up**: losing it means shipping a new app build with a new key.
+- **CI setup (done):** the GitHub Environment `release` releases its secrets only to runs for `app-v*` / `fw-v*` tags, under Deployment branches and tags. A tag ruleset ("release tags") restricts who may create those tags. The secrets:
+  - `TOUCHDECK_UPDATES_TOKEN`: a fine-grained token with *Contents: read and write* on TouchDeckUpdates only, expiring after 1 year, so renew it then;
+  - `TOUCHDECK_FEED_KEY`: the PEM file's text.
+  Required reviewers would need GitHub Enterprise for a private repo.
+- **By hand:** `python tools/publish_release.py --key-file %USERPROFILE%\.touchdeck\feed-signing-key.pem ...` does the same publish from your PC (see `--help`). It refuses a key that doesn't match the app's.
+- **What the app trusts:**
+  - only a correctly signed feed;
+  - only `https` downloads from that repo's releases (and GitHub's download hosts);
+  - each download checked against the SHA-256 and size in the feed, with read timeouts, before anything runs.
 
 ## Tests
 
 - `pytest tools/tests` covers:
-  - the helper protocol and the SendInput injector;
+  - the release feed builder (`make_updates.py`);
   - the font generator, including a check that every UI label fits its button;
   - the jiggler letters: every lane fits both screens, the dot stays inside its lane, letters loop or bounce correctly, and the mouse stays bounded. This drives the shared C engine, built on the PC with MSVC;
   - `gfx_line`, checked pixel for pixel against the reference algorithm, also built with MSVC.

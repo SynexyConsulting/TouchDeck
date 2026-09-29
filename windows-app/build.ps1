@@ -19,7 +19,10 @@ param(
     [switch]$Smoke,
     [string]$Configuration = "Release",
     # Overrides <Version> in Directory.Build.props (app, assembly and MSI).
-    [string]$Version
+    [string]$Version,
+    # Compile the end-to-end update test switches (--update-feed/--update-key/--smoke-update).
+    # Never for a release.
+    [switch]$UpdateTestHooks
 )
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
@@ -29,6 +32,7 @@ $publish = Join-Path $out "publish"
 # and splatting a string passes it one character at a time.
 $versionArgs = @()
 if ($Version) { $versionArgs += "-p:Version=$Version" }
+if ($UpdateTestHooks) { $versionArgs += "-p:UpdateTestHooks=true" }
 
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed (exit $LASTEXITCODE)" } }
