@@ -18,6 +18,29 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void Update_and_startup_options_round_trip_with_sane_defaults()
+    {
+        var d = new AppSettings();
+        Assert.True(d.CheckForUpdates);
+        Assert.True(d.StartMinimized);
+        Assert.Null(d.LastUpdateCheck);
+        var s = d with { CheckForUpdates = false, StartMinimized = false, LastUpdateCheck = new DateTime(2026, 9, 29, 8, 0, 0, DateTimeKind.Utc) };
+        s.Save(File_);
+        Assert.Equal(s, AppSettings.Load(File_));
+    }
+
+    [Fact]
+    public void A_1_1_settings_file_loads_with_the_new_defaults()
+    {
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(File_, """{ "DryRun": true, "Diagnostics": false, "StartWithWindows": true, "PreferredPort": "COM6" }""");
+        var s = AppSettings.Load(File_);
+        Assert.True(s.DryRun);
+        Assert.True(s.CheckForUpdates);
+        Assert.True(s.StartMinimized);
+    }
+
+    [Fact]
     public void Missing_file_gives_defaults() => Assert.Equal(new AppSettings(), AppSettings.Load(File_));
 
     [Fact]
@@ -74,6 +97,28 @@ public sealed class AutostartTests : IDisposable
         autostart.Set(false, exe);                                          // idempotent
         Assert.False(autostart.IsEnabled(exe));
     }
+
+    [Fact]
+    public void Start_minimized_is_part_of_the_command()
+    {
+        const string exe = @"C:	d\TouchDeck.exe";
+        autostart.Set(true, exe, minimized: false);
+        using (var key = Registry.CurrentUser.OpenSubKey(TestKey))
+            Assert.Equal($"\"{exe}\"", key!.GetValue("TouchDeck"));
+        Assert.True(autostart.IsEnabled(exe));
+        Assert.False(autostart.IsMinimized(exe));
+        autostart.Set(true, exe, minimized: true);
+        Assert.True(autostart.IsMinimized(exe));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\Touch Deck\TouchDeck.exe", true)]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\touch deck\TouchDeck.exe", true)]    // case-insensitive paths
+    [InlineData(@"C:\ai\windows-app\src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe", false)]
+    [InlineData(@"C:\ai\windows-app\out\publish\TouchDeck.exe", false)]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\Touch Deck Evil\TouchDeck.exe", false)]
+    public void Only_the_installed_copy_may_repoint_autostart(string exe, bool installed) =>
+        Assert.Equal(installed, Autostart.IsInstalledCopy(exe, @"C:\Users\x\AppData\Local"));
 
     [Fact]
     public void Remove_drops_an_entry_for_any_path()

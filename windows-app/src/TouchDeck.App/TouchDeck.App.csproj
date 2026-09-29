@@ -11,6 +11,8 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- English UI only: skips ~20 folders of framework resource translations. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Test builds only (build.ps1 -UpdateTestHooks): the update-feed, update-key and smoke-update switches. -->
+    <DefineConstants Condition="'$(UpdateTestHooks)' == 'true'">$(DefineConstants);UPDATE_TEST_HOOKS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <!-- WinForms is only for NotifyIcon: keep its types out of the global usings. -->

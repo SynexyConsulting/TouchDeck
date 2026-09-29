@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Toolchain from the VS Code Raspberry Pi Pico extension (~/.pico-sdk).
-set(USERHOME $ENV{USERPROFILE})
-set(PICO_SDK_PATH ${USERHOME}/.pico-sdk/sdk/2.1.1)
-set(PICO_TOOLCHAIN_PATH ${USERHOME}/.pico-sdk/toolchain/14_2_Rel1)
-set(picotool_DIR ${USERHOME}/.pico-sdk/picotool/2.1.1/picotool)
+# Toolchain from the VS Code Raspberry Pi Pico extension (~/.pico-sdk) by default. CI (and any
+# other machine) sets PICO_SDK_PATH in the environment and uses the system arm-none-eabi-gcc.
+if(DEFINED ENV{PICO_SDK_PATH})
+    set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
+else()
+    set(USERHOME $ENV{USERPROFILE})
+    set(PICO_SDK_PATH ${USERHOME}/.pico-sdk/sdk/2.1.1)
+    set(PICO_TOOLCHAIN_PATH ${USERHOME}/.pico-sdk/toolchain/14_2_Rel1)
+    set(picotool_DIR ${USERHOME}/.pico-sdk/picotool/2.1.1/picotool)
+endif()
 set(PICO_BOARD pico CACHE STRING "Board type")
 
 include(pico_sdk_import.cmake)

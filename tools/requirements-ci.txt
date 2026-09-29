@@ -1,0 +1,7 @@
+# Exact pins for the release pipeline (.github/workflows/release.yml): the jobs that build
+# and publish binaries must not pick up a new package release unreviewed.
+pyserial==3.5
+pytest==8.4.2
+Pillow==11.3.0
+cryptography==50.0.1
+platformio==6.2.0

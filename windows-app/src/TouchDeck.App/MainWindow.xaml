@@ -19,13 +19,21 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Margin="2,0,0,14">
-            <Image Source="pack://application:,,,/Assets/app-256.png" Width="30" Height="30" Margin="0,0,10,0" />
-            <TextBlock Text="Touch Deck" FontFamily="{StaticResource HeadFont}" FontSize="24" VerticalAlignment="Center" />
-            <TextBlock x:Name="AppVersionText" Foreground="{StaticResource Faint}" FontFamily="{StaticResource MonoFont}"
-                       FontSize="12" VerticalAlignment="Bottom" Margin="10,0,0,5" />
-        </StackPanel>
+        <!-- Header: name on the left, Settings (versions, startup, updates) on the right -->
+        <DockPanel Grid.ColumnSpan="3" Margin="2,0,0,14">
+            <Button x:Name="SettingsButton" DockPanel.Dock="Right" Style="{StaticResource SmallButton}" Click="OnSettings"
+                    ToolTip="Settings: versions, startup, updates" Padding="12,6">
+                <StackPanel Orientation="Horizontal">
+                    <Path Data="{StaticResource CogIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          Width="14" Height="14" Stretch="Uniform" Margin="0,0,7,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Settings" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <StackPanel Orientation="Horizontal">
+                <Image Source="pack://application:,,,/Assets/app-256.png" Width="30" Height="30" Margin="0,0,10,0" />
+                <TextBlock Text="Touch Deck" FontFamily="{StaticResource HeadFont}" FontSize="24" VerticalAlignment="Center" />
+            </StackPanel>
+        </DockPanel>
 
         <!-- Left column -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -109,19 +117,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Settings -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Text="Settings" Style="{StaticResource CardTitle}" />
-                        <CheckBox Content="Dry run (log keys, don't type)" IsChecked="{Binding DryRun}" />
-                        <CheckBox Content="Board diagnostics" IsChecked="{Binding DiagnosticsEnabled}" />
-                        <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" />
-                        <TextBlock Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="13">
-                            <Run Text="Ctrl+Alt+C" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Accent}" />
-                            <Run Text="sends the selected text (or the clipboard) to the board, like tapping COPY." />
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
             </StackPanel>
         </ScrollViewer>
 
@@ -228,7 +223,5 @@
             </Border>
         </Grid>
 
-        <!-- Footer -->
-        <TextBlock x:Name="Footer" Grid.Row="2" Grid.ColumnSpan="3" Foreground="{StaticResource Faint}" FontSize="12" Margin="2,12,0,0" />
     </Grid>
 </Window>

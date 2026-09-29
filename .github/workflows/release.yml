@@ -1,0 +1,147 @@
+# Builds and publishes Touch Deck releases to the public update repo
+# (SynexyConsulting/TouchDeckUpdates), where the Windows app finds them.
+#
+#   git tag app-v1.3.0 && git push origin app-v1.3.0   -> app MSI (+ its bundled RP2040 firmware)
+#   git tag fw-v1.7.0  && git push origin fw-v1.7.0    -> RP2040 firmware only
+#   Actions > Release > Run workflow                   -> dry run: build + test, keep artifacts
+#
+# Publishing runs in the GitHub Environment "release". It only releases its secrets to runs for
+# app-v*/fw-v* tags (Deployment branches and tags), and a tag ruleset restricts who may create
+# those tags. (Required reviewers need GitHub Enterprise for private repos.) Its secrets:
+#   TOUCHDECK_UPDATES_TOKEN  fine-grained token, Contents: Read and write on TouchDeckUpdates only
+#   TOUCHDECK_FEED_KEY       the feed-signing private key (PEM); its public half is pinned in the app
+# Actions are pinned to commit SHAs and Python packages to exact versions (requirements-ci.txt).
+name: Release
+
+on:
+  push:
+    tags: ["app-v*", "fw-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read            # this repo is only read; publishing uses the update-repo token
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check the tag matches FW_VERSION
+        if: startsWith(github.ref_name, 'fw-v')
+        run: |
+          want="${GITHUB_REF_NAME#fw-v}"
+          have=$(sed -n 's/^#define FW_VERSION *"\(.*\)".*/\1/p' src/version.h)
+          [ "$want" = "$have" ] || { echo "tag $want != FW_VERSION $have"; exit 1; }
+
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi cmake ninja-build
+
+      - name: Pico SDK 2.1.1
+        run: git clone --depth 1 --branch 2.1.1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "$RUNNER_TEMP/pico-sdk"
+
+      - name: Build RP2040 firmware
+        env:
+          PICO_SDK_PATH: ${{ runner.temp }}/pico-sdk
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          ninja -C build
+          mkdir -p dist && cp build/watch.uf2 dist/rp2040-169.uf2
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Build ESP32-C3 firmware (artifact only; not published until run on hardware)
+        run: |
+          pip install platformio==6.2.0
+          cd esp32c3 && pio run
+          cp .pio/build/*/firmware.bin ../dist/esp32c3-128.bin
+
+      - name: Generator and unit tests
+        run: |
+          pip install -r tools/requirements-ci.txt
+          python -m pytest tools/tests -q
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firmware
+          path: dist/
+
+  app:
+    needs: firmware
+    if: startsWith(github.ref_name, 'app-v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check the tag matches the app version
+        if: startsWith(github.ref_name, 'app-v')
+        shell: pwsh
+        run: |
+          $want = "$env:GITHUB_REF_NAME".Substring(5)
+          $have = ([xml](Get-Content windows-app/Directory.Build.props)).Project.PropertyGroup.Version | Select-Object -First 1
+          if ($want -ne $have) { throw "tag $want != app Version $have" }
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: firmware
+          path: dist
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Host C tests (MSVC) and unit tests
+        run: |
+          pip install -r tools/requirements-ci.txt
+          python -m pytest tools/tests -q
+
+      - name: Bundle the firmware and build the MSI
+        shell: pwsh
+        run: |
+          Copy-Item dist/rp2040-169.uf2 windows-app/firmware/rp2040-169.uf2 -Force
+          $v = (Select-String -Path src/version.h -Pattern '#define FW_VERSION\s+"([^"]+)"').Matches[0].Groups[1].Value
+          Set-Content -Path windows-app/firmware/manifest.json -Encoding ascii -Value "[`n  { `"board`": `"rp2040-169`", `"version`": `"$v`", `"file`": `"rp2040-169.uf2`" }`n]"
+          cd windows-app
+          ./build.ps1
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: msi
+          path: windows-app/out/TouchDeck-*.msi
+
+  publish:
+    needs: [firmware, app]
+    environment: release        # secrets only for app-v*/fw-v* tags; tag creation is restricted
+    if: always() && needs.firmware.result == 'success' && (needs.app.result == 'success' || needs.app.result == 'skipped') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Publish to TouchDeckUpdates
+        env:
+          TOUCHDECK_UPDATES_TOKEN: ${{ secrets.TOUCHDECK_UPDATES_TOKEN }}
+          TOUCHDECK_FEED_KEY: ${{ secrets.TOUCHDECK_FEED_KEY }}
+        run: |
+          pip install cryptography==50.0.1
+          # Strict tag format before the name is used anywhere (git allows ; $ ( in tag names).
+          [[ "$GITHUB_REF_NAME" =~ ^(app|fw)-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag"; exit 1; }
+          fw=$(sed -n 's/^#define FW_VERSION *"\([0-9.]*\)".*/\1/p' src/version.h)
+          args=(--tag "$GITHUB_REF_NAME" --firmware "rp2040-169=$fw=artifacts/firmware/rp2040-169.uf2")
+          if [[ "$GITHUB_REF_NAME" == app-v* ]]; then
+            ver="${GITHUB_REF_NAME#app-v}"
+            args+=(--app-windows "artifacts/msi/TouchDeck-$ver.msi" --app-version "$ver" --title "Touch Deck $ver")
+          else
+            args+=(--title "Touch Deck firmware $fw")
+          fi
+          python tools/publish_release.py "${args[@]}"
