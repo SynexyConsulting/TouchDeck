@@ -14,6 +14,12 @@ public sealed record AppSettings
     public bool StartWithWindows { get; init; }
     /// <summary>Port of the last board used, preferred when several are plugged in.</summary>
     public string? PreferredPort { get; init; }
+    /// <summary>With Start with Windows: start hidden in the tray (the Run entry gets --minimized).</summary>
+    public bool StartMinimized { get; init; } = true;
+    /// <summary>Check the public update feed at start and daily.</summary>
+    public bool CheckForUpdates { get; init; } = true;
+    /// <summary>When the feed was last checked (UTC).</summary>
+    public DateTime? LastUpdateCheck { get; init; }
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
@@ -72,13 +78,19 @@ public sealed class Autostart(string keyPath = Autostart.RunKey, string valueNam
 {
     public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    public static string CommandFor(string exePath) => $"\"{exePath}\" --minimized";
+    public static string CommandFor(string exePath, bool minimized = true) =>
+        minimized ? $"\"{exePath}\" --minimized" : $"\"{exePath}\"";
 
-    public bool IsEnabled(string exePath)
+    private string? Current()
     {
         using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-        return key?.GetValue(valueName) as string == CommandFor(exePath);
+        return key?.GetValue(valueName) as string;
     }
+
+    /// <summary>On, for this exe (either form of the command).</summary>
+    public bool IsEnabled(string exePath) => Current() is { } c && (c == CommandFor(exePath, true) || c == CommandFor(exePath, false));
+
+    public bool IsMinimized(string exePath) => Current() == CommandFor(exePath, true);
 
     /// <summary>Uninstall: drop the entry whatever path it points at.</summary>
     public void Remove()
@@ -87,10 +99,10 @@ public sealed class Autostart(string keyPath = Autostart.RunKey, string valueNam
         key?.DeleteValue(valueName, throwOnMissingValue: false);
     }
 
-    public void Set(bool enabled, string exePath)
+    public void Set(bool enabled, string exePath, bool minimized = true)
     {
         using var key = Registry.CurrentUser.CreateSubKey(keyPath);
-        if (enabled) key.SetValue(valueName, CommandFor(exePath));
+        if (enabled) key.SetValue(valueName, CommandFor(exePath, minimized));
         else key.DeleteValue(valueName, throwOnMissingValue: false);
     }
 }
