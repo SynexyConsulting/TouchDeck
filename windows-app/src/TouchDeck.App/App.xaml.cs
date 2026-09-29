@@ -43,10 +43,13 @@ public partial class App : Application
             return;
         }
 
-        // Backstop: log and keep running rather than vanish from the tray (the session's
-        // own finally has already released any held input).
+        // Backstop: once running, log and keep going rather than vanish from the tray (the
+        // session's own finally has already released any held input). A failure during
+        // startup is not swallowed: an app with no window would look alive but do nothing.
         DispatcherUnhandledException += (_, ex) =>
         {
+            LogError(ex.Exception);
+            if (window is null) return;
             controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}");
             ex.Handled = true;
         };
@@ -85,6 +88,10 @@ public partial class App : Application
             $"board={controller.State.Firmware?.Board}",
             $"port={controller.Port}",
             $"firmware={controller.State.Firmware?.Version}",
+            $"mirror={controller.MirrorAvailable}",
+            $"jig={controller.JigOn}",
+            $"letter={controller.JigLetter}",
+            $"boardclip={controller.BoardClipText}",
             $"bundled={controller.BundledSummary}",
             $"exe={Environment.ProcessPath}",
         ]);
@@ -92,6 +99,20 @@ public partial class App : Application
     }
 
     private void ShowWindow() => window?.ShowFromTray();
+
+    /// <summary>Unexpected errors go to %APPDATA%\TouchDeck\errors.log (kept small) for bug reports.</summary>
+    private static void LogError(Exception e)
+    {
+        try
+        {
+            var path = Path.Combine(Path.GetDirectoryName(Core.App.AppSettings.DefaultPath)!, "errors.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            if (File.Exists(path) && new FileInfo(path).Length > 256 * 1024) File.Delete(path);
+            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {e}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 
     /// <summary>Asks a running instance to quit and waits (up to 5 s) until it has.</summary>
     private static void QuitRunningInstance()

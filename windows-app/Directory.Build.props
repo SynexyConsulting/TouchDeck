@@ -1,7 +1,7 @@
 <Project>
   <!-- One version for the app, its assembly info and the MSI. -->
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Company>Touch Deck</Company>
     <Product>Touch Deck</Product>
     <Nullable>enable</Nullable>
