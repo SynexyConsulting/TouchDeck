@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This is the Windows companion app for the Touch Deck boards: C# .NET 8 WPF with a WiX v5 per-user MSI. It lives in the `windows-app/` folder of the TouchDeck repo, next to the firmware. The protocol it speaks is documented at the top of `../src/usb_io.c`. `../tools/clip_helper.py` is the Python original that this app ports, and it's still the reference for behaviour.
+This is the Windows companion app for the Touch Deck boards: C# .NET 8 WPF with a WiX v5 per-user MSI. It lives in the `windows-app/` folder of the TouchDeck repo, next to the firmware. The protocol it speaks is documented at the top of `../src/usb_io.c`. It began as a port of the Python helper `tools/clip_helper.py`, now removed; git history has it.
 
 ## Commands
 
@@ -11,7 +11,7 @@ dotnet test                      # all tests; hardware ones skip without a free 
 src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snapshot + state, then quit
 ```
 
-- The app holds the board's serial port. Quit it (tray → Quit) before running the firmware repo's `flash.py`, `clip_helper.py` or its pytest board tests, and stop those before starting the app.
+- The app holds the board's serial port. Quit it (tray → Quit) before running the firmware repo's `flash.py` or its pytest board tests (they skip while the port is busy).
 - `build.ps1` copies `../build/watch.uf2` and `FW_VERSION` from `../src/version.h` into `firmware/`. Rebuild the firmware first if you want the new version bundled.
 - Scripts are Windows PowerShell 5.1, so keep them ASCII. Don't assign splat arrays from an `if` expression: a one-item array unwraps to a string and splats character by character.
 
@@ -44,6 +44,19 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
   - The app re-asserts the Run entry at start if the settings want it.
   - Per-user ARP entries live under `HKLM\...\Installer\UserData\<SID>`.
 - **Visual language** matches the devices. The palette is from `../esp32c3/src/ui.cpp`, with Barlow and JetBrains Mono embedded (OFL, licenses shipped), pill buttons and an amber accent. Icons come from `tools/make_icons.py`.
+
+## Updates and Settings
+
+- **`Core/Updates`:**
+  - `UpdateSource` (the official feed, or a loopback feed via `--update-feed`) fixes which URLs are allowed.
+  - `UpdateFeed.Parse` validates everything and rejects the whole feed on any bad entry: repo-only https URLs, 64-hex SHA-256, size caps of 200 MB for the app and 4 MB for firmware.
+  - `UpdateClient` follows redirects by hand, only to GitHub https hosts, and hashes and size-checks while streaming. A mismatch leaves no file.
+  - `UpdateService` downloads to `%LOCALAPPDATA%\TouchDeck\Updates` under fixed names.
+  - `InstallerLaunch` starts a *fixed* encoded PowerShell script with paths passed only through environment variables. It runs `msiexec /i … /passive` and then relaunches the app.
+  - Keep all of these properties; `UpdateTests.cs` pins them.
+- **`SettingsWindow`:** an overlay window that dims the main window. It holds the versions, startup options (autostart with or without `--minimized`), updates and advanced options. `--smoke` also writes `settings.png`.
+- **Autostart:** only the installed copy (`Autostart.IsInstalledCopy`) may re-point the Run entry at start-up. Dev and test builds must never hijack it.
+- **Tests:** `tools/update-e2e.ps1` is the real in-app update test. `--smoke-update DIR` checks, reports to `update.txt`, and installs.
 
 ## Workflow
 
