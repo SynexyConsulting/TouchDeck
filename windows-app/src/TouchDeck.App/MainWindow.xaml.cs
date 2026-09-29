@@ -31,8 +31,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = app;
         Title = $"Touch Deck {AppController.AppVersion}";
-        AppVersionText.Text = $"v{AppController.AppVersion}";
-        Footer.Text = $"App {AppController.AppVersion}  ·  bundled firmware: {app.BundledSummary}  ·  settings in %APPDATA%\\TouchDeck";
 
         app.PropertyChanged += OnAppChanged;
         app.LogLines.CollectionChanged += (_, e) =>
@@ -180,6 +178,15 @@ public partial class MainWindow : Window
     private void OnClearHistory(object sender, RoutedEventArgs e) => app.History.Clear();
 
     private void OnCopyLog(object sender, RoutedEventArgs e) => Win32Clipboard.Write(string.Join(Environment.NewLine, app.LogLines));
+
+    private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
+
+    /// <summary>The Settings overlay (modal); returns once it is closed.</summary>
+    public void OpenSettings()
+    {
+        ShowFromTray();
+        new SettingsWindow(app, this).ShowDialog();
+    }
 
     private void OnJigToggle(object sender, RoutedEventArgs e) => app.ToggleJiggler();
     private void OnLaneClick(object sender, MouseButtonEventArgs e) => app.ToggleJiggler();

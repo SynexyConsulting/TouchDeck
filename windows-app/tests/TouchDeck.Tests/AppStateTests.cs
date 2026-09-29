@@ -111,6 +111,15 @@ public sealed class AutostartTests : IDisposable
         Assert.True(autostart.IsMinimized(exe));
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\Touch Deck\TouchDeck.exe", true)]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\touch deck\TouchDeck.exe", true)]    // case-insensitive paths
+    [InlineData(@"C:\ai\windows-app\src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe", false)]
+    [InlineData(@"C:\ai\windows-app\out\publish\TouchDeck.exe", false)]
+    [InlineData(@"C:\Users\x\AppData\Local\Programs\Touch Deck Evil\TouchDeck.exe", false)]
+    public void Only_the_installed_copy_may_repoint_autostart(string exe, bool installed) =>
+        Assert.Equal(installed, Autostart.IsInstalledCopy(exe, @"C:\Users\x\AppData\Local"));
+
     [Fact]
     public void Remove_drops_an_entry_for_any_path()
     {

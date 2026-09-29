@@ -78,6 +78,17 @@ public sealed class Autostart(string keyPath = Autostart.RunKey, string valueNam
 {
     public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
+    /// <summary>
+    /// True for the MSI-installed exe (%LOCALAPPDATA%\Programs\Touch Deck\TouchDeck.exe). Only that copy
+    /// may re-point the Run entry at start-up; a dev or test build must never hijack it.
+    /// </summary>
+    public static bool IsInstalledCopy(string exePath, string? localAppData = null)
+    {
+        var root = localAppData ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var expected = Path.GetFullPath(Path.Combine(root, "Programs", "Touch Deck", "TouchDeck.exe"));
+        return string.Equals(Path.GetFullPath(exePath), expected, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string CommandFor(string exePath, bool minimized = true) =>
         minimized ? $"\"{exePath}\" --minimized" : $"\"{exePath}\"";
 
