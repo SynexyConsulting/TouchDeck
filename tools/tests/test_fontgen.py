@@ -60,13 +60,15 @@ LABELS = [
     ("font_body", "Pair Bluetooth to switch", 230, 0),
     ("font_body", "Menu every 45-150s", 160, 0),     # jiggler stats at y 200
     ("font_big", "OFF", 80, 0),                       # inside the orbit's inner disc
-    ("font_caps", "TAP TO START", 80, 1),
     ("font_body", "PC: Settings > Bluetooth >", 210, 0),       # bluetooth page, y 152
     ("font_body", 'Pick "Touch Deck" in Add device', 225, 0),  # pairing page, y 130
     ("font_body", "Enter this PIN on your PC", 190, 0),        # pairing page, y 72
     ("font_caps", "DISCONNECTED", 120, 1),
     ("font_timer", "88:88:88", 104, 0),                        # stopwatch box on the watch face
     ("font_caps", "2.0X", 36 - 8, 1),                          # jiggler scale pill
+    ("font_caps", "OFF", 44 - 12, 1),                          # jiggler ON/OFF pill (round is narrowest)
+    ("font_caps", "2.0X", 44 - 10, 1),                         # scale pill beside/above the letter
+    ("font_body", "Cleared", 150, 0),                          # clipboard status line
 ]
 
 @pytest.mark.parametrize("font,text,avail,spacing", LABELS)

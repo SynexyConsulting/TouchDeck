@@ -106,13 +106,13 @@ void debug_report(void) {
     char s[320];
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
-             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jscale=%.1f letter=%c timer=%d trun=%d "
+             "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jig=%d jscale=%.1f letter=%c clip=%d timer=%d trun=%d "
              "| draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
              touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
-             (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.timer_s, app.timer_running,
+             app.jig_on, (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, app.timer_s, app.timer_running,
              (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
              (unsigned long)app.perf_draw_max_us, (unsigned long)app.perf_edge_lag_us,
              (unsigned long)app.prerender_hits, (unsigned long)app.prerender_misses);
@@ -126,6 +126,29 @@ static void feedback(void) {
 
 static bool in_rect(const touch_event_t *e, int x, int y, int w, int h) {
     return e->x >= x && e->x < x + w && e->y >= y && e->y < y + h;
+}
+
+static bool near_box(const touch_event_t *e, int x, int y, int w, int h, int pad) {
+    return in_rect(e, x - pad, y - pad, w + 2 * pad, h + 2 * pad);
+}
+
+// Trash can / CLIP CLEAR: only with text on board and no paste typing it.
+void clip_clear(void) {
+    if (app.clip_len == 0 || app.clip_state == CLIP_PASTING) return;
+    mutex_enter_blocking(&clip_mtx);
+    app.clip_len = 0;
+    app.clip[0] = 0;
+    strcpy(app.clip_src, "-");
+    mutex_exit(&clip_mtx);
+    app_message("Cleared");
+    app_redraw();
+}
+
+// Scale pill tap, BOOT button on the jiggler page, JIG SCALE: 1x -> 1.5x -> 2x -> 1x.
+void jig_cycle_scale(void) {
+    app.jig_scale_idx = (app.jig_scale_idx + 1) % JIG_SCALE_COUNT;
+    app_redraw();
+    settings_save();
 }
 
 static void on_touch(touch_event_t e) {
@@ -150,7 +173,9 @@ static void on_touch(touch_event_t e) {
             settings_save();
         }
     } else if (app.screen == SCR_CLIP) {
-        if (in_rect(&e, BTN_COPY_X, BTN_Y, BTN_W, BTN_H)) {
+        if (near_box(&e, TRASH_CX - TRASH_HIT, TRASH_CY - TRASH_HIT, 2 * TRASH_HIT, 2 * TRASH_HIT, 0)) {
+            if (app.clip_len && app.clip_state != CLIP_PASTING) { feedback(); clip_clear(); }
+        } else if (in_rect(&e, BTN_COPY_X, BTN_Y, BTN_W, BTN_H)) {
             feedback();
             if (app.clip_state == CLIP_PASTING) return;
             if (!app.helper) { app_message("Start the PC helper"); return; }
@@ -165,8 +190,12 @@ static void on_touch(touch_event_t e) {
             app_redraw();
         }
     } else if (app.screen == SCR_JIG) {
-        int dx = e.x - JIG_CX, dy = e.y - JIG_CY;
-        if (dx * dx + dy * dy <= (JIG_R + 10) * (JIG_R + 10)) {
+        const int pad = (int)(JIG_LANE / 2 + JIG_WALL) + JIG_ZONE_PAD;
+        if (near_box(&e, SCALE_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD)) {
+            feedback();
+            jig_cycle_scale();
+        } else if (near_box(&e, ONOFF_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD) ||
+                   near_box(&e, JIG_BOX_X, JIG_BOX_Y, JIG_BOX, JIG_BOX, pad)) {
             feedback();
             jiggler_toggle();
             settings_save();
@@ -181,10 +210,8 @@ static void on_button(btn_ev_t ev) {
         else timer_reset();                           // long press: back to 00:00:00
         feedback();
     } else if (app.screen == SCR_JIG && ev == BTN_SHORT) {
-        app.jig_scale_idx = (app.jig_scale_idx + 1) % JIG_SCALE_COUNT;   // 1x -> 1.5x -> 2x -> 1x
         feedback();
-        app_redraw();
-        settings_save();
+        jig_cycle_scale();
     }
 }
 
@@ -195,6 +222,11 @@ void inject_swipe(bool left) {
 }
 
 void inject_button(bool long_press) { on_button(long_press ? BTN_LONG : BTN_SHORT); }
+
+void inject_tap(int x, int y) {
+    touch_event_t e = {EV_TAP, x, y};
+    on_touch(e);
+}
 
 int main(void) {
     // Hold the power latch first so the board stays on when running from battery.

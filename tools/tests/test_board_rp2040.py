@@ -71,3 +71,32 @@ def test_ver_reports_board_and_firmware_version(board):
 
 def test_dbg_reports_a_jiggler_letter(board):
     assert board.field("letter") in "OWMNZXCVHJLBGD"
+
+def put_clip(board, text):
+    board.send(f"CLIP {len(text)} test"); board.s.write(text.encode()); board.pump(0.3)
+
+def test_trash_tap_clears_the_clip(board):
+    board.goto(1)                                         # clipboard
+    put_clip(board, "hello")
+    assert board.field("clip") == "5"
+    board.send("TAP 120 120"); board.pump(0.2)           # the text box: nothing happens
+    assert board.field("clip") == "5"
+    board.send("TAP 196 43"); board.pump(0.3)            # the trash can
+    assert board.field("clip") == "0"
+
+def test_scale_pill_tap_cycles_like_the_button(board):
+    board.goto(2)
+    before = board.field("jscale")
+    board.send("TAP 39 42"); board.pump(0.3)             # scale pill, top-left
+    after = board.field("jscale")
+    order = ["1.0", "1.5", "2.0"]
+    assert after == order[(order.index(before) + 1) % 3]
+
+def test_letter_zone_tap_toggles_the_jiggler(board):
+    """Moves the real mouse for ~0.3 s (the RP2040 is a USB mouse)."""
+    board.goto(2)
+    was = board.field("jig")
+    board.send("TAP 120 140"); board.pump(0.3)
+    assert board.field("jig") != was
+    board.send("TAP 120 140"); board.pump(0.3)
+    assert board.field("jig") == was

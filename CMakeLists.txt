@@ -24,6 +24,7 @@ add_executable(watch
     src/usb_io.c
     src/jig_motion.c
     src/jig_paths.c
+    src/jig_lane.c
     src/usb_descriptors.c
     src/typer.c
     src/jiggler.c

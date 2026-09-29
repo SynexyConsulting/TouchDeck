@@ -59,4 +59,6 @@ extern mutex_t clip_mtx;
 
 static inline void app_redraw(void) { app.redraw_seq++; }
 void app_message(const char *text);
+void clip_clear(void);          // empty the clip (ignored when empty or pasting)
+void jig_cycle_scale(void);     // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
 uint32_t now_ms(void);
