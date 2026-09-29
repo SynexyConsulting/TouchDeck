@@ -35,9 +35,9 @@ Expect (Test-Path "$dir\firmware\manifest.json") "bundled firmware manifest"
 Expect (Test-Path "$dir\firmware\rp2040-169.uf2") "bundled RP2040 firmware"
 Expect (Test-Path "$dir\licenses\OFL-Barlow.txt") "font licenses"
 Expect (Test-Path $lnk) "Start-menu shortcut"
-$arp = Arp
-Expect ($null -ne $arp) "Apps & Features entry"
-if ($arp) { Write-Host "        $($arp.DisplayName) $($arp.DisplayVersion)" }
+$arp = @(Arp)
+Expect ($arp.Count -eq 1) "exactly one Apps & Features entry (found $($arp.Count))"
+if ($arp.Count) { Write-Host "        $($arp[0].DisplayName) $($arp[0].DisplayVersion)" }
 
 Write-Host "==> Running the installed app (--smoke)" -ForegroundColor Cyan
 $smoke = Join-Path $out "install-smoke"
