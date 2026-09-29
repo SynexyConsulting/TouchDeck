@@ -12,10 +12,17 @@ The Windows companion app for the Touch Deck boards. It replaces `tools/clip_hel
 - **PC output mode (ESP32-C3).** It performs the board's `K`/`M` keyboard and mouse reports with `SendInput` scancodes and reports Caps Lock back as `LEDS`. If the link drops, it releases any held key or button.
 - **Send to board.** Type or paste text in the app, or press **Ctrl+Alt+C** anywhere to send the current selection.
 - **Recent clips.** It keeps the last 10 clips in memory only (never on disk), with Resend and Copy buttons.
+- **Jiggler card (firmware 1.6.0+).** A live copy of the board's jiggler:
+  - the active letter's lane with the moving dot;
+  - ON/OFF and size (1.0X/1.5X/2.0X) buttons, and a click on the letter to toggle;
+  - the board's status (Moving, Right-click menu, …).
+
+  The Send card shows "Board clip: N chars" with a **Clear** button (the board's trash can). Older firmware gets a note to update instead.
 - **Remote.** Page ◀ ▶ and the BOOT button (stopwatch start/pause and reset, jiggler size).
 - **Board diagnostics.** Optionally polls the live `DBG` counters every 2 s.
 - **Firmware update (RP2040).** The app bundles the RP2040 firmware. It reboots the board into its UF2 drive, checks that the image really is an RP2040 UF2, copies it, and waits for the board to report its new version. It also notices a board already sitting in its bootloader. ESP32-C3 firmware is still flashed with PlatformIO.
 - **Tray.** The tray icon's colour shows the link state. Closing the window keeps the app running in the tray. Only one instance runs at a time, and a second launch brings the first to the front.
+- **Error log.** Unexpected errors go to `%APPDATA%\TouchDeck\errors.log`, useful in a bug report.
 - **Settings.** Dry run (log the keys and mouse input instead of performing them), diagnostics, and Start with Windows. They're stored in `%APPDATA%\TouchDeck\settings.json`.
 
 ## Install

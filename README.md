@@ -26,11 +26,12 @@ Both boards speak the same serial line protocol, which is documented at the top 
 
 It shows up on the PC as a USB composite device (`CAFE:4011`): a keyboard, a mouse and a serial port. Swipe between three pages:
 
-- **Watch.** A rounded-square analog face that ticks every second on the speaker. The tick is driven by a hardware timer, so it's exactly on the second. There's a mute toggle in the corner. The **BOOT button** starts and pauses a stopwatch; a long press resets it.
+- **Watch.** A rounded-square analog face that ticks every second on the speaker. The tick is driven by a hardware timer, so it's exactly on the second. There's a mute toggle in the corner; it silences only the tick, and touch clicks always sound. The **BOOT button** starts and pauses a stopwatch; a long press resets it.
 - **Clipboard.** COPY asks the PC for the selected text; PASTE types it as US-layout keystrokes, adjusting for Caps Lock.
-- **Jiggler.** Moves the mouse in a loose, wobbling circle. Every so often it stops, right-clicks, presses Esc, then carries on. BOOT cycles the circle size (1x, 1.5x, 2x).
+- **Clipboard trash.** A bin next to the title clears the board's clip. It only works when there's text and no paste is typing.
+- **Jiggler.** The dot drives along an outlined letter lane (O W M N Z X C V H J L B G D) and the mouse follows it in proportion, drifting within the lane like a car in its lane. O, B and D loop; the other letters bounce back at their ends. Every so often it stops, right-clicks, presses Esc, then glides on to a new random letter. The mouse always stays in the area where it started. The scale pill (top-left) and BOOT change the size (1x, 1.5x, 2x). The ON/OFF pill (top-right) and a tap on the letter turn it on and off.
 
-Mute, jiggler on/off and circle size are saved to flash, and they survive power-off and firmware updates. The core runs at 200 MHz. Only the parts of the screen that change are redrawn, and each watch second is drawn in advance so it appears about 8 ms after the tick.
+Mute, jiggler on/off and size are saved to flash, and they survive power-off and firmware updates. The core runs at 200 MHz. Only the parts of the screen that change are redrawn, and each watch second is drawn in advance so it appears about 8 ms after the tick.
 
 ### ESP32-2424S012C (1.28" round, touch)
 
@@ -39,7 +40,7 @@ The ESP32-C3 has no USB keyboard/mouse hardware, so it has two **output modes**:
 - **BT:** a Bluetooth LE keyboard and mouse, paired explicitly with an on-screen 6-digit passkey.
 - **PC:** the board sends its key and mouse reports over USB serial, and the PC app performs them.
 
-It has Clipboard, Jiggler and Settings pages. There's no clock or speaker on this board.
+It has Clipboard, Jiggler and Settings pages with the same trash can and letter lanes. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
 
 ## Touch Deck for Windows
 
@@ -52,6 +53,7 @@ Install `TouchDeck-<version>.msi`. It installs just for you, needs no admin righ
 - sends the current selection to the board with **Ctrl+Alt+C** from any app;
 - keeps a list of recent clips in memory only;
 - gives you remote page and button controls, live board diagnostics, and dry-run mode;
+- shows a live **jiggler card**: the board's current letter, the moving dot, and ON/OFF and size buttons, plus the board's clip length with a Clear button (firmware 1.6.0 and later);
 - lives in the tray.
 
 See [`windows-app/README.md`](windows-app/README.md) for details and build steps.
@@ -95,13 +97,19 @@ Only one program can hold the board's serial port at a time. Quit the app before
 
 ## Tests
 
-- `pytest tools/tests` covers the helper protocol, the SendInput injector, and the font generator, including a check that every UI label fits its button. The `test_board_*` files drive a connected board and skip when it's absent.
+- `pytest tools/tests` covers:
+  - the helper protocol and the SendInput injector;
+  - the font generator, including a check that every UI label fits its button;
+  - the jiggler letters: every lane fits both screens, the dot stays inside its lane, letters loop or bounce correctly, and the mouse stays bounded. This drives the shared C engine, built on the PC with MSVC;
+  - `gfx_line`, checked pixel for pixel against the reference algorithm, also built with MSVC.
+
+  The MSVC-based tests skip without Visual Studio. The `test_board_*` files drive a connected board and skip when it's absent.
 - `dotnet test windows-app/TouchDeck.sln` covers the app: protocol, injection, session, device manager, settings and firmware update, plus hardware smoke tests.
 - `windows-app/tools/install-smoke.ps1` is a real install, run and uninstall check of the MSI.
 
 ## Firmware versions
 
-`src/version.h` and `esp32c3/src/version.h` define the board ID and version, and the `VER` command reports them. Bump `FW_VERSION` whenever the firmware changes. The Windows app compares the board's version with the one it bundles and offers the update.
+`src/version.h` and `esp32c3/src/version.h` define the board ID and version (1.6.0), and the `VER` command reports them. Bump `FW_VERSION` whenever the firmware changes. The Windows app compares the board's version with the one it bundles and offers the update.
 
 ## Credits
 
