@@ -21,7 +21,7 @@ typedef struct {
     volatile uint32_t edge_us;      // time_us_32() of the latest second edge
     volatile bool helper;           // PC helper is talking to us
     volatile bool usb_mounted;      // host has enumerated us (keyboard/mouse usable)
-    volatile bool muted;            // silences the tick and touch clicks
+    volatile bool muted;            // silences the once-a-second watch tick
     volatile uint32_t frames;       // core1 frame counter (diagnostics)
     volatile uint32_t loops;        // core0 main-loop counter (diagnostics)
     volatile uint32_t perf_draw_us, perf_push_us, perf_draw_max_us;   // frame timing (DBG)

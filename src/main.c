@@ -120,7 +120,7 @@ void debug_report(void) {
 }
 
 static void feedback(void) {
-    if (!app.muted) buzzer_tone(2500, 4, 15);
+    buzzer_tone(2500, 4, 15);   // touch/button click: always on (mute silences only the watch tick)
 }
 
 static bool in_rect(const touch_event_t *e, int x, int y, int w, int h) {
@@ -144,7 +144,7 @@ static void on_touch(touch_event_t e) {
     if (app.screen == SCR_WATCH) {
         if (e.x >= MUTE_HIT_X && e.y < MUTE_HIT_Y) {
             app.muted = !app.muted;
-            feedback();   // audible confirmation only when un-muting
+            feedback();
             app_redraw();
             settings_save();
         }
