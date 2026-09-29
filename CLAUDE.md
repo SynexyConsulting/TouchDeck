@@ -6,7 +6,7 @@ Firmware (Pico SDK, C) for the **Waveshare RP2040-Touch-LCD-1.69** ("Touch Deck"
 
 A second port lives in `esp32c3/` for the **ESP32-2424S012C** (see "ESP32-C3 port" below).
 
-The Windows companion app (C# .NET 8 WPF, per-user MSI) is in `windows-app/`. It's a **separate git repo** that this repo ignores, and it has its own CLAUDE.md. It replaces `clip_helper.py` and bundles `build/watch.uf2` for in-app firmware updates. When you change the protocol in `usb_io.c`/`link.cpp`, update the app's `TouchDeck.Core/Protocol` too. Bump `FW_VERSION` in both `version.h` files so the app offers the update. Both the app and `clip_helper.py` want the serial port, so run only one at a time.
+The Windows companion app (C# .NET 8 WPF, per-user MSI) is in `windows-app/`. It has its own CLAUDE.md. A macOS app will go beside it in `macos-app/`. Firmware and apps share one repo so a protocol change can land in a single PR. It replaces `clip_helper.py` and bundles `build/watch.uf2` for in-app firmware updates. When you change the protocol in `usb_io.c`/`link.cpp`, update the app's `TouchDeck.Core/Protocol` too. Bump `FW_VERSION` in both `version.h` files so the app offers the update. Both the app and `clip_helper.py` want the serial port, so run only one at a time.
 
 ## Build & flash
 
@@ -24,7 +24,7 @@ PC helper: `py tools\clip_helper.py` or `python tools/clip_helper.py`. On this P
 
 **Tests:** `py -m pytest tools/tests -q`. The unit tests (helper protocol, SendInput injector, font generator, and that every UI label fits its button or circle chord) always run. The board tests in `test_board_*.py` drive the **ESP32-C3** over its serial port and skip when it isn't connected; see the ESP32-C3 section. The RP2040 firmware has no automated tests. Verify it by building, then with the serial protocol from Python (HELLO→PONG, DBG liveness: `frames` rising, touch `fails=0`), then by looking at the device. PASTE and the jiggler inject real keystrokes/mouse input on the PC (RP2040: always, over USB HID; ESP32-C3: in PC mode through the helper), so trigger them deliberately, or use `clip_helper.py --dry-run`.
 
-**Firmware version:** `src/version.h` and `esp32c3/src/version.h` define `FW_BOARD` and `FW_VERSION`, and the `VER` serial command replies `VERSION <board> <version> <build date>`. Bump `FW_VERSION` on every firmware change that ships. The Windows app (`windows-app/`, its **own git repository**, ignored here) shows it and offers an RP2040 update when its bundled firmware is newer.
+**Firmware version:** `src/version.h` and `esp32c3/src/version.h` define `FW_BOARD` and `FW_VERSION`, and the `VER` serial command replies `VERSION <board> <version> <build date>`. Bump `FW_VERSION` on every firmware change that ships. The Windows app (`windows-app/`) shows it and offers an RP2040 update when its bundled firmware is newer.
 
 ## Hardware facts (from the schematic, not the demo code)
 

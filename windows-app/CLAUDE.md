@@ -1,0 +1,40 @@
+# CLAUDE.md
+
+This is the Windows companion app for the Touch Deck boards: C# .NET 8 WPF with a WiX v5 per-user MSI. It lives in the `windows-app/` folder of the TouchDeck repo, next to the firmware. The protocol it speaks is documented at the top of `../src/usb_io.c`. `../tools/clip_helper.py` is the Python original that this app ports, and it's still the reference for behaviour.
+
+## Commands
+
+```powershell
+dotnet test                      # all tests; hardware ones skip without a free board
+.\build.ps1 [-SkipTests] [-Smoke] [-Version x.y.z]   # -> out\TouchDeck-<ver>.msi
+.\tools\install-smoke.ps1 [-KeepInstalled]           # real install/run/uninstall check
+src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snapshot + state, then quit
+```
+
+- The app holds the board's serial port. Quit it (tray → Quit) before running the firmware repo's `flash.py`, `clip_helper.py` or its pytest board tests, and stop those before starting the app.
+- `build.ps1` copies `../build/watch.uf2` and `FW_VERSION` from `../src/version.h` into `firmware/`. Rebuild the firmware first if you want the new version bundled.
+- Scripts are Windows PowerShell 5.1, so keep them ASCII. Don't assign splat arrays from an `if` expression: a one-item array unwraps to a string and splats character by character.
+
+## Architecture
+
+- **Core has no UI.** `UseWPF` is on only for the UI Automation client assemblies, and it drops the implicit `System.IO` using, so add that using explicitly.
+  - `Protocol/`: line parsing, `CLIP` framing, ASCII transliteration.
+  - `Devices/`: WMI scan by VID/PID and the serial transport. DTR is high for the RP2040, whose TinyUSB only sends with DTR set. DTR and RTS stay low for the ESP32-C3, where they are its reset lines.
+  - `Input/`: USB HID usage → scancode `Injector`, `SendInputSink`, and the dry-run `SwitchableSink`.
+  - `Selection/`: UIA TextPattern with a 1.5 s time box, then the Win32 clipboard.
+  - `App/`: settings, RAM-only clip history, HKCU Run autostart.
+  - `Firmware/`: manifest, UF2 validation, update flow.
+- **`DeviceSession`** is single-threaded. `Run()` owns the transport on a worker thread; other threads only queue requests (`SendText`, `Swipe`, `PressButton`, `RequestBootloader`). `Run`'s `finally` always calls `Injector.ReleaseAll()`, so keep it that way. Lines read while waiting for a handshake reply are held and processed later, never dropped.
+- **`DeviceManager`** polls every 2 s and runs one session at a time. It reports `PortBusy` (another program holds the port) and `NotResponding` (no PONG) without throwing.
+- **`AppController`** (App) marshals Core events to the dispatcher and ignores them after dispose. Shutdown order is controller, then tray: producers before consumers.
+- **Firmware update:** it counts as done only when a *new* session reports its version. The old session may not have noticed the reboot yet.
+- **Installer:** installs to `LocalAppDataFolder\Programs\Touch Deck`. `ProgramFiles6432Folder` does not redirect for `perUser`. The payload is harvested with `<Files>`, and the main exe is a named `File` so custom actions can reference it.
+  - `--quit`, run from the new package on `WIX_UPGRADE_DETECTED`, closes a running copy before InstallValidate.
+  - `--cleanup` runs on a real uninstall and also removes the Run entry.
+  - The app re-asserts the Run entry at start if the settings want it.
+  - Per-user ARP entries live under `HKLM\...\Installer\UserData\<SID>`.
+- **Visual language** matches the devices. The palette is from `../esp32c3/src/ui.cpp`, with Barlow and JetBrains Mono embedded (OFL, licenses shipped), pill buttons and an amber accent. Icons come from `tools/make_icons.py`.
+
+## Workflow
+
+Work on feature branches and open a PR to `main` on GitHub (SynexyConsulting/TouchDeck). Test, see it pass, verify on hardware or with `--smoke`, then commit. Commit trailer: `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
