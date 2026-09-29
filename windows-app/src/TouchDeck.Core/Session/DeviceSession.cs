@@ -65,6 +65,15 @@ public sealed class DeviceSession(
     /// <summary>Text sent to the board: (ascii text, source, characters that became '?').</summary>
     public event Action<string, string, int>? ClipSent;
     public event Action<IReadOnlyDictionary<string, string>>? Diagnostics;
+    /// <summary>Live board state (firmware 1.6.0+, after WATCH 1).</summary>
+    public event Action<StateReport>? StateReceived;
+
+    public StateReport? LastState { get; private set; }
+
+    /// <summary>null until known; false when the board sent no STATE within 1.5 s of WATCH 1 (older firmware).</summary>
+    public bool? MirrorSupported { get; private set; }
+
+    private DateTime? watchSentAt;
 
     /// <summary>HELLO must be answered by PONG, else the port isn't a Touch Deck. Then VER and TIME.</summary>
     public bool Handshake(TimeSpan? timeout = null)
@@ -78,6 +87,8 @@ public sealed class DeviceSession(
             ? new FirmwareInfo(v!.Board, v.Version, v.Build)
             : FirmwareInfo.Unknown;
         SendTime();
+        transport.WriteLine("WATCH 1");       // the app mirror; older firmware ignores it
+        watchSentAt = clock.Now;
         handshaken = true;
         return true;
     }
@@ -129,6 +140,8 @@ public sealed class DeviceSession(
             lastHeartbeat = now;
             transport.WriteLine(DiagnosticsEnabled ? "DBG" : "PING");
         }
+        if (MirrorSupported is null && watchSentAt is { } w && now - w >= TimeSpan.FromSeconds(1.5))
+            MirrorSupported = false;
         if (now - lastTimeSync >= TimeSyncEvery)
         {
             lastTimeSync = now;
@@ -148,10 +161,27 @@ public sealed class DeviceSession(
     /// <summary>Press the board's BOOT button (stopwatch on the watch, scale on the jiggler).</summary>
     public void PressButton(bool longPress) => requests.Enqueue(() => transport.WriteLine(longPress ? "BTN LONG" : "BTN"));
 
+    /// <summary>Turn the board's jiggler on or off (saved on the board).</summary>
+    public void SetJiggler(bool on) => requests.Enqueue(() => transport.WriteLine(on ? "JIG ON" : "JIG OFF"));
+
+    /// <summary>Jiggler scale index 0..2 (1x, 1.5x, 2x).</summary>
+    public void SetScale(int index)
+    {
+        if (index is >= 0 and <= 2) requests.Enqueue(() => transport.WriteLine($"JIG SCALE {index}"));
+    }
+
+    /// <summary>Empty the board's clip (the trash can); the board ignores it while pasting.</summary>
+    public void ClearClip() => requests.Enqueue(() => transport.WriteLine("CLIP CLEAR"));
+
     private void Handle(BoardMessage message)
     {
         switch (message)
         {
+            case StateReport st:
+                LastState = st;
+                MirrorSupported = true;
+                StateReceived?.Invoke(st);
+                break;
             case CopyRequest:
                 var (text, source) = selection.Grab();
                 SendClip(text, source);
