@@ -4,6 +4,7 @@ import os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
+import serial
 from touchdeck import PID, VID, find_port
 from test_board_pc_mode import Board
 
@@ -12,7 +13,10 @@ pytestmark = pytest.mark.skipif(RP_PORT is None, reason="RP2040 Touch Deck not c
 
 @pytest.fixture
 def board():
-    b = Board(RP_PORT)
+    try:
+        b = Board(RP_PORT)
+    except serial.SerialException as e:
+        pytest.skip(f"{RP_PORT} is busy (quit the Touch Deck app): {e}")
     try:
         yield b
     finally:

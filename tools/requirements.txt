@@ -1,6 +1,4 @@
-# PC helper (clip_helper.py): serial link + reading the selected text
+# Development tools: flashing, board tests, font/letter generators, BLE scanning
 pyserial>=3.5
-uiautomation>=2.0
-# Development only: tests, font generation, BLE scanning
 pytest>=8
 Pillow>=10

@@ -3,6 +3,7 @@ PC output mode emits K/M lines. Nothing is performed on the PC."""
 import os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
+import serial
 from touchdeck import ESP_PID, ESP_VID, find_port, open_serial
 
 PORT = find_port(ESP_VID, ESP_PID)
@@ -50,7 +51,10 @@ def jiggler_off(b):
 
 @pytest.fixture
 def board():
-    b = Board()
+    try:
+        b = Board()
+    except serial.SerialException as e:
+        pytest.skip(f"{PORT} is busy (quit the Touch Deck app): {e}")
     try:                                  # always release COM7, even when setup fails
         b.send("MODE PC"); b.pump(0.2)
         jiggler_off(b)                    # start from a known state
