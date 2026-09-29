@@ -12,6 +12,7 @@ OUT = os.path.join(HERE, "..", "src", "TouchDeck.App", "Assets")
 
 BG = (7, 9, 13, 255)
 SURF = (20, 26, 36, 255)
+INNER = (16, 21, 30, 255)
 PC = (242, 163, 58, 255)        # amber accent (PC mode on the device)
 OK = (60, 203, 127, 255)
 IDLE = (138, 148, 166, 255)
@@ -20,25 +21,38 @@ SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 
 
 def draw(size, dot):
-    """Rounded device body, amber edge ring, and a status dot (the board's USB chip dot)."""
+    """The jiggler page as an icon: rounded-square device body with the amber edge
+    ring, an active letter lane "T", and the dot resting in the rounded end of the
+    T's top bar (where it would turn back), with equal space around it."""
     s = 8                                        # supersample, then downscale for anti-aliasing
     n = size * s
     im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
+    small = size <= 24                           # tray/taskbar sizes: bolder strokes, no fine walls
     r = n * 0.22
     d.rounded_rectangle([0, 0, n - 1, n - 1], radius=r, fill=BG)
-    ring = max(n * 0.075, 1.6 * s)               # stays at least ~1.6 px wide at 16 px
-    inset = n * 0.09
-    d.rounded_rectangle([inset, inset, n - 1 - inset, n - 1 - inset], radius=r * 0.8,
-                        outline=PC, width=int(ring))
-    # Centre: a filled pill button, as on the device's Clipboard page.
-    pw, ph = n * 0.5, n * 0.2
-    px, py = (n - pw) / 2, (n - ph) / 2
-    d.rounded_rectangle([px, py, px + pw, py + ph], radius=ph / 2, fill=PC)
-    # Top right: the status dot, like the USB chip's link dot.
-    dr = n * 0.075
-    cx, cy = n * 0.68, n * 0.32
-    d.ellipse([cx - dr, cy - dr, cx + dr, cy + dr], fill=dot)
+    ring = n * 0.045 if small else max(n * 0.06, 1.3 * s)
+    inset = n * 0.03 if small else n * 0.07
+    d.rounded_rectangle([inset, inset, n - 1 - inset, n - 1 - inset], radius=r * 0.8, outline=PC, width=int(ring))
+
+    lane = n * (0.19 if small else 0.17)         # inner width of the lane
+    wall = n * (0.07 if small else 0.035)
+    top, bottom = n * (0.30 if small else 0.33), n * (0.80 if small else 0.76)
+    left, right, mid = n * (0.20 if small else 0.27), n * (0.80 if small else 0.73), n * 0.5
+    strokes = [((left, top), (right, top)), ((mid, top), (mid, bottom))]
+
+    def capsule(a, b, width, fill):
+        rad = width / 2
+        d.line([a, b], fill=fill, width=int(width))
+        for x, y in (a, b):
+            d.ellipse([x - rad, y - rad, x + rad, y + rad], fill=fill)
+
+    for a, b in strokes:
+        capsule(a, b, lane + 2 * wall, PC)       # walls
+    for a, b in strokes:
+        capsule(a, b, lane, INNER)               # the lane
+    dr = lane * (0.42 if small else 0.30)        # dot: centred in the bar's right end cap
+    d.ellipse([right - dr, top - dr, right + dr, top + dr], fill=dot)
     return im.resize((size, size), Image.LANCZOS)
 
 
