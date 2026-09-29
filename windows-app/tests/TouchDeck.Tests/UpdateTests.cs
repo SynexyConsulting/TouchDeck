@@ -252,3 +252,96 @@ public sealed class UpdateClientTests : IDisposable
         Directory.Delete(dir, true);
     }
 }
+
+public sealed class UpdateServiceTests : IDisposable
+{
+    private readonly LoopServer server = new();
+    private readonly string dir = Directory.CreateTempSubdirectory("td-svc-").FullName;
+    private static readonly byte[] Msi = Encoding.ASCII.GetBytes(new string('I', 3000));
+    private static readonly byte[] Uf2 = Encoding.ASCII.GetBytes(new string('U', 2048));
+    private static string Hex(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
+
+    private UpdateService Service() =>
+        new(new UpdateClient(UpdateSource.ForTest(new Uri($"{server.Base}/updates.json"))), dir);
+
+    private void Publish(string app = "1.3.0", string fw = "1.7.0")
+    {
+        server.Serve("/app.msi", Msi);
+        server.Serve("/fw.uf2", Uf2);
+        server.Serve("/updates.json", Encoding.UTF8.GetBytes($$"""
+            { "schema": 1,
+              "app": { "windows": { "version": "{{app}}", "url": "{{server.Base}}/app.msi", "sha256": "{{Hex(Msi)}}", "size": {{Msi.Length}} } },
+              "firmware": [ { "board": "rp2040-169", "version": "{{fw}}", "url": "{{server.Base}}/fw.uf2", "sha256": "{{Hex(Uf2)}}", "size": {{Uf2.Length}} } ] }
+            """));
+    }
+
+    [Fact]
+    public async Task Nothing_published_is_reported_as_such()
+    {
+        var r = await Service().CheckAsync(new Version(1, 2, 0), null, CancellationToken.None);
+        Assert.True(r.NothingPublished);
+        Assert.Null(r.Error);
+    }
+
+    [Fact]
+    public async Task Reports_app_and_firmware_separately()
+    {
+        Publish();
+        var r = await Service().CheckAsync(new Version(1, 2, 0), new FirmwareInfo("rp2040-169", "1.6.0", ""), CancellationToken.None);
+        Assert.Equal(new Version(1, 3, 0), r.Choice!.App!.Version);
+        Assert.Equal(new Version(1, 7, 0), r.Choice.Firmware!.Version);
+    }
+
+    [Fact]
+    public async Task Failures_are_text_not_exceptions()
+    {
+        server.Serve("/updates.json", Encoding.UTF8.GetBytes("{ broken"));
+        var r = await Service().CheckAsync(new Version(1, 2, 0), null, CancellationToken.None);
+        Assert.NotNull(r.Error);
+        Assert.Null(r.Choice);
+    }
+
+    [Fact]
+    public async Task Downloads_use_fixed_names_in_a_cleared_folder()
+    {
+        Publish();
+        File.WriteAllText(Path.Combine(dir, "leftover.msi"), "old");
+        var s = Service();
+        var r = await s.CheckAsync(new Version(1, 2, 0), new FirmwareInfo("rp2040-169", "1.6.0", ""), CancellationToken.None);
+        var msi = await s.DownloadAppAsync(r.Choice!.App!, null, CancellationToken.None);
+        Assert.Equal(Path.Combine(dir, "TouchDeck-update.msi"), msi);
+        Assert.False(File.Exists(Path.Combine(dir, "leftover.msi")));
+        var uf2 = await s.DownloadFirmwareAsync(r.Choice.Firmware!, null, CancellationToken.None);
+        Assert.Equal(Path.Combine(dir, "rp2040-169-update.uf2"), uf2);
+        Assert.Equal(Uf2, File.ReadAllBytes(uf2));
+    }
+
+    public void Dispose()
+    {
+        server.Dispose();
+        Directory.Delete(dir, true);
+    }
+}
+
+public class InstallerLaunchTests
+{
+    [Fact]
+    public void Launcher_passes_paths_by_environment_never_in_the_command()
+    {
+        const string msi = @"C:\Users\A & B %PATH%\AppData\Local\TouchDeck\Updates\TouchDeck-update.msi";
+        const string exe = @"C:\Users\A & B %PATH%\AppData\Local\Programs\Touch Deck\TouchDeck.exe";
+        var psi = InstallerLaunch.Create(msi, exe);
+        Assert.EndsWith(@"WindowsPowerShell\v1.0\powershell.exe", psi.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal(msi, psi.Environment["TD_UPDATE_MSI"]);
+        Assert.Equal(exe, psi.Environment["TD_UPDATE_EXE"]);
+        var args = string.Join(' ', psi.ArgumentList);
+        Assert.DoesNotContain("A & B", args);
+        Assert.DoesNotContain("%PATH%", args);
+        var script = Encoding.Unicode.GetString(Convert.FromBase64String(psi.ArgumentList[psi.ArgumentList.IndexOf("-EncodedCommand") + 1]));
+        Assert.Contains("msiexec.exe", script);
+        Assert.Contains("/passive", script);
+        Assert.Contains("$env:TD_UPDATE_MSI", script);
+        Assert.Contains("$env:TD_UPDATE_EXE", script);
+    }
+}
