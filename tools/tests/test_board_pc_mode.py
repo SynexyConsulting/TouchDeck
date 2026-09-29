@@ -178,3 +178,16 @@ def test_trash_tap_clears_the_clip(board):
     assert board.field("clip") == "5"
     board.send("TAP 178 42"); board.pump(0.3)
     assert board.field("clip") == "0"
+
+def test_jig_off_mid_menu_releases_the_button(board):
+    """JIG OFF right after the right-button press must still release it (M 00)."""
+    board.send("JIG ON"); board.pump(0.5)
+    board.take(); board.send("JIG MENU")
+    end = time.time() + 2.0
+    while time.time() < end and not any(l.startswith("M 02") for l in board.lines):
+        board.pump(0.01)
+    assert any(l.startswith("M 02") for l in board.lines), "menu never pressed the right button"
+    board.send("JIG OFF"); board.pump(0.6)
+    after = board.take()
+    down = max(i for i, l in enumerate(after) if l.startswith("M 02"))
+    assert any(l.startswith("M 00") for l in after[down + 1:]), "right button left held"

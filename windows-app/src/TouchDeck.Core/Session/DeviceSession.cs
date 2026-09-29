@@ -74,6 +74,7 @@ public sealed class DeviceSession(
     public bool? MirrorSupported { get; private set; }
 
     private DateTime? watchSentAt;
+    private static readonly Version MirrorSince = new(1, 6, 0);
 
     /// <summary>HELLO must be answered by PONG, else the port isn't a Touch Deck. Then VER and TIME.</summary>
     public bool Handshake(TimeSpan? timeout = null)
@@ -89,6 +90,8 @@ public sealed class DeviceSession(
         SendTime();
         transport.WriteLine("WATCH 1");       // the app mirror; older firmware ignores it
         watchSentAt = clock.Now;
+        // STATE arrived in firmware 1.6.0: an older (or unknown) version has no mirror.
+        if (Firmware.SemVer is not { } fwVersion || fwVersion < MirrorSince) MirrorSupported = false;
         handshaken = true;
         return true;
     }

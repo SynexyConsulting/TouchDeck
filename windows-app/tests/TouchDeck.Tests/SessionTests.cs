@@ -217,4 +217,26 @@ public class SessionTests
         Assert.Equal(["JIG ON", "JIG OFF", "JIG SCALE 2", "CLIP CLEAR"],
             t.Written.Where(w => w.StartsWith("JIG") || w.StartsWith("CLIP CLEAR")).ToList());
     }
+
+    [Theory]
+    [InlineData("VERSION rp2040-169 1.5.0 Sep 27 2026")]
+    [InlineData(null)]                                  // pre-VER firmware
+    public void Firmware_older_than_1_6_has_no_mirror_right_away(string? ver)
+    {
+        t.Incoming.Enqueue("PONG");
+        if (ver is not null) t.Incoming.Enqueue(ver);
+        var s = Make();
+        Assert.True(s.Handshake());
+        Assert.False(s.MirrorSupported);
+    }
+
+    [Fact]
+    public void Firmware_1_6_waits_for_state()
+    {
+        t.Incoming.Enqueue("PONG");
+        t.Incoming.Enqueue("VERSION rp2040-169 1.6.0 Sep 28 2026");
+        var s = Make();
+        Assert.True(s.Handshake());
+        Assert.Null(s.MirrorSupported);
+    }
 }

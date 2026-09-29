@@ -12,6 +12,7 @@
 //               WATCH 1|0              start/stop STATE reports (the Windows app's mirror)
 //               JIG ON|OFF, JIG SCALE n   jiggler on/off, scale index 0-2 (saved)
 //               CLIP CLEAR             empty the clip (ignored when empty or pasting)
+//               JIG MENU               start the right-click/Esc sequence now (tests)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
 //               STATE jig= letter= scale= phase= x= y= clip= paste=   after WATCH 1: on any
@@ -162,6 +163,8 @@ static void handle_line(char *s) {
     } else if (!strcmp(s, "WATCH 1") || !strcmp(s, "WATCH 0")) {
         watching = s[6] == '1';
         state_head[0] = 0;                    // report once right away
+    } else if (!strcmp(s, "JIG MENU")) {                            // tests: menu sequence now
+        jiggler_menu_now();
     } else if (!strcmp(s, "JIG ON") || !strcmp(s, "JIG OFF")) {
         jiggler_set(s[5] == 'N');
         settings_save();

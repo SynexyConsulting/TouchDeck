@@ -78,18 +78,18 @@
                 <!-- Jiggler (live mirror of the board, firmware 1.6.0+) -->
                 <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
                     <StackPanel>
-                        <DockPanel>
+                        <DockPanel x:Name="JigBody">
                             <Button x:Name="ScalePill" DockPanel.Dock="Left" Style="{StaticResource SmallButton}" Margin="0"
                                     Content="{Binding JigScaleText}" Click="OnScale" ToolTip="Jiggler size: 1x, 1.5x, 2x" />
                             <Button x:Name="JigPill" DockPanel.Dock="Right" Style="{StaticResource SmallButton}" Click="OnJigToggle"
                                     ToolTip="Turn the jiggler on or off" />
                             <TextBlock Text="Jiggler" Style="{StaticResource CardTitle}" HorizontalAlignment="Center" Margin="0,4,0,0" />
                         </DockPanel>
-                        <local:JiggleLane x:Name="Lane" Height="120" Margin="0,6,0,0" Cursor="Hand"
+                        <local:JiggleLane x:Name="JigLaneView" Height="120" Margin="0,6,0,0" Cursor="Hand"
                                           Letter="{Binding JigLetter}" DotX="{Binding JigX}" DotY="{Binding JigY}"
                                           Active="{Binding JigOn}" MouseLeftButtonUp="OnLaneClick"
                                           ToolTip="Tap the letter to turn the jiggler on or off" />
-                        <TextBlock Text="{Binding JigStatus}" Foreground="{StaticResource Dim}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                        <TextBlock x:Name="JigStatusText" Text="{Binding JigStatus}" Foreground="{StaticResource Dim}" HorizontalAlignment="Center" Margin="0,6,0,0" />
                         <TextBlock x:Name="MirrorFallback" Text="{Binding MirrorFallbackText}" Foreground="{StaticResource Accent}"
                                    TextWrapping="Wrap" Margin="0,6,0,0" />
                     </StackPanel>

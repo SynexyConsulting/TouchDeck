@@ -17,7 +17,8 @@ static jig_motion_t m;
 static float sent_x, sent_y;   // mouse offset from the start point we have told the host so far
 static float scale = 1.f;      // eases toward JIG_SCALES[app.jig_scale_idx] so a change never jumps
 static uint32_t next_ms;
-static uint32_t paused_menu_ms;   // countdown left when switched off while moving (0 = none)
+static uint32_t paused_menu_ms;
+static bool release_mouse, release_key;   // owed to the host after an interrupted menu   // countdown left when switched off while moving (0 = none)
 
 static uint32_t rand_between(uint32_t lo, uint32_t hi) {
     return lo + esp_random() % (hi - lo + 1);
@@ -55,8 +56,9 @@ void jiggler_set(bool on) {
         int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
         paused_menu_ms = left > 0 ? (uint32_t)left : 0;
     } else if (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_ESC_DOWN) {
-        out_mouse(0, 0, 0);      // don't leave a button or key held
-        out_key(0, 0);
+        // Don't leave a button or key held; jiggler_step retries each release
+        // until the output accepts it (a BLE notify can fail).
+        release_mouse = release_key = true;
     }
     app_redraw();
 }
@@ -81,6 +83,10 @@ int jiggler_next_menu_s() {
     if (!app.jig_on) return (int)(paused_menu_ms / 1000);
     int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
     return left > 0 ? left / 1000 : 0;
+}
+
+void jiggler_menu_now() {
+    if (app.jig_on && app.jig_phase == JIG_MOVING) app.jig_next_menu_ms = now_ms();
 }
 
 bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING; }
@@ -114,6 +120,12 @@ static void move_step() {
 }
 
 void jiggler_step() {
+    if (release_mouse || release_key) {
+        if (!out_ready()) return;
+        if (release_mouse) { if (out_mouse(0, 0, 0)) release_mouse = false; return; }
+        if (out_key(0, 0)) release_key = false;
+        return;
+    }
     if (!app.jig_on) {
         if (app.anim_demo) demo_step();
         return;

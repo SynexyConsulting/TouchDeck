@@ -121,6 +121,7 @@ public partial class MainWindow : Window
                 break;
             case nameof(AppController.JigOn):
             case nameof(AppController.MirrorFallbackText):
+            case nameof(AppController.MirrorAvailable):
                 UpdateJigPill();
                 break;
             case nameof(AppController.DiagnosticsEnabled):
@@ -190,6 +191,11 @@ public partial class MainWindow : Window
         JigPill.Content = app.JigOn ? "ON" : "OFF";
         JigPill.Tag = app.JigOn ? "Primary" : null;
         MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
+        // Without the board mirror (older firmware / no board) the controls would do nothing: hide them.
+        var live = app.MirrorAvailable ? Visibility.Visible : Visibility.Collapsed;
+        JigBody.Visibility = live;
+        JigLaneView.Visibility = live;
+        JigStatusText.Visibility = live;
     }
 
     private void OnSwipeLeft(object sender, RoutedEventArgs e) => app.Swipe(left: true);

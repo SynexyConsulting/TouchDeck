@@ -262,11 +262,21 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var supported = manager.Session?.MirrorSupported;
         if (!IsConnected || supported is null)
         {
-            if (!IsConnected) { MirrorAvailable = false; MirrorFallbackText = ""; BoardClipText = ""; CanClearBoardClip = false; }
+            if (!IsConnected)
+            {
+                // A new board must not inherit the last one's jiggler state.
+                MirrorAvailable = false;
+                MirrorFallbackText = "Connect a board to see and control its jiggler.";
+                JigOn = false;
+                JigLetter = 'O';
+                JigStatus = "";
+                BoardClipText = "";
+                CanClearBoardClip = false;
+            }
             return;
         }
         MirrorAvailable = supported.Value;
-        MirrorFallbackText = supported.Value ? "" : "Update the board's firmware to 1.6.0 to see and control the jiggler here.";
+        MirrorFallbackText = supported.Value ? "" : "This board's firmware is older than 1.6.0. Use Install firmware above to see and control its jiggler here.";
     }
 
     public void ToggleJiggler() => manager.Session?.SetJiggler(!JigOn);
