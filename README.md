@@ -106,10 +106,10 @@ git tag fw-v1.7.0  && git push origin fw-v1.7.0      # firmware only
   - Every `updates.json` is signed (`updates.json.sig`, ECDSA P-256).
   - The app has the public key built in and refuses any feed whose signature doesn't verify, so a leaked publish token alone can't ship an update.
   - The private key is `%USERPROFILE%\.touchdeck\feed-signing-key.pem`. It is **never** committed. **Back it up**: losing it means shipping a new app build with a new key.
-- **CI setup, once:** create the GitHub Environment `release` with yourself as required reviewer, holding two secrets:
-  - `TOUCHDECK_UPDATES_TOKEN`: a fine-grained token with *Contents: read and write* on TouchDeckUpdates only;
+- **CI setup (done):** the GitHub Environment `release` releases its secrets only to runs for `app-v*` / `fw-v*` tags, under Deployment branches and tags. A tag ruleset ("release tags") restricts who may create those tags. The secrets:
+  - `TOUCHDECK_UPDATES_TOKEN`: a fine-grained token with *Contents: read and write* on TouchDeckUpdates only, expiring after 1 year, so renew it then;
   - `TOUCHDECK_FEED_KEY`: the PEM file's text.
-  Add tag protection for `app-v*` and `fw-v*`.
+  Required reviewers would need GitHub Enterprise for a private repo.
 - **By hand:** `python tools/publish_release.py --key-file %USERPROFILE%\.touchdeck\feed-signing-key.pem ...` does the same publish from your PC (see `--help`). It refuses a key that doesn't match the app's.
 - **What the app trusts:**
   - only a correctly signed feed;

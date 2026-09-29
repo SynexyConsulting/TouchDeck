@@ -59,7 +59,7 @@ It lives in the public repo `SynexyConsulting/TouchDeckUpdates`. The app reads i
   - `updates.json.sig` holds an ECDSA P-256 signature over the feed.
   - The app pins the public key and refuses unsigned or wrongly signed feeds.
   - The private key stays off the repo: on the maintainer's PC and in the protected `release` environment.
-  - Publishing needs a reviewer's approval.
+  - CI hands out the publishing secrets only for `app-v*` / `fw-v*` tags, whose creation a tag ruleset restricts. Required reviewers need Enterprise on private repos.
   - Test switches exist only in `-UpdateTestHooks` builds.
   - Downloads have idle timeouts, and the feed has an overall timeout.
 - **Unsigned artefacts, for now:** Windows SmartScreen may warn when the MSI is run by hand. The in-app update goes through `msiexec`, which doesn't show SmartScreen. Code signing (Azure Trusted Signing) is a follow-up. Until then the SHA-256 in the HTTPS feed is the integrity check.

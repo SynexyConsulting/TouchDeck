@@ -5,8 +5,9 @@
 #   git tag fw-v1.7.0  && git push origin fw-v1.7.0    -> RP2040 firmware only
 #   Actions > Release > Run workflow                   -> dry run: build + test, keep artifacts
 #
-# Publishing runs in the GitHub Environment "release", which must require your approval
-# (Settings > Environments > release > Required reviewers) and holds two secrets:
+# Publishing runs in the GitHub Environment "release". It only releases its secrets to runs for
+# app-v*/fw-v* tags (Deployment branches and tags), and a tag ruleset restricts who may create
+# those tags. (Required reviewers need GitHub Enterprise for private repos.) Its secrets:
 #   TOUCHDECK_UPDATES_TOKEN  fine-grained token, Contents: Read and write on TouchDeckUpdates only
 #   TOUCHDECK_FEED_KEY       the feed-signing private key (PEM); its public half is pinned in the app
 # Actions are pinned to commit SHAs and Python packages to exact versions (requirements-ci.txt).
@@ -116,7 +117,7 @@ jobs:
 
   publish:
     needs: [firmware, app]
-    environment: release        # required reviewers: nothing is published without approval
+    environment: release        # secrets only for app-v*/fw-v* tags; tag creation is restricted
     if: always() && needs.firmware.result == 'success' && (needs.app.result == 'success' || needs.app.result == 'skipped') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
