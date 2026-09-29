@@ -117,3 +117,17 @@ public sealed class Autostart(string keyPath = Autostart.RunKey, string valueNam
         else key.DeleteValue(valueName, throwOnMissingValue: false);
     }
 }
+
+/// <summary>Scrubs personal paths from text written to errors.log (users may share that file).</summary>
+public static class LogRedaction
+{
+    public static string Redact(string text, string? userProfile = null)
+    {
+        var profile = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(profile)) return text;
+        // Only the whole profile folder (C:\Users\Nik, not C:\Users\Nikolai).
+        var pattern = System.Text.RegularExpressions.Regex.Escape(profile.TrimEnd('\\', '/')) + @"(?=[\\/]|$|[\s""';:,)])";
+        return System.Text.RegularExpressions.Regex.Replace(text, pattern, "%USERPROFILE%",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+}
