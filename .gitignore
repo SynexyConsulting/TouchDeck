@@ -12,5 +12,3 @@ __pycache__/
 # Local session memory (remember plugin)
 .remember/
 
-# Windows app: its own git repository
-windows-app/
