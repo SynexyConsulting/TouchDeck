@@ -167,7 +167,8 @@ public class SessionTests
         t.Incoming.Enqueue("K 02 04");                     // Shift+a held when the board vanishes
         var s = Make();
         var run = Task.Run(() => s.Run(CancellationToken.None));
-        SpinWait.SpinUntil(() => sink.Events.Count >= 2, 2000);
+        // Unplug only once the key is really down (a slow CI machine can take a while to get here).
+        Assert.True(SpinWait.SpinUntil(() => s.Injector.HeldKey != 0, 10000), "the key report was never applied");
         t.FailReads = true;
         Assert.ThrowsAny<IOException>(() => run.GetAwaiter().GetResult());
         Assert.Equal(0, s.Injector.HeldKey);
