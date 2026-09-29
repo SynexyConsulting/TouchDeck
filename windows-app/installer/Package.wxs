@@ -1,0 +1,70 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Touch Deck"
+           Manufacturer="Touch Deck"
+           Version="$(var.Version)"
+           UpgradeCode="056138bc-ee72-4c95-bed9-5a2a5fb68785"
+           Scope="perUser"
+           Compressed="yes">
+
+    <!-- Newer replaces older in place; installing an older one over a newer is refused. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer Touch Deck is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="app.ico" SourceFile="..\src\TouchDeck.App\Assets\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="app.ico" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!-- Per-user, no admin rights: %LOCALAPPDATA%\Programs\Touch Deck. (ProgramFiles6432Folder
+         only redirects there for perUserOrMachine packages; for perUser it stays C:\Program Files.) -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Touch Deck" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExe">
+        <File Id="TouchDeckExe" Source="$(var.PublishDir)TouchDeck.exe" KeyPath="yes" />
+      </Component>
+      <Files Include="$(var.PublishDir)**">
+        <Exclude Files="$(var.PublishDir)TouchDeck.exe" />
+        <Exclude Files="$(var.PublishDir)**.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="AppShortcut" Name="Touch Deck" Description="Touch Deck companion"
+                  Target="[INSTALLFOLDER]TouchDeck.exe" WorkingDirectory="INSTALLFOLDER" Icon="app.ico" />
+        <RegistryValue Root="HKCU" Key="Software\TouchDeck" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Touch Deck">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- Close a running instance before its files are replaced (upgrade) or removed; on a
+         real uninstall (not the removal half of an upgrade) also drop "Start with Windows". -->
+    <CustomAction Id="QuitOldApp" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]TouchDeck.exe&quot; --quit"
+                  Execute="immediate" Return="ignore" />
+    <CustomAction Id="CleanupApp" FileRef="TouchDeckExe" ExeCommand="--cleanup" Execute="immediate" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="QuitOldApp" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED" />
+      <Custom Action="CleanupApp" Before="InstallValidate" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+
+    <!-- Minimal UI with a "Launch Touch Deck" box on the last page. -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="Notices.rtf" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Touch Deck" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="LaunchApp" FileRef="TouchDeckExe" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApp"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+  </Package>
+</Wix>
