@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This is the Windows companion app for the Touch Deck boards: C# .NET 8 WPF with a WiX v5 per-user MSI. It's its own git repo, nested in (and ignored by) the firmware repo one level up. The protocol it speaks is documented at the top of `../src/usb_io.c`. `../tools/clip_helper.py` is the Python original that this app ports, and it's still the reference for behaviour.
+This is the Windows companion app for the Touch Deck boards: C# .NET 8 WPF with a WiX v5 per-user MSI. It lives in the `windows-app/` folder of the TouchDeck repo, next to the firmware. The protocol it speaks is documented at the top of `../src/usb_io.c`. `../tools/clip_helper.py` is the Python original that this app ports, and it's still the reference for behaviour.
 
 ## Commands
 
@@ -37,4 +37,4 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
 
 ## Workflow
 
-Work on feature branches and merge to main with `--no-ff`. Test, see it pass, verify on hardware or with `--smoke`, then commit. Commit trailer: `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
+Work on feature branches and open a PR to `main` on GitHub (SynexyConsulting/TouchDeck). Test, see it pass, verify on hardware or with `--smoke`, then commit. Commit trailer: `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
