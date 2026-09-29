@@ -117,22 +117,63 @@ void gfx_ring(float cx, float cy, float r, float width, uint16_t color) {
     }
 }
 
+// Widen [lo, hi] to include [a, b].
+static void span_add(float a, float b, float *lo, float *hi) {
+    if (a > b) { float t = a; a = b; b = t; }
+    if (a < *lo) *lo = a;
+    if (b > *hi) *hi = b;
+}
+
 void gfx_line(float ax, float ay, float bx, float by, float thick, uint16_t color) {
     float r = thick * 0.5f;
     int x0, y0, x1, y1;
     clip_box(fminf(ax, bx) - r - 1, fminf(ay, by) - r - 1,
              fmaxf(ax, bx) + r + 1, fmaxf(ay, by) + r + 1, &x0, &y0, &x1, &y1);
+    if (x0 > x1 || y0 > y1) return;          // entirely outside the clip (partial redraws)
     float vx = bx - ax, vy = by - ay;
-    float len2 = vx * vx + vy * vy;
+    float len2 = vx * vx + vy * vy, len = sqrtf(len2);
     float inv = len2 > 0.f ? 1.f / len2 : 0.f;
-    for (int y = y0; y <= y1; y++)
-        for (int x = x0; x <= x1; x++) {
-            float px = x + 0.5f - ax, py = y + 0.5f - ay;
+    // Only pixels closer than r + 0.5 get any coverage. Per row, that is one span
+    // of the capsule (the hull of the two end discs and the band between them), so
+    // long diagonal strokes skip most of their bounding box.
+    float R = r + 0.5f + 0.01f;
+    for (int y = y0; y <= y1; y++) {
+        float py = y + 0.5f - ay;               // row centre, relative to a
+        float lo = 1e30f, hi = -1e30f;
+        float d = R * R - py * py;              // disc at a
+        if (d >= 0.f) { d = sqrtf(d); span_add(-d, d, &lo, &hi); }
+        float qy = py - vy;                     // disc at b
+        d = R * R - qy * qy;
+        if (d >= 0.f) { d = sqrtf(d); span_add(vx - d, vx + d, &lo, &hi); }
+        if (len2 > 0.f) {                       // band: |perpendicular| <= R and 0 <= t <= 1
+            float bl = -1e30f, bh = 1e30f;
+            if (vy != 0.f) {
+                float c0 = (py * vx - R * len) / vy, c1 = (py * vx + R * len) / vy;
+                bl = fminf(c0, c1); bh = fmaxf(c0, c1);
+            } else if (fabsf(py) > R) {
+                bl = 1e30f;                     // horizontal segment, row too far
+            }
+            if (vx != 0.f) {
+                float t0 = (0.f - py * vy) / vx, t1 = (len2 - py * vy) / vx;
+                bl = fmaxf(bl, fminf(t0, t1)); bh = fminf(bh, fmaxf(t0, t1));
+            } else {
+                float t = py * vy * inv;        // vertical segment: t depends on the row only
+                if (t < 0.f || t > 1.f) bl = 1e30f;
+            }
+            if (bl <= bh) span_add(bl, bh, &lo, &hi);
+        }
+        if (lo > hi) continue;
+        int xs = (int)floorf(ax + lo - 0.5f) - 1, xe = (int)ceilf(ax + hi - 0.5f) + 1;
+        if (xs < x0) xs = x0;
+        if (xe > x1) xe = x1;
+        for (int x = xs; x <= xe; x++) {
+            float px = x + 0.5f - ax;
             float t = (px * vx + py * vy) * inv;
             t = t < 0.f ? 0.f : (t > 1.f ? 1.f : t);
             float dx = px - vx * t, dy = py - vy * t;
             plot(x, y, color, r + 0.5f - sqrtf(dx * dx + dy * dy));
         }
+    }
 }
 
 void gfx_rrect(int x, int y, int w, int h, float rad, uint16_t color) {
