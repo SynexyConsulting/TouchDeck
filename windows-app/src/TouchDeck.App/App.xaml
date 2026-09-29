@@ -1,8 +1,11 @@
 <Application x:Class="TouchDeck.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:TouchDeck.App"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <local:PillRadius x:Key="PillRadius" />
+
         <!-- The device palette (esp32c3/src/ui.cpp). -->
         <Color x:Key="BgColor">#07090D</Color>
         <SolidColorBrush x:Key="Bg" Color="#07090D" />
@@ -66,7 +69,8 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Pill" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1" CornerRadius="16" Padding="{TemplateBinding Padding}">
+                                BorderThickness="1" Padding="{TemplateBinding Padding}"
+                                CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource PillRadius}}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -95,10 +99,13 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Compact pill: same half-circle ends, enough room around the label/icon. -->
         <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="Padding" Value="14,5" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="MinWidth" Value="52" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Margin" Value="8,0,0,0" />
         </Style>
 
         <!-- Toggle switch for settings. -->
