@@ -107,7 +107,8 @@ public class SwitchableSinkTests
         sink.Send([new KeyStroke(0x1D, true, true), new MouseMove(3, -2), new MouseButton(MouseAction.RightDown)]);
 
         Assert.Equal([new KeyStroke(0x1E, false, false), new KeyStroke(0x1E, false, true)], real.Events);  // released on switch
-        Assert.Equal(["key 0x1D ext up", "mouse move +3 -2", "mouse RightDown"], described);
+        // Which key it was is not logged: the activity log (and "Copy log") must not spell out typed text.
+        Assert.Equal(["key up", "mouse move +3 -2", "mouse RightDown"], described);
     }
 }
 

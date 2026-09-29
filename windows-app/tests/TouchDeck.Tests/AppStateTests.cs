@@ -132,3 +132,19 @@ public sealed class AutostartTests : IDisposable
 
     public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(TestKey, throwOnMissingSubKey: false);
 }
+
+public class LogRedactionTests
+{
+    [Fact]
+    public void The_user_profile_path_is_replaced_in_any_case()
+    {
+        const string profile = @"C:\Users\Nik";
+        var text = @"at X in C:\Users\Nik\AppData\Local\x.cs:line 3; c:\users\nik\y; C:\Users\Nikolai\z";
+        Assert.Equal(@"at X in %USERPROFILE%\AppData\Local\x.cs:line 3; %USERPROFILE%\y; C:\Users\Nikolai\z",
+            LogRedaction.Redact(text, profile));
+    }
+
+    [Fact]
+    public void Nothing_to_redact_leaves_text_alone() =>
+        Assert.Equal("plain", LogRedaction.Redact("plain", @"C:\Users\Nik"));
+}

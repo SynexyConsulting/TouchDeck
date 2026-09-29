@@ -1,0 +1,27 @@
+Touch Deck - third-party notices
+
+The Touch Deck app and the board firmware it bundles include the following
+third-party components. Full license texts are in this folder where the
+license requires them.
+
+App
+- .NET 8 runtime and libraries, including System.IO.Ports and System.Management
+  (c) .NET Foundation and Contributors, MIT License.
+  https://github.com/dotnet/runtime
+- Barlow fonts, (c) The Barlow Project Authors, SIL Open Font License 1.1
+  (OFL-Barlow.txt).
+- JetBrains Mono font, (c) The JetBrains Mono Project Authors, SIL Open Font
+  License 1.1 (OFL-JetBrainsMono.txt).
+- The installer is built with the WiX Toolset, Microsoft Reciprocal License.
+
+Bundled RP2040 firmware (firmware\watch.uf2)
+- Raspberry Pi Pico SDK, (c) Raspberry Pi (Trading) Ltd., BSD 3-Clause License.
+  https://github.com/raspberrypi/pico-sdk
+- TinyUSB, (c) Ha Thach (tinyusb.org), MIT License.
+  https://github.com/hathach/tinyusb
+- newlib C library (via the Arm GNU toolchain), various BSD-style licenses.
+  https://sourceware.org/newlib/
+- Barlow and JetBrains Mono (as above) and DSEG7 Classic, (c) keshikan,
+  SIL Open Font License 1.1, rendered into bitmap fonts.
+- The LCD initialisation sequence follows Waveshare's RP2040-Touch-LCD-1.69
+  example code.

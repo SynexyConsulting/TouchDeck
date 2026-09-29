@@ -24,6 +24,7 @@
     <Resource Include="Assets\app-256.png" />
     <Resource Include="Assets\Fonts\*.ttf" />
     <None Include="Assets\Fonts\OFL-*.txt" CopyToOutputDirectory="PreserveNewest" Link="licenses\%(Filename)%(Extension)" />
+    <None Include="Assets\THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" Link="licenses\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <!-- Bundled board firmware (build.ps1 refreshes it from the firmware repo). -->

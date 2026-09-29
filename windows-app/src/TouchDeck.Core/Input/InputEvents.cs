@@ -65,7 +65,7 @@ public sealed class SwitchableSink(IInputSink real) : IInputSink
         }
     }
 
-    /// <summary>Dry-run descriptions, e.g. "key 0x1E down".</summary>
+    /// <summary>Dry-run descriptions, e.g. "key down" (never which key).</summary>
     public event Action<string>? DryRunEvent;
 
     public void Send(IReadOnlyList<InputEvent> events)
@@ -105,7 +105,7 @@ public sealed class SwitchableSink(IInputSink real) : IInputSink
 
     public static string Describe(InputEvent e) => e switch
     {
-        KeyStroke k => $"key 0x{k.Scan:X2}{(k.Extended ? " ext" : "")} {(k.Up ? "up" : "down")}",
+        KeyStroke k => $"key {(k.Up ? "up" : "down")}",     // never which key: the log must not spell out typed text
         MouseMove m => $"mouse move {m.Dx:+0;-0;0} {m.Dy:+0;-0;0}",
         MouseButton b => $"mouse {b.Action}",
         _ => e.ToString() ?? "",

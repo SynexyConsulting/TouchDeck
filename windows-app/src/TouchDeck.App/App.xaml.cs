@@ -153,7 +153,7 @@ public partial class App : Application
             var path = Path.Combine(Path.GetDirectoryName(Core.App.AppSettings.DefaultPath)!, "errors.log");
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             if (File.Exists(path) && new FileInfo(path).Length > 256 * 1024) File.Delete(path);
-            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {e}{Environment.NewLine}{Environment.NewLine}");
+            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {Core.App.LogRedaction.Redact(e.ToString())}{Environment.NewLine}{Environment.NewLine}");
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

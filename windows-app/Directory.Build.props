@@ -9,4 +9,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+  <!-- Release builds embed no local source paths in PDBs or stack traces (they become /_/),
+       and no Source Link: the repo is private, so its URLs would help no one. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <EnableSourceLink>false</EnableSourceLink>
+  </PropertyGroup>
 </Project>
