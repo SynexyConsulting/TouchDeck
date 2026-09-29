@@ -62,6 +62,7 @@ public class LineSplitterTests
 }
 
 /// <summary>Real hardware: skipped unless a Touch Deck is plugged in.</summary>
+[Collection("Board")]   // one test at a time on the real serial port
 public class DeviceSmokeTests
 {
     [SkippableFact]

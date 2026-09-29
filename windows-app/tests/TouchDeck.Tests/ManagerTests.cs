@@ -119,6 +119,7 @@ public class ManagerTests
 }
 
 /// <summary>Real hardware: skipped unless a Touch Deck is plugged in and free.</summary>
+[Collection("Board")]   // one test at a time on the real serial port
 public class ManagerSmokeTests
 {
     [SkippableFact]

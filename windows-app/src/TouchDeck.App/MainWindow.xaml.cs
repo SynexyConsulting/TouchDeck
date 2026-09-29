@@ -8,6 +8,8 @@ using System.Windows.Interop;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using TouchDeck.Core.Devices;
+using TouchDeck.Core.Mirror;
 using TouchDeck.Core.Protocol;
 using TouchDeck.Core.Selection;
 
@@ -44,6 +46,9 @@ public partial class MainWindow : Window
         UpdateDiagnosticsCard();
         UpdateSendInfo();
         UpdateJigPill();
+        Mirror.Gesture += OnMirrorGesture;
+        app.MirrorFrameChanged += ShowMirrorFrame;
+        UpdateMirror();
     }
 
     /// <summary>Creates the window handle without showing it, so the hotkey works from the tray.</summary>
@@ -118,14 +123,19 @@ public partial class MainWindow : Window
                 UpdateStatusDot();
                 break;
             case nameof(AppController.JigOn):
+                UpdateJigPill();
+                break;
             case nameof(AppController.MirrorFallbackText):
             case nameof(AppController.MirrorAvailable):
-                UpdateJigPill();
+            case nameof(AppController.FullMirror):
+            case nameof(AppController.MirrorKind):
+                UpdateMirror();
                 break;
             case nameof(AppController.DiagnosticsEnabled):
             case nameof(AppController.IsConnected):
                 UpdateDiagnosticsCard();
                 UpdateSendInfo();
+                UpdateMirror();
                 break;
             case nameof(AppController.UpdateText):
                 UpdateButton.Content = app.IsConnected && !app.UpdateIsUpgrade ? "Reinstall firmware" : "Install firmware";
@@ -197,12 +207,55 @@ public partial class MainWindow : Window
     {
         JigPill.Content = app.JigOn ? "ON" : "OFF";
         JigPill.Tag = app.JigOn ? "Primary" : null;
+    }
+
+    /// <summary>
+    /// The device card: the live device view (firmware 1.7.0+), the jiggler card for firmware 1.6.x
+    /// (whose STATE has no page), or the empty device with a note.
+    /// </summary>
+    private void UpdateMirror()
+    {
+        bool full = app.FullMirror, legacy = app.IsConnected && !full && app.MirrorAvailable;
+        Mirror.Visibility = legacy ? Visibility.Collapsed : Visibility.Visible;
+        MirrorHint.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
+        LegacyJiggler.Visibility = legacy ? Visibility.Visible : Visibility.Collapsed;
         MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
-        // Without the board mirror (older firmware / no board) the controls would do nothing: hide them.
-        var live = app.MirrorAvailable ? Visibility.Visible : Visibility.Collapsed;
-        JigBody.Visibility = live;
-        JigLaneView.Visibility = live;
-        JigStatusText.Visibility = live;
+        BootButtons.Visibility = app.IsConnected && app.MirrorKind == BoardKind.Esp32C3 ? Visibility.Collapsed : Visibility.Visible;
+        if (Mirror.Kind != app.MirrorKind) Mirror.SetKind(app.MirrorKind);
+        if (!full || app.MirrorFrame is null)
+            Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck" : full ? "" : app.MirrorAvailable ? null : "Waiting for the board...";
+    }
+
+    private void ShowMirrorFrame()
+    {
+        if (app.MirrorFrame is { } frame && app.FullMirror)
+        {
+            Mirror.Show(app.MirrorKind, frame);
+            Mirror.Placeholder = null;
+        }
+        else UpdateMirror();
+    }
+
+    private void OnMirrorGesture(MirrorGesture g)
+    {
+        switch (g)
+        {
+            case MirrorTap t: app.Tap(t.X, t.Y); break;
+            case MirrorSwipe sw: app.Swipe(sw.Left); break;
+        }
+    }
+
+    /// <summary>The device view at 1:1 as a PNG (smoke tests: compare with the board).</summary>
+    public bool SaveMirror(string path)
+    {
+        if (app.MirrorFrame is not { } frame || !app.FullMirror) return false;
+        var (w, h) = NativeUi.Size(app.MirrorKind);
+        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr565, null, frame, w * 2);
+        var png = new PngBitmapEncoder();
+        png.Frames.Add(BitmapFrame.Create(bmp));
+        using var f = File.Create(path);
+        png.Save(f);
+        return true;
     }
 
     private void OnSwipeLeft(object sender, RoutedEventArgs e) => app.Swipe(left: true);

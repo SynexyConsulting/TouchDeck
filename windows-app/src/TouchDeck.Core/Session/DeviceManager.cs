@@ -97,6 +97,7 @@ public sealed class DeviceManager(
         var cts = new CancellationTokenSource();
         lock (gate)
         {
+            session.Kind = device.Kind;
             Session = session;
             sessionStop = cts;
             SessionStarted?.Invoke(session);

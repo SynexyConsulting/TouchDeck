@@ -111,7 +111,7 @@ public class StateProtocolTests
     public void Parses_state()
     {
         var m = BoardLine.Parse("STATE jig=1 letter=W scale=2 phase=0 x=412 y=733 clip=58 paste=0");
-        Assert.Equal(new StateReport(true, 'W', 2, 0, 412, 733, 58, false), m);
+        Assert.Equal(new StateReport(true, 'W', 2, 0, 412, 733, 58, false), ((StateReport)m) with { Fields = StateFields.Empty });
     }
 
     [Fact]

@@ -56,6 +56,8 @@ public sealed class DeviceSession(
     private bool handshaken;
 
     public Injector Injector => injector;
+    /// <summary>Which board this is (set by <see cref="DeviceManager"/> before the session starts).</summary>
+    public BoardKind Kind { get; set; }
     public FirmwareInfo? Firmware { get; private set; }
 
     /// <summary>Poll DBG instead of PING, feeding <see cref="Diagnostics"/>.</summary>
@@ -67,6 +69,11 @@ public sealed class DeviceSession(
     public event Action<IReadOnlyDictionary<string, string>>? Diagnostics;
     /// <summary>Live board state (firmware 1.6.0+, after WATCH 1).</summary>
     public event Action<StateReport>? StateReceived;
+
+    /// <summary>Device mirror string fields (TEXT, firmware 1.7.0+).</summary>
+    public event Action<TextField>? TextReceived;
+    /// <summary>Device mirror clip text (CLIPTEXT, firmware 1.7.0+).</summary>
+    public event Action<ClipText>? ClipTextReceived;
 
     public StateReport? LastState { get; private set; }
 
@@ -125,7 +132,7 @@ public sealed class DeviceSession(
         while (requests.TryDequeue(out var request)) request();
 
         var line = held.Count > 0 ? held.Dequeue() : transport.ReadLine(wait);
-        if (line is not null) Handle(BoardLine.Parse(line.Trim()));
+        if (line is not null) Handle(BoardLine.Parse(line.TrimEnd('\r', '\n')));
 
         now = clock.Now;
         if (now - lastCapsPoll >= CapsPollEvery)
@@ -164,6 +171,16 @@ public sealed class DeviceSession(
     /// <summary>Press the board's BOOT button (stopwatch on the watch, scale on the jiggler).</summary>
     public void PressButton(bool longPress) => requests.Enqueue(() => transport.WriteLine(longPress ? "BTN LONG" : "BTN"));
 
+    /// <summary>A tap on the board's touch panel at (x, y), device pixels (the device mirror).</summary>
+    public void Tap(int x, int y) => requests.Enqueue(() => transport.WriteLine(
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"TAP {x} {y}")));
+
+    /// <summary>ANIM 1|0: the jiggler page animates its dot without sending HID (demos, tests).</summary>
+    public void Animate(bool on) => requests.Enqueue(() => transport.WriteLine(on ? "ANIM 1" : "ANIM 0"));
+
+    /// <summary>Any protocol line, sent on the session thread (tests).</summary>
+    internal void SendRaw(string line) => requests.Enqueue(() => transport.WriteLine(line));
+
     /// <summary>Turn the board's jiggler on or off (saved on the board).</summary>
     public void SetJiggler(bool on) => requests.Enqueue(() => transport.WriteLine(on ? "JIG ON" : "JIG OFF"));
 
@@ -184,6 +201,12 @@ public sealed class DeviceSession(
                 LastState = st;
                 MirrorSupported = true;
                 StateReceived?.Invoke(st);
+                break;
+            case TextField t:
+                TextReceived?.Invoke(t);
+                break;
+            case ClipText c:
+                ClipTextReceived?.Invoke(c);
                 break;
             case CopyRequest:
                 var (text, source) = selection.Grab();
@@ -221,7 +244,7 @@ public sealed class DeviceSession(
         {
             var line = transport.ReadLine(TimeSpan.FromMilliseconds(50));
             if (line is null) continue;
-            if (BoardLine.Parse(line.Trim()) is T t)
+            if (BoardLine.Parse(line.TrimEnd('\r', '\n')) is T t)
             {
                 reply = t;
                 return true;
