@@ -1,8 +1,12 @@
 #pragma once
 #include "touch.h"
+#include "ui_state.h"
 
 // Core1 entry point: renders whichever screen is active and pushes frames.
 void ui_core1_main(void);
+// Samples the live state (app) for drawing or for the mirror sync; with_clip = 0
+// leaves the clip text out. Safe from either core.
+void ui_state_fill(ui_state_t *s, int with_clip);
 
 // Hit areas and layout, shared by drawing (core1) and touch handling (core0).
 #define TITLE_Y    42          // page titles (centre of capitals)

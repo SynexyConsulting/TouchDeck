@@ -13,10 +13,17 @@
 //               JIG ON|OFF, JIG SCALE n   jiggler on/off, scale index 0-2 (saved)
 //               CLIP CLEAR             empty the clip (ignored when empty or pasting)
 //               JIG MENU               start the right-click/Esc sequence now (tests)
+//               FBCRC x y w h          reply LOG fbcrc <hex>: CRC-32 of that framebuffer region
+//                                      (tests: the app's mirror draws the same pixels)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
-//               STATE jig= letter= scale= phase= x= y= clip= paste=   after WATCH 1: on any
-//                                      change, dot position (letter-box units) at most every 100 ms
+//   After WATCH 1, the device mirror (ui_sync.c, docs/superpowers/specs/2026-09-29-device-mirror-design.md):
+//   everything once, then on change.
+//               STATE jig= letter= scale= phase= x= y= clip= paste=   (the 1.6.0 fields, then 1.7.0's)
+//                     page= sub= t= pc= link= mute= timer= cst= ppos= paused= demo= next= up= menus=
+//                     mode= bta= bts= btr= left= pk=     the dot (x, y) at most every 50 ms
+//               TEXT msg|src <text>    the transient message ("" = none), the clip's source
+//               CLIPTEXT <escaped>     the clip's first 1024 bytes (\\ \n \r \t \xHH escapes)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +35,10 @@
 #include "jig_paths.h"
 #include "jiggler.h"
 #include "settings.h"
+#include "ui.h"
+#include "ui_sync.h"
+#include "gfx.h"
+#include "board.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -80,27 +91,59 @@ void usb_send_line(const char *s) {
     tud_cdc_write_flush();
 }
 
-// STATE reporting for the app (WATCH 1).
-static bool watching;
-static char state_head[64];          // STATE without x/y/clip/paste, as last sent
-static int state_clip = -1, state_paste = -1;
-static uint32_t state_ms;
+// The app's device mirror (WATCH 1): STATE/TEXT/CLIPTEXT lines from a sample
+// of the UI state, checked every 10 ms and sent on change (ui_sync.c). The dot
+// alone is sent at most every 50 ms, the device's own animation rate.
+static bool watching, sync_force;
+static ui_state_t sync_last, sync_cur;          // static: 1.2 KB is too much for core0's stack
+static uint32_t sync_check_ms, sync_state_ms, sync_clip_seq;
+static char sync_line[UI_SYNC_CLIP_LINE];
 
 void usb_state_poll(void) {
-    if (!watching || !tud_cdc_connected()) return;
-    char head[64], line[112];
-    snprintf(head, sizeof head, "STATE jig=%d letter=%c scale=%d phase=%d", app.jig_on ? 1 : 0,
-             JIG_PATHS[app.jig_letter].name, app.jig_scale_idx, app.jig_phase);
-    int paste = app.clip_state == CLIP_PASTING, clip = app.clip_len;
-    bool moving = (app.jig_on && !app.jig_paused) || app.anim_demo;
-    bool changed = strcmp(head, state_head) != 0 || clip != state_clip || paste != state_paste;
-    if (!changed && !(moving && now_ms() - state_ms >= 100)) return;
-    snprintf(line, sizeof line, "%s x=%d y=%d clip=%d paste=%d", head, (int)app.jig_x, (int)app.jig_y, clip, paste);
-    usb_send_line(line);
-    strcpy(state_head, head);
-    state_clip = clip;
-    state_paste = paste;
-    state_ms = now_ms();
+    if (!tud_cdc_connected()) watching = false;   // the app closed the port: it sends WATCH 1 again
+    if (!watching) return;
+    uint32_t now = now_ms();
+    if (!sync_force && now - sync_check_ms < 10) return;
+    sync_check_ms = now;
+    ui_state_fill(&sync_cur, 0);
+    int d = sync_force ? UI_SYNC_ALL : ui_sync_diff(&sync_last, &sync_cur);
+    if (d & UI_SYNC_MSG) {
+        ui_sync_text_line("msg", sync_cur.msg, sync_line, sizeof sync_line);
+        usb_send_line(sync_line);
+        memcpy(sync_last.msg, sync_cur.msg, sizeof sync_last.msg);
+    }
+    if (d & UI_SYNC_SRC) {
+        ui_sync_text_line("src", sync_cur.clip_src, sync_line, sizeof sync_line);
+        usb_send_line(sync_line);
+        memcpy(sync_last.clip_src, sync_cur.clip_src, sizeof sync_last.clip_src);
+    }
+    if (sync_force || app.clip_seq != sync_clip_seq) {
+        mutex_enter_blocking(&clip_mtx);
+        sync_clip_seq = app.clip_seq;
+        ui_sync_clip_line(app.clip, app.clip_len, sync_line, sizeof sync_line);
+        mutex_exit(&clip_mtx);
+        usb_send_line(sync_line);
+    }
+    if ((d & UI_SYNC_FIELDS) || ((d & UI_SYNC_DOT) && now - sync_state_ms >= 50)) {
+        ui_sync_state_line(&sync_cur, sync_line, sizeof sync_line);
+        usb_send_line(sync_line);
+        sync_last = sync_cur;
+        sync_state_ms = now;
+    }
+    sync_force = false;
+}
+
+// CRC-32 (zlib's) of a framebuffer region, pixels as little-endian RGB565 bytes, row by row.
+static uint32_t fb_crc32(int x, int y, int w, int h) {
+    uint32_t crc = 0xFFFFFFFFu;
+    for (int r = y; r < y + h; r++) {
+        const uint8_t *p = (const uint8_t *)&fb[r * LCD_W + x];
+        for (int i = 0; i < w * 2; i++) {
+            crc ^= p[i];
+            for (int k = 0; k < 8; k++) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1)));
+        }
+    }
+    return ~crc;
 }
 
 static void commit_clip(void) {
@@ -112,6 +155,7 @@ static void commit_clip(void) {
     memcpy(app.clip, rx_clip, rx_got);
     app.clip[rx_got] = 0;
     app.clip_len = rx_got;
+    app.clip_seq++;
     strcpy(app.clip_src, rx_src);
     mutex_exit(&clip_mtx);
     app.clip_state = CLIP_IDLE;
@@ -162,7 +206,7 @@ static void handle_line(char *s) {
         if (app.anim_demo) { extern void jiggler_demo_begin(void); jiggler_demo_begin(); }
     } else if (!strcmp(s, "WATCH 1") || !strcmp(s, "WATCH 0")) {
         watching = s[6] == '1';
-        state_head[0] = 0;                    // report once right away
+        sync_force = watching;                // everything once, right away
     } else if (!strcmp(s, "JIG MENU")) {                            // tests: menu sequence now
         jiggler_menu_now();
     } else if (!strcmp(s, "JIG ON") || !strcmp(s, "JIG OFF")) {
@@ -177,6 +221,14 @@ static void handle_line(char *s) {
         }
     } else if (!strcmp(s, "CLIP CLEAR")) {
         clip_clear();
+    } else if (!strncmp(s, "FBCRC ", 6)) {                         // tests: mirror == device
+        int x, y, w, h;
+        if (sscanf(s + 6, "%d %d %d %d", &x, &y, &w, &h) == 4 && x >= 0 && y >= 0 && w > 0 && h > 0 &&
+            x + w <= LCD_W && y + h <= LCD_H) {
+            char m[32];
+            snprintf(m, sizeof m, "LOG fbcrc %08lx", (unsigned long)fb_crc32(x, y, w, h));
+            usb_send_line(m);
+        }
     } else if (!strcmp(s, "BOOT")) {
         reset_usb_boot(0, 0);
     }
@@ -211,7 +263,10 @@ void usb_io_poll(void) {
     }
     bool h = tud_cdc_connected() && helper_seen_ever &&
              (now_ms() - helper_seen_ms) < HELPER_TIMEOUT_MS;
-    if (h != app.helper) app.helper = h;
+    if (h != app.helper) {             // the watch shows "PC" while the app talks to us
+        app.helper = h;
+        app_redraw();
+    }
 }
 
 // Opening the port at 1200 baud is the Arduino-style "reboot to bootloader".

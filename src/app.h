@@ -3,15 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "pico/mutex.h"
+#include "ui_pages.h"      // SCR_*, and via ui_state.h CLIP_*, JIG_* phases, JIG_SCALES
 
 #define CLIP_MAX 8192
 
-enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_COUNT };
-enum { CLIP_IDLE, CLIP_COPYING, CLIP_PASTING };
-enum { JIG_MOVING, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
-
-#define JIG_SCALE_COUNT 3
-static const float JIG_SCALES[JIG_SCALE_COUNT] = {1.0f, 1.5f, 2.0f};
 
 typedef struct {
     volatile int screen;
@@ -32,6 +27,7 @@ typedef struct {
     // Clipboard. clip/clip_src are guarded by clip_mtx.
     char clip[CLIP_MAX + 1];
     volatile int clip_len;
+    volatile uint32_t clip_seq;     // bumped whenever the clip's text changes (mirror sync)
     char clip_src[12];
     volatile int clip_state;
     volatile int paste_pos;
