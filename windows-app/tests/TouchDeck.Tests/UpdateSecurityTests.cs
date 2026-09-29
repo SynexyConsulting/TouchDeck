@@ -187,3 +187,22 @@ public sealed class UpdateFolderTests : IDisposable
         Directory.Delete(root, true);
     }
 }
+
+/// <summary>The live channel, read with the app's own code (skipped when offline).</summary>
+public sealed class LiveFeedTests
+{
+    [SkippableFact]
+    public async Task The_published_feed_is_signed_and_offers_nothing_older()
+    {
+        UpdateFeed? feed;
+        try { feed = await new UpdateClient(UpdateSource.Official).FetchFeedAsync(CancellationToken.None); }
+        catch (UpdateFeedException e) when (e.Message.StartsWith("Couldn't reach") || e.Message.Contains("timed out"))
+        { Skip.If(true, "offline: " + e.Message); return; }
+        Skip.If(feed is null, "nothing published yet");
+        Assert.True(feed!.WindowsApp!.Version >= new Version(1, 2, 0));
+        Assert.Contains(feed.Firmware, f => f.Board == "rp2040-169");
+        // An installed copy of the published version sees nothing to install.
+        var choice = UpdateSelector.Select(feed, feed.WindowsApp.Version, new TouchDeck.Core.Session.FirmwareInfo("rp2040-169", "1.6.0", ""));
+        Assert.Null(choice.App);
+    }
+}
