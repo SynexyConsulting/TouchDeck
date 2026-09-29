@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
 # Toolchain from the VS Code Raspberry Pi Pico extension (~/.pico-sdk) by default. CI (and any
-# other machine) sets PICO_SDK_PATH in the environment and uses the system arm-none-eabi-gcc.
+# other machine) sets PICO_SDK_PATH in the environment and uses the arm-none-eabi-gcc on PATH.
+# Use Arm GNU Toolchain 14.2.Rel1 (as CI does): distro GCC 13 builds drew the UI 10-30% slower.
 if(DEFINED ENV{PICO_SDK_PATH})
     set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
 else()

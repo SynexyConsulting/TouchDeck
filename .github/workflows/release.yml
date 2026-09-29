@@ -35,8 +35,20 @@ jobs:
           have=$(sed -n 's/^#define FW_VERSION *"\(.*\)".*/\1/p' src/version.h)
           [ "$want" = "$have" ] || { echo "tag $want != FW_VERSION $have"; exit 1; }
 
-      - name: Toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi cmake ninja-build
+      # The same Arm GNU Toolchain 14.2.Rel1 as the VS Code Pico extension used for development and
+      # hardware testing. Ubuntu's gcc-arm-none-eabi (GCC 13) built a firmware that drew 10-15% slower
+      # on average and ~30% slower in the worst watch frame (42 vs 29-33 ms). Checksum from Arm's .sha256asc.
+      - name: Toolchain (Arm GNU 14.2.Rel1, pinned)
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build
+          f=arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz
+          curl -fsSL -o "$RUNNER_TEMP/$f" "https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/$f"
+          echo "62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi/bin" >> "$GITHUB_PATH"
+
+      - name: Check the compiler
+        run: arm-none-eabi-gcc --version | head -1 | grep -F "14.2.1"
 
       - name: Pico SDK 2.1.1
         run: git clone --depth 1 --branch 2.1.1 --recurse-submodules --shallow-submodules https://github.com/raspberrypi/pico-sdk.git "$RUNNER_TEMP/pico-sdk"
