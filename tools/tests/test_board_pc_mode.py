@@ -71,7 +71,7 @@ def test_jiggler_in_pc_mode_sends_mouse_reports(board):
 def test_paste_in_pc_mode_types_key_reports(board):
     board.goto(0)
     board.s.write(b"CLIP 3 cli\nHi\n"); board.pump(0.3)
-    board.take(); board.send("TAP 160 186"); board.pump(1.0)
+    board.take(); board.send("TAP 160 160"); board.pump(1.0)       # Paste (buttons at y 140..180)
     keys = [l for l in board.take() if l.startswith("K ")]
     assert keys == ["K 02 0B", "K 00 00", "K 00 0C", "K 00 00", "K 00 28", "K 00 00"]
 
@@ -82,13 +82,14 @@ def test_bluetooth_mode_refused_while_unpaired(board):
     board.send("MODE BT"); board.pump(0.3)
     assert board.field("mode") == "0"
 
-@pytest.mark.skip(reason="ESP32-C3 BOOT button not wired into the firmware yet (button.cpp is WIP)")
-def test_boot_button_cycles_jiggler_scale(board):
+SCALE_PILL = "TAP 32 120"                               # left of the letter
+
+def test_scale_pill_cycles_jiggler_scale(board):
     board.goto(1)
     order = ["1.0", "1.5", "2.0"]
     seen = [board.field("jscale")]
     for _ in range(3):
-        board.send("BTN"); board.pump(0.2)
+        board.send(SCALE_PILL); board.pump(0.2)
         seen.append(board.field("jscale"))
     i = order.index(seen[0])
     assert seen == [order[(i + k) % 3] for k in range(4)]
@@ -98,19 +99,82 @@ def _mean_step(board, secs):
     steps = [l.split() for l in board.take() if l.startswith("M 00 ")]
     return sum(abs(int(dx)) + abs(int(dy)) for _, _, dx, dy in steps) / max(1, len(steps))
 
-@pytest.mark.skip(reason="ESP32-C3 BOOT button not wired into the firmware yet (button.cpp is WIP)")
 def test_jiggler_scale_widens_the_movement(board):
     board.goto(1)
     while board.field("jscale") != "1.0":
-        board.send("BTN"); board.pump(0.2)
+        board.send(SCALE_PILL); board.pump(0.2)
     board.send("TAP 120 115"); board.pump(1.5)          # jiggler on at 1x, let it settle
     small = _mean_step(board, 2.0)
-    board.send("BTN"); board.send("BTN"); board.pump(1.5)   # -> 2x, allow the easing
+    board.send(SCALE_PILL); board.send(SCALE_PILL); board.pump(1.5)   # -> 2x, allow the easing
     large = _mean_step(board, 2.0)
-    board.send("BTN"); board.pump(0.2)                  # back to 1x
+    board.send(SCALE_PILL); board.pump(0.2)             # back to 1x
     assert large > 1.6 * small
 
 def test_ver_reports_board_and_firmware_version(board):
     board.take(); board.send("VER"); board.pump(0.4)
     replies = [l for l in board.take() if l.startswith("VERSION ")]
     assert replies and replies[-1].split()[1] == "esp32c3-128"
+
+
+# ---------- app mirror protocol (firmware 1.6.0) ----------
+
+def state_lines(board, secs):
+    board.take(); board.pump(secs)
+    return [l for l in board.take() if l.startswith("STATE ")]
+
+def fields(line):
+    return dict(kv.split("=", 1) for kv in line.split()[1:])
+
+def latest_state(board):
+    """Forces a fresh report (WATCH 1 re-sends once) and returns its fields."""
+    board.send("WATCH 1")
+    return fields(state_lines(board, 0.3)[-1])
+
+def test_watch_streams_state(board):
+    board.send("WATCH 1")
+    lines = state_lines(board, 0.5)
+    assert lines, "no STATE after WATCH 1"
+    f = fields(lines[-1])
+    assert set(f) >= {"jig", "letter", "scale", "phase", "x", "y", "clip", "paste"}
+    assert f["letter"] in "OWMNZXCVHJLBGD"
+    board.send("WATCH 0"); board.pump(0.2)
+    assert not state_lines(board, 0.6), "STATE kept coming after WATCH 0"
+
+def test_anim_demo_moves_the_dot_in_state(board):
+    board.send("WATCH 1"); board.send("ANIM 1")
+    try:
+        pts = {(fields(l)["x"], fields(l)["y"]) for l in state_lines(board, 1.2)}
+        assert len(pts) >= 5, "dot position did not stream"
+    finally:
+        board.send("ANIM 0"); board.send("WATCH 0"); board.pump(0.2)
+
+def test_jig_scale_command(board):
+    start = int(latest_state(board)["scale"])
+    try:
+        for want in (2, 0, 1):
+            board.send(f"JIG SCALE {want}"); board.pump(0.2)
+            assert board.field("jscale") == ["1.0", "1.5", "2.0"][want]
+    finally:
+        board.send(f"JIG SCALE {start}"); board.send("WATCH 0"); board.pump(0.2)
+
+def test_jig_on_off_command(board):
+    board.send("JIG ON"); board.pump(0.3)
+    assert board.field("jig") == "1"
+    board.send("JIG OFF"); board.pump(0.2)
+    assert board.field("jig") == "0"
+
+def test_clip_clear_ignored_while_empty(board):
+    board.s.write(b"CLIP 5 test" + bytes([10]) + b"hello"); board.pump(0.3)
+    assert latest_state(board)["clip"] == "5"
+    board.send("CLIP CLEAR"); board.pump(0.3)
+    assert latest_state(board)["clip"] == "0"
+    board.send("CLIP CLEAR"); board.pump(0.3)
+    assert latest_state(board)["clip"] == "0"
+    board.send("WATCH 0"); board.pump(0.2)
+
+def test_trash_tap_clears_the_clip(board):
+    board.goto(0)
+    board.s.write(b"CLIP 5 test" + bytes([10]) + b"hello"); board.pump(0.3)
+    assert board.field("clip") == "5"
+    board.send("TAP 178 42"); board.pump(0.3)
+    assert board.field("clip") == "0"

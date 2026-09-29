@@ -70,6 +70,14 @@ void display_push() {
     lcd.pushImageDMA(0, 0, LCD_W, LCD_H, (const lgfx::rgb565_t *)fb);
 }
 
+// Push just a rectangle of fb (partial frames: the jiggler's dot and status lines).
+void display_push_rect(int x, int y, int w, int h) {
+    lcd.startWrite();
+    lcd.setAddrWindow(x, y, w, h);
+    for (int r = 0; r < h; r++) lcd.writePixels((const lgfx::rgb565_t *)(fb + (y + r) * LCD_W + x), w);
+    lcd.endWrite();
+}
+
 void display_wait() {
     lcd.waitDMA();
     lcd.endWrite();

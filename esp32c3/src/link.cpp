@@ -7,8 +7,14 @@
 //               MODE PC|BT             set the output mode (scripting/tests)
 //               TAP x y | SWIPE L|R    inject a touch event (scripting/tests)
 //               TEXTW <font> <sp> <t>  reply LOG textw <px> (tests: C vs fontgen widths)
+//               ANIM 1|0               walk a jiggler letter on screen without HID (tests)
+//               WATCH 1|0              start/stop STATE reports (the Windows app's mirror)
+//               JIG ON|OFF, JIG SCALE n   jiggler on/off, scale index 0-2 (saved)
+//               CLIP CLEAR             empty the clip (ignored when empty or pasting)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
+//               STATE jig= letter= scale= phase= x= y= clip= paste=   after WATCH 1: on any
+//                                      change, dot position (letter-box units) at most every 100 ms
 //               K <mod> <usage>        keyboard report, PC output mode (hex)
 //               M <btn> <dx> <dy>      mouse report, PC output mode (hex, dec, dec)
 #include <Arduino.h>
@@ -18,6 +24,8 @@
 #include "touch.h"
 #include "gfx.h"
 #include "version.h"
+#include "jig_paths.h"
+#include "jiggler.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -42,6 +50,32 @@ void link_send_line(const char *s) {
     if (!app.helper) return;
     Serial.print(s);
     Serial.print('\n');
+}
+
+extern void jig_set_scale(int idx);
+extern void jig_set_on(bool on);
+
+// STATE reporting for the app (WATCH 1).
+static bool watching;
+static char state_head[64];          // STATE without x/y/clip/paste, as last sent
+static int state_clip = -1, state_paste = -1;
+static uint32_t state_ms;
+
+void link_state_poll() {
+    if (!watching || !app.helper) return;
+    char head[64], out[112];
+    snprintf(head, sizeof head, "STATE jig=%d letter=%c scale=%d phase=%d", app.jig_on ? 1 : 0,
+             JIG_PATHS[app.jig_letter].name, app.jig_scale_idx, app.jig_phase);
+    int paste = app.clip_state == CLIP_PASTING, clip = app.clip_len;
+    bool moving = (app.jig_on && !app.jig_paused) || app.anim_demo;
+    bool changed = strcmp(head, state_head) != 0 || clip != state_clip || paste != state_paste;
+    if (!changed && !(moving && now_ms() - state_ms >= 100)) return;
+    snprintf(out, sizeof out, "%s x=%d y=%d clip=%d paste=%d", head, (int)app.jig_x, (int)app.jig_y, clip, paste);
+    link_send_line(out);
+    strcpy(state_head, head);
+    state_clip = clip;
+    state_paste = paste;
+    state_ms = now_ms();
 }
 
 static void commit_clip() {
@@ -106,6 +140,20 @@ static void handle_line(char *s) {
                     snprintf(r, sizeof r, "LOG textw %d", gfx_text_aa_width(s + 6 + used, e.f, sp));
                     link_send_line(r);
                 }
+    } else if (!strncmp(s, "ANIM ", 5)) {
+        app.anim_demo = s[5] == '1';
+        if (app.anim_demo) jiggler_demo_begin();
+        app_redraw();
+    } else if (!strcmp(s, "WATCH 1") || !strcmp(s, "WATCH 0")) {
+        watching = s[6] == '1';
+        state_head[0] = 0;                    // report once right away
+    } else if (!strcmp(s, "JIG ON") || !strcmp(s, "JIG OFF")) {
+        jig_set_on(s[5] == 'N');
+    } else if (!strncmp(s, "JIG SCALE ", 10)) {
+        int n = s[10] - '0';
+        if (n >= 0 && n < JIG_SCALE_COUNT && !s[11]) jig_set_scale(n);
+    } else if (!strcmp(s, "CLIP CLEAR")) {
+        clip_clear();
     } else if (!strcmp(s, "VER")) {
         link_send_line("VERSION " FW_BOARD " " FW_VERSION " " __DATE__);
     } else if (!strcmp(s, "DBG")) {

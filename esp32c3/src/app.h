@@ -8,7 +8,10 @@
 
 enum { SCR_CLIP, SCR_JIG, SCR_SETTINGS, SCR_COUNT };
 enum { CLIP_IDLE, CLIP_COPYING, CLIP_PASTING };
-enum { JIG_CIRCLE, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
+
+#define JIG_SCALE_COUNT 3
+static const float JIG_SCALES[JIG_SCALE_COUNT] = {1.0f, 1.5f, 2.0f};
+enum { JIG_MOVING, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
 
 struct app_t {
     volatile int screen;
@@ -32,7 +35,10 @@ struct app_t {
     volatile bool jig_on;
     volatile bool jig_paused;       // held while a paste is typing
     volatile int jig_phase;
-    volatile float jig_angle, jig_radius;
+    volatile int jig_letter;        // index into JIG_PATHS (jig_paths.h)
+    volatile float jig_x, jig_y;    // dot position in letter-box units (0..1000)
+    volatile int jig_scale_idx;     // 0..2 -> JIG_SCALES[] (scale pill), Preferences "jscale"
+    volatile bool anim_demo;        // ANIM 1: animate the jiggler page without sending HID
     volatile uint32_t jig_next_menu_ms;
     volatile uint32_t jig_menus;
     volatile uint32_t jig_started_ms;
@@ -43,4 +49,6 @@ extern SemaphoreHandle_t clip_mtx;
 
 inline void app_redraw() { app.redraw_seq++; }
 void app_message(const char *text);
+void clip_clear();         // empty the clip (ignored when empty or pasting)
+void jig_cycle_scale();    // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
 inline uint32_t now_ms() { return millis(); }
