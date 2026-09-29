@@ -194,15 +194,18 @@ The mirror test found one real device bug. When the app connected or left, the R
 
 | | 1.6.0 (main) | 1.7.0 | 1.7.0 streaming the mirror (`--watch`) |
 |---|---|---|---|
-| Jiggler animation (`ANIM 1`) | 19.77 / 19.80 fps | 19.83 / 19.89 fps | 19.85 fps |
+| Jiggler animation (`ANIM 1`) | 19.77 / 19.80 fps | 19.83 / 19.89 fps | 19.85 / 19.83 fps |
 | Watch, per-second frames | 1.11 fps | 1.11 fps | 1.11 fps |
-| Full redraw, clipboard | 110.0-110.8 ms | 111.9 ms | 112.0 ms |
+| Full redraw, clipboard | 110.0-110.8 ms | 111.9 ms | 112.0-113.8 ms |
 | Full redraw, jiggler letter O | 542.0 ms | 544.1 ms | 544.8 ms |
 | Full redraw, jiggler letter D | 368.9 ms | 370.7 ms | |
-| Full redraw, watch | 229.9-232.5 ms | 233.1-234.5 ms | 235.6 ms |
+| Full redraw, watch | 229.9-232.5 ms | 233.1-234.5 ms | 235.6-237.2 ms |
+| Control: 1.6.0 + one unused function | watch 234.9, clipboard 110.5, letter O 542.4 ms | | |
+
+The last 1.7.0 row was measured after the review fixes. Those only changed core0 code (`usb_io.c`), yet the core1 full redraws moved by about 2 ms again, which shows the layout effect.
 
 - **The frame rates are unchanged**, with and without the mirror stream.
-- **A full redraw costs 1-2 ms (0.4-1.7%) more**, which isn't visible.
+- **A full redraw measures 0.4-3.5% slower (1-4 ms)**, which isn't visible. This is a page change, not a frame rate.
   - `ui_state_fill` was measured on the device at 20-34 µs per frame, so the sampling itself isn't the cause.
   - Code and data layout in the RP2040's 16 KB XIP flash cache moves these numbers by that much. Firmware 1.6.0 with one unused 64-word function added (a pure layout change) drew the watch 5 ms slower and the clipboard 0.5 ms slower.
 - **Streaming the mirror (`WATCH 1`) adds at most 0.7 ms per full redraw.** That is the core0 check every 10 ms plus the USB writes.

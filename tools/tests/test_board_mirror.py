@@ -101,6 +101,8 @@ def test_empty_clipboard_and_message(mirror):
 
 def test_jiggler_page_is_pixel_identical_for_each_scale(mirror):
     settle(mirror, 2)
+    if mirror.st.jig_on:
+        pytest.skip("the jiggler is on (its dot and countdown move); not switching it off")
     start = mirror.st.jig_scale
     try:
         for i in range(3):

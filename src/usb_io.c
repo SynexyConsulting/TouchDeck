@@ -24,6 +24,7 @@
 //                     mode= bta= bts= btr= left= pk=     the dot (x, y) at most every 50 ms
 //               TEXT msg|src <text>    the transient message ("" = none), the clip's source
 //               CLIPTEXT <escaped>     the clip's first 1024 bytes (\\ \n \r \t \xHH escapes)
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,24 +72,25 @@ bool usb_mouse(uint8_t buttons, int8_t dx, int8_t dy) {
 // Sends the whole line: a line can be longer than the free TX FIFO (DBG is ~300
 // bytes), so write what fits, flush, and let USB drain it. Bounded, so a host
 // that stops reading can't stall core0.
-static void write_all(const char *p, size_t n, uint32_t give_up) {
+static bool write_all(const char *p, size_t n, uint32_t give_up) {
     while (n) {
         uint32_t w = tud_cdc_write(p, n);
         p += w;
         n -= w;
         if (!n) break;
         tud_cdc_write_flush();
-        if ((int32_t)(now_ms() - give_up) >= 0) return;
+        if ((int32_t)(now_ms() - give_up) >= 0) return false;
         tud_task();
     }
+    return true;
 }
 
-void usb_send_line(const char *s) {
-    if (!tud_cdc_connected()) return;
+bool usb_send_line(const char *s) {
+    if (!tud_cdc_connected()) return false;
     uint32_t give_up = now_ms() + 20;
-    write_all(s, strlen(s), give_up);
-    write_all("\n", 1, give_up);
+    bool ok = write_all(s, strlen(s), give_up) && write_all("\n", 1, give_up);
     tud_cdc_write_flush();
+    return ok;
 }
 
 // The app's device mirror (WATCH 1): STATE/TEXT/CLIPTEXT lines from a sample
@@ -99,38 +101,44 @@ static ui_state_t sync_last, sync_cur;          // static: 1.2 KB is too much fo
 static uint32_t sync_check_ms, sync_state_ms, sync_clip_seq;
 static char sync_line[UI_SYNC_CLIP_LINE];
 
+static bool sync_text(int d, int bit, const char *key, char *last, const char *cur, size_t n) {
+    if (!(d & bit)) return true;
+    ui_sync_text_line(key, cur, sync_line, sizeof sync_line);
+    if (!usb_send_line(sync_line)) return false;
+    memcpy(last, cur, n);
+    return true;
+}
+
 void usb_state_poll(void) {
     if (!tud_cdc_connected()) watching = false;   // the app closed the port: it sends WATCH 1 again
     if (!watching) return;
     uint32_t now = now_ms();
-    if (!sync_force && now - sync_check_ms < 10) return;
+    if (now - sync_check_ms < 10) return;
     sync_check_ms = now;
+    if (tud_cdc_write_available() < 64) return;   // the host isn't reading: try later, don't stall core0
     ui_state_fill(&sync_cur, 0);
     int d = sync_force ? UI_SYNC_ALL : ui_sync_diff(&sync_last, &sync_cur);
-    if (d & UI_SYNC_MSG) {
-        ui_sync_text_line("msg", sync_cur.msg, sync_line, sizeof sync_line);
-        usb_send_line(sync_line);
-        memcpy(sync_last.msg, sync_cur.msg, sizeof sync_last.msg);
-    }
-    if (d & UI_SYNC_SRC) {
-        ui_sync_text_line("src", sync_cur.clip_src, sync_line, sizeof sync_line);
-        usb_send_line(sync_line);
-        memcpy(sync_last.clip_src, sync_cur.clip_src, sizeof sync_last.clip_src);
-    }
+    // Each part counts as sent only once its whole line is out; anything that
+    // didn't make it still differs from sync_last and goes again next time.
+    bool ok = true;
+    ok &= sync_text(d, UI_SYNC_MSG, "msg", sync_last.msg, sync_cur.msg, sizeof sync_last.msg);
+    ok &= sync_text(d, UI_SYNC_SRC, "src", sync_last.clip_src, sync_cur.clip_src, sizeof sync_last.clip_src);
     if (sync_force || app.clip_seq != sync_clip_seq) {
         mutex_enter_blocking(&clip_mtx);
-        sync_clip_seq = app.clip_seq;
+        uint32_t seq = app.clip_seq;
         ui_sync_clip_line(app.clip, app.clip_len, sync_line, sizeof sync_line);
         mutex_exit(&clip_mtx);
-        usb_send_line(sync_line);
+        if (usb_send_line(sync_line)) sync_clip_seq = seq;
+        else ok = false;
     }
     if ((d & UI_SYNC_FIELDS) || ((d & UI_SYNC_DOT) && now - sync_state_ms >= 50)) {
         ui_sync_state_line(&sync_cur, sync_line, sizeof sync_line);
-        usb_send_line(sync_line);
-        sync_last = sync_cur;
-        sync_state_ms = now;
+        if (usb_send_line(sync_line)) {
+            memcpy(&sync_last, &sync_cur, offsetof(ui_state_t, clip_src));   // the numbers; strings go with TEXT
+            sync_state_ms = now;
+        } else ok = false;
     }
-    sync_force = false;
+    if (ok) sync_force = false;                   // after WATCH 1, until everything went out once
 }
 
 // CRC-32 (zlib's) of a framebuffer region, pixels as little-endian RGB565 bytes, row by row.

@@ -223,7 +223,9 @@ public partial class MainWindow : Window
         BootButtons.Visibility = app.IsConnected && app.MirrorKind == BoardKind.Esp32C3 ? Visibility.Collapsed : Visibility.Visible;
         if (Mirror.Kind != app.MirrorKind) Mirror.SetKind(app.MirrorKind);
         if (!full || app.MirrorFrame is null)
-            Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck" : full ? "" : app.MirrorAvailable ? null : "Waiting for the board...";
+            Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck"
+                : full || !string.IsNullOrEmpty(app.MirrorFallbackText) ? ""     // the note below says why
+                : app.MirrorAvailable ? null : "Waiting for the board...";
     }
 
     private void ShowMirrorFrame()

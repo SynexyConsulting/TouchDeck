@@ -146,6 +146,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             _ => (Health.Idle, "Looking for a Touch Deck..."),
         };
         if (!DiagnosticsEnabled || !IsConnected) DiagnosticItems.Clear();
+        if (!IsConnected) ResetMirror();         // the board's screen goes with it, at once
         RefreshUpdateOffer();
 
         if (s.Status == was.Status && s.Device == was.Device) return;
@@ -277,13 +278,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (!IsConnected)
             {
                 // A new board must not inherit the last one's jiggler state or screen.
-                if (mirror is not null)
-                {
-                    mirror = null;
-                    FullMirror = false;
-                    MirrorFrame = null;
-                    MirrorFrameChanged?.Invoke();
-                }
+                ResetMirror();
                 MirrorAvailable = false;
                 MirrorFallbackText = "Connect a board to see and control its jiggler.";
                 JigOn = false;
@@ -352,9 +347,21 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             mirrorFramePending = false;
             if (disposed || mirror is null || !FullMirror) return;
-            MirrorFrame = NativeUi.Render(mirror.Kind, mirror.State);
+            var (w, h) = NativeUi.Size(mirror.Kind);
+            var frame = MirrorFrame is { } f && f.Length == w * h ? f : new ushort[w * h];   // reused: 134 KB per frame would churn the LOH
+            NativeUi.Render(mirror.Kind, mirror.State, frame);
+            MirrorFrame = frame;
             MirrorFrameChanged?.Invoke();
         });
+    }
+
+    private void ResetMirror()
+    {
+        if (mirror is null && !FullMirror) return;
+        mirror = null;
+        FullMirror = false;
+        MirrorFrame = null;
+        MirrorFrameChanged?.Invoke();
     }
 
     /// <summary>A click on the device view: the board's own hit testing decides what it hits.</summary>

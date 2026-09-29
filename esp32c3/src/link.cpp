@@ -54,14 +54,22 @@ extern void clock_set(int seconds_of_day);
 extern void inject_touch(int type, int x, int y);
 
 void link_init() {
+    // Room for the mirror's longest line (CLIPTEXT, up to ~4 KB) plus K/M reports.
+    // Must precede begin(), which otherwise makes a 256-byte ring.
+    Serial.setTxBufferSize(8192);
     Serial.begin(115200);
     Serial.setTxTimeoutMs(0);   // never block when no one is reading
 }
 
-void link_send_line(const char *s) {
-    if (!app.helper) return;
-    Serial.print(s);
-    Serial.print('\n');
+// Whole lines or nothing: with no timeout, a line that doesn't fit would be cut
+// and glued to the next one.
+bool link_send_line(const char *s) {
+    if (!app.helper) return false;
+    size_t n = strlen(s);
+    if (Serial.availableForWrite() < (int)n + 1) return false;
+    Serial.write((const uint8_t *)s, n);
+    Serial.write('\n');
+    return true;
 }
 
 extern void jig_set_scale(int idx);
@@ -75,39 +83,44 @@ static ui_state_t sync_last, sync_cur;
 static uint32_t sync_check_ms, sync_state_ms, sync_clip_seq;
 static char sync_line[UI_SYNC_CLIP_LINE];
 
-static void sync_text(int d, int bit, const char *key, char *last, const char *cur, size_t n) {
-    if (!(d & bit)) return;
+static bool sync_text(int d, int bit, const char *key, char *last, const char *cur, size_t n) {
+    if (!(d & bit)) return true;
     ui_sync_text_line(key, cur, sync_line, sizeof sync_line);
-    link_send_line(sync_line);
+    if (!link_send_line(sync_line)) return false;
     memcpy(last, cur, n);
+    return true;
 }
 
 void link_state_poll() {
-    if (!app.helper) watching = false;            // the app went away: it sends WATCH 1 again
-    if (!watching) return;
+    if (!watching || !app.helper) return;
     uint32_t now = now_ms();
-    if (!sync_force && now - sync_check_ms < 10) return;
+    if (now - sync_check_ms < 10) return;
     sync_check_ms = now;
     ui_state_fill(&sync_cur, false);
     int d = sync_force ? UI_SYNC_ALL : ui_sync_diff(&sync_last, &sync_cur);
-    sync_text(d, UI_SYNC_MSG, "msg", sync_last.msg, sync_cur.msg, sizeof sync_last.msg);
-    sync_text(d, UI_SYNC_SRC, "src", sync_last.clip_src, sync_cur.clip_src, sizeof sync_last.clip_src);
-    sync_text(d, UI_SYNC_HOST, "host", sync_last.bt_host, sync_cur.bt_host, sizeof sync_last.bt_host);
-    sync_text(d, UI_SYNC_DOWN, "down", sync_last.down_reason, sync_cur.down_reason, sizeof sync_last.down_reason);
+    // Each part counts as sent only once its whole line is out; anything that
+    // didn't make it still differs from sync_last and goes again next time.
+    bool ok = true;
+    ok &= sync_text(d, UI_SYNC_MSG, "msg", sync_last.msg, sync_cur.msg, sizeof sync_last.msg);
+    ok &= sync_text(d, UI_SYNC_SRC, "src", sync_last.clip_src, sync_cur.clip_src, sizeof sync_last.clip_src);
+    ok &= sync_text(d, UI_SYNC_HOST, "host", sync_last.bt_host, sync_cur.bt_host, sizeof sync_last.bt_host);
+    ok &= sync_text(d, UI_SYNC_DOWN, "down", sync_last.down_reason, sync_cur.down_reason, sizeof sync_last.down_reason);
     if (sync_force || app.clip_seq != sync_clip_seq) {
         xSemaphoreTake(clip_mtx, portMAX_DELAY);
-        sync_clip_seq = app.clip_seq;
+        uint32_t seq = app.clip_seq;
         ui_sync_clip_line(app.clip, app.clip_len, sync_line, sizeof sync_line);
         xSemaphoreGive(clip_mtx);
-        link_send_line(sync_line);
+        if (link_send_line(sync_line)) sync_clip_seq = seq;
+        else ok = false;
     }
     if ((d & UI_SYNC_FIELDS) || ((d & UI_SYNC_DOT) && now - sync_state_ms >= 50)) {
         ui_sync_state_line(&sync_cur, sync_line, sizeof sync_line);
-        link_send_line(sync_line);
-        sync_last = sync_cur;
-        sync_state_ms = now;
+        if (link_send_line(sync_line)) {
+            memcpy(&sync_last, &sync_cur, offsetof(ui_state_t, clip_src));   // the numbers; strings go with TEXT
+            sync_state_ms = now;
+        } else ok = false;
     }
-    sync_force = false;
+    if (ok) sync_force = false;                   // after WATCH 1, until everything went out once
 }
 
 // CRC-32 (zlib's) of a framebuffer region, pixels as little-endian RGB565 bytes, row by row.

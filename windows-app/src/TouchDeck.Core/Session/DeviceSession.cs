@@ -78,7 +78,12 @@ public sealed class DeviceSession(
     public StateReport? LastState { get; private set; }
 
     /// <summary>null until known; false when the board sent no STATE within 1.5 s of WATCH 1 (older firmware).</summary>
-    public bool? MirrorSupported { get; private set; }
+    public bool? MirrorSupported
+    {
+        get => Volatile.Read(ref mirrorSupported) switch { 0 => null, 1 => false, _ => true };
+        private set => Volatile.Write(ref mirrorSupported, value switch { null => 0, false => 1, true => 2 });
+    }
+    private int mirrorSupported;              // 0 unknown, 1 no, 2 yes: read from the UI thread
 
     private DateTime? watchSentAt;
     private static readonly Version MirrorSince = new(1, 6, 0);
