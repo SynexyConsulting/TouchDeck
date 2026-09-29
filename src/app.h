@@ -8,7 +8,7 @@
 
 enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_COUNT };
 enum { CLIP_IDLE, CLIP_COPYING, CLIP_PASTING };
-enum { JIG_CIRCLE, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
+enum { JIG_MOVING, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
 
 #define JIG_SCALE_COUNT 3
 static const float JIG_SCALES[JIG_SCALE_COUNT] = {1.0f, 1.5f, 2.0f};
@@ -42,7 +42,8 @@ typedef struct {
     volatile bool jig_on;
     volatile bool jig_paused;       // held while a paste is typing
     volatile int jig_phase;
-    volatile float jig_angle, jig_radius;
+    volatile int jig_letter;        // index into JIG_PATHS (jig_paths.h)
+    volatile float jig_x, jig_y;    // dot position in letter-box units (0..1000)
     volatile uint32_t jig_next_menu_ms;
     volatile uint32_t jig_menus;
     volatile uint32_t jig_started_ms;

@@ -22,6 +22,8 @@ add_executable(watch
     src/touch.c
     src/ui.c
     src/usb_io.c
+    src/jig_motion.c
+    src/jig_paths.c
     src/usb_descriptors.c
     src/typer.c
     src/jiggler.c

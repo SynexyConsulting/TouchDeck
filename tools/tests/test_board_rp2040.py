@@ -68,3 +68,6 @@ def test_ver_reports_board_and_firmware_version(board):
     assert name == "rp2040-169"
     assert len(semver.split(".")) == 3 and all(p.isdigit() for p in semver.split("."))
     assert build                                          # compile date
+
+def test_dbg_reports_a_jiggler_letter(board):
+    assert board.field("letter") in "OWMNZXCVHJLBGD"

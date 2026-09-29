@@ -106,6 +106,7 @@ static void handle_line(char *s) {
         inject_button(s[3] == ' ');
     } else if (!strncmp(s, "ANIM ", 5)) {                          // perf tests: animate, no HID
         app.anim_demo = s[5] == '1';
+        if (app.anim_demo) { extern void jiggler_demo_begin(void); jiggler_demo_begin(); }
     } else if (!strcmp(s, "BOOT")) {
         reset_usb_boot(0, 0);
     }

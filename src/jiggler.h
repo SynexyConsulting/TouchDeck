@@ -3,5 +3,6 @@
 
 void jiggler_set(bool on);
 void jiggler_toggle(void);
-bool jiggler_idle(void);   // off, or circling (safe to start typing)
+bool jiggler_idle(void);   // off, or moving along the letter (safe to start typing)
+void jiggler_demo_begin(void);   // ANIM 1: walk a letter on screen, no HID
 void jiggler_step(void);   // call from the main loop

@@ -292,9 +292,7 @@ static void draw_jig(void) {
     gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
     gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
     if (on || app.anim_demo) {
-        // The dot's orbit grows with the BOOT-button scale (1x inside, 2x at the ring).
-        float orbit = 40.f + 15.f * (JIG_SCALES[app.jig_scale_idx] - 1.f);
-        gfx_disc(JIG_CX + cosf(app.jig_angle) * orbit, JIG_CY + sinf(app.jig_angle) * orbit, 6.f, C_PC);
+        gfx_disc(JIG_CX, JIG_CY, 6.f, C_PC);   // placeholder until the lane is drawn
     }
     text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
     text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
@@ -310,7 +308,7 @@ static void draw_jig(void) {
     uint16_t scol = C_TEXT;
     if (on && !app.usb_mounted) { status = "Plug into USB"; scol = C_BAD_TXT; }
     else if (on && app.jig_paused) status = "Paused: pasting";
-    else if (on && app.jig_phase == JIG_CIRCLE) {
+    else if (on && app.jig_phase == JIG_MOVING) {
         int secs = (int)((int32_t)(app.jig_next_menu_ms - now_ms()) / 1000);
         snprintf(s, sizeof s, "Next menu in %ds", secs < 0 ? 0 : secs);
         status = s;
@@ -412,7 +410,6 @@ void ui_core1_main(void) {
         msg_shown = msg;
         drawn_wtick = wtick;
         last_frame = now_ms();
-        if (app.anim_demo && anim_jig) app.jig_angle += 0.12f;   // ANIM 1: spin the dot, no HID
 
         uint64_t t_draw = time_us_64(), t_push = t_draw;
         bool pushed = true;
