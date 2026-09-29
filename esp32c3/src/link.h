@@ -6,3 +6,4 @@
 void link_init();
 void link_poll();                   // call often
 void link_send_line(const char *line);
+void link_state_poll();   // STATE lines for the app after WATCH 1 (logic loop)

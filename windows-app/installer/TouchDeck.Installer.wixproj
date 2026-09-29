@@ -7,8 +7,10 @@
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\out\publish\</PublishDir>
     <DefineConstants>Version=$(Version);PublishDir=$(PublishDir)</DefineConstants>
     <!-- Per-user components keep file key paths (the Files element); ICE38/64/91 assume
-         registry key paths and per-machine folders, so they are not meaningful here. -->
-    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+         registry key paths and per-machine folders, so they are not meaningful here.
+         ICE61 warns about AllowSameVersionUpgrades, which is intended: a rebuild of the
+         same version must replace the installed one, not sit beside it. -->
+    <SuppressIces>ICE38;ICE64;ICE91;ICE61</SuppressIces>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />

@@ -10,6 +10,7 @@
 #include "display.h"
 #include "gfx.h"
 #include "icons.h"
+#include "jig_lane.h"
 #include "output.h"
 #include "ui.h"
 
@@ -85,17 +86,20 @@ static void dots(int count, int active) {
 }
 
 static void draw_clip() {
-    enum { CX0 = 32, CY0 = 58, CW = 176, CH = 86, ROWS = 6, PITCH = 12 };
+    enum { CX0 = 32, CY0 = 52, CW = 176, CH = 80, ROWS = 5, PITCH = 12 };
     const int cols = (CW - 16) / font_mono.glyphs['M' - ' '].adv;
     char info[40], buf[40];
-    text_c(46, "Clipboard", &font_title, C_TEXT);
+    bool pasting = app.clip_state == CLIP_PASTING;
+    text_c(TITLE_Y, "Clipboard", &font_title, C_TEXT);
 
     xSemaphoreTake(clip_mtx, portMAX_DELAY);
     int len = app.clip_len;
+    // Trash: clears the clip; live only when there is text and no paste is typing.
+    icon_trash(TRASH_CX, TRASH_CY, 18.f, len && !pasting ? C_TEXT : C_FAINT);
     gfx_rrect(CX0, CY0, CW, CH, 12.f, len ? C_SURF : C_INNER);
     if (len == 0) {
-        text_c(CY0 + 34, "Select text on PC,", &font_body, C_DIM);
-        text_c(CY0 + 50, "then tap Copy", &font_body, C_DIM);
+        text_c(CY0 + 32, "Select text on PC,", &font_body, C_DIM);
+        text_c(CY0 + 48, "then tap Copy", &font_body, C_DIM);
     } else {
         // Wrap into rows of monospaced text, drawn a row at a time.
         char line[40];
@@ -116,37 +120,50 @@ static void draw_clip() {
     snprintf(info, sizeof info, len ? "%d chars from %s" : "Empty", len, app.clip_src);
     xSemaphoreGive(clip_mtx);
 
-    bool pasting = app.clip_state == CLIP_PASTING;
-    if (pasting && len) {
-        gfx_rrect(48, 152, 144, 4, 2.f, C_SURF2);
-        gfx_rrect(48, 152, 144 * app.paste_pos / len + 1, 4, 2.f, accent());
-    } else {
-        text_c(155, msg_or(info, buf, sizeof buf), &font_body, C_DIM);
-    }
-
     button(BTN_COPY_X, BTN_Y, BTN_W, BTN_H, C_SURF2, C_TEXT,
            app.clip_state == CLIP_COPYING ? "..." : "Copy", icon_copy, nullptr);
     if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", nullptr, nullptr);
     else button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, len ? accent() : C_SURF2, len ? C_BG : C_FAINT,
                 "Paste", nullptr, icon_arrow_right);
+    if (pasting && len) {
+        gfx_rrect(48, CLIP_STATUS_Y - 2, 144, 4, 2.f, C_SURF2);
+        gfx_rrect(48, CLIP_STATUS_Y - 2, 144 * app.paste_pos / len + 1, 4, 2.f, accent());
+    } else {
+        text_c(CLIP_STATUS_Y, msg_or(info, buf, sizeof buf), &font_body, C_DIM);
+    }
+}
+
+// Where the dot is drawn this frame: one sample of the logic task's position per
+// frame, so the dirty box and the drawing agree.
+static float jig_draw_x, jig_draw_y;
+
+static void jig_pill(int x, const char *label, uint16_t bg, uint16_t fg, uint16_t ring) {
+    pill(x, PILL_Y, PILL_W, PILL_H, ring);
+    if (ring != bg) pill(x + 1, PILL_Y + 1, PILL_W - 2, PILL_H - 2, bg);
+    gfx_text_aa_centered(x + PILL_W / 2, gfx_text_aa_ytop(&font_caps, PILL_Y + PILL_H / 2), label, &font_caps, fg, 1);
 }
 
 static void draw_jig() {
-    char s[40], buf[40];
-    bool on = app.jig_on;
-    text_c(46, "Jiggler", &font_title, C_TEXT);
-    gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? accent() : C_SURF2);
-    gfx_disc(JIG_CX, JIG_CY, 44.f, C_INNER);
-    if (on)
-        gfx_disc(JIG_CX + cosf(app.jig_angle) * 50.f, JIG_CY + sinf(app.jig_angle) * 50.f, 6.f, accent());
-    text_c(JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? accent() : C_DIM);
-    text_c(JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
+    char s[40], buf[40], sc[8];
+    bool on = app.jig_on, live = on || app.anim_demo;
+    bool bt = mode_get() == MODE_BT;
+    text_c(TITLE_Y, "Jiggler", &font_title, C_TEXT);
+    snprintf(sc, sizeof sc, "%.1fX", (double)JIG_SCALES[app.jig_scale_idx]);
+    jig_pill(SCALE_PILL_X, sc, C_SURF2, accent(), C_SURF2);
+    jig_pill(ONOFF_PILL_X, on ? "ON" : "OFF", on ? (bt ? C_BT_TINT : C_PC_TINT) : C_SURF2, on ? accent() : C_DIM,
+             on ? accent() : C_SURF2);
+    jig_draw_lane(&JIG_PATHS[app.jig_letter], live ? accent() : C_SURF2, C_INNER);
+    if (live) {
+        float x, y;
+        jig_dot_screen(jig_draw_x, jig_draw_y, &x, &y);
+        gfx_disc(x, y, JIG_DOT, accent());
+    }
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
     if (on && !out_ready()) { status = out_down_reason(); scol = C_BAD_TXT; }
     else if (on && app.jig_paused) status = "Paused: pasting";
-    else if (on && app.jig_phase == JIG_CIRCLE) {
+    else if (on && app.jig_phase == JIG_MOVING) {
         int secs = (int)((int32_t)(app.jig_next_menu_ms - now_ms()) / 1000);
         snprintf(s, sizeof s, "Next menu in %ds", secs < 0 ? 0 : secs);
         status = s;
@@ -180,8 +197,8 @@ static const char *bt_row_status(uint16_t *col) {
 static void draw_settings() {
     char buf[40];
     int tw = gfx_text_aa_width("Settings", &font_title, 0), x0 = 120 - (15 + 6 + tw) / 2;
-    icon_cog(x0 + 7.5f, 46.f, 15.f, C_DIM);
-    text_at(x0 + 21, 46, "Settings", &font_title, C_TEXT);
+    icon_cog(x0 + 7.5f, (float)TITLE_Y, 15.f, C_DIM);
+    text_at(x0 + 21, TITLE_Y, "Settings", &font_title, C_TEXT);
     text_c(65, "OUTPUT", &font_caps, C_DIM, 2);
 
     bool avail = mode_bt_available(), bt = mode_get() == MODE_BT;
@@ -254,31 +271,84 @@ static void draw_bt() {
     }
 }
 
+static void draw_page(int screen, bool in_bt) {
+    frame();
+    if (in_bt) { draw_bt(); dots(1, 0); }
+    else {
+        if (screen == SCR_CLIP) draw_clip();
+        else if (screen == SCR_JIG) draw_jig();
+        else draw_settings();
+        dots(SCR_COUNT, screen);
+    }
+}
+
+struct rect_t { int x, y, w, h; };
+
+// Screen box around the dot at box position (bx, by), wide enough for its anti-aliased edge.
+static rect_t dot_rect(float bx, float by) {
+    float x, y;
+    jig_dot_screen(bx, by, &x, &y);
+    int r = (int)JIG_DOT + 2;
+    rect_t b = {(int)x - r, (int)y - r, 2 * r + 2, 2 * r + 2};
+    return b;
+}
+
+static rect_t rect_union(rect_t a, rect_t b) {
+    int x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    int x1 = a.x + a.w > b.x + b.w ? a.x + a.w : b.x + b.w, y1 = a.y + a.h > b.y + b.h ? a.y + a.h : b.y + b.h;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > LCD_W) x1 = LCD_W;
+    if (y1 > LCD_H) y1 = LCD_H;
+    rect_t r = {x0, y0, x1 - x0, y1 - y0};
+    return r;
+}
+
+// Frames: a full redraw when the logic task bumps redraw_seq, once a second on
+// the jiggler page (countdown) and every 100 ms while copying/pasting. While the
+// jiggler dot moves, only its old+new box (and the status lines every 250 ms)
+// is redrawn and pushed, 20 times a second: the letter lanes are costly to draw.
 void ui_task(void *) {
-    uint32_t drawn_seq = ~0u, last_frame = 0;
+    static const rect_t JIG_STATUS = {0, 180, LCD_W, 34};
+    uint32_t drawn_seq = ~0u, last_full = 0, last_part = 0, status_ms = 0;
+    rect_t prev_dot = {0, 0, 0, 0};
+    int drawn_screen = -1;
     bool first = true;
     for (;;) {
         int screen = app.screen;
         bool in_bt = app.in_bt;
-        uint32_t seq = app.redraw_seq;
-        uint32_t period = (screen == SCR_JIG && app.jig_on) || app.clip_state != CLIP_IDLE ? 100 : 500;
-        if (seq == drawn_seq && now_ms() - last_frame < period) {
+        uint32_t seq = app.redraw_seq, now = now_ms();
+        bool anim = !in_bt && screen == SCR_JIG && (app.jig_on || app.anim_demo);
+        uint32_t period = app.clip_state != CLIP_IDLE ? 100 : (screen == SCR_JIG ? 1000 : 500);
+        bool full = seq != drawn_seq || screen != drawn_screen || now - last_full >= period;
+        bool part = anim && now - last_part >= 50;
+        if (!full && !part) {
             vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
-        drawn_seq = seq;
-        last_frame = now_ms();
-
-        frame();
-        if (in_bt) { draw_bt(); dots(1, 0); }
-        else {
-            if (screen == SCR_CLIP) draw_clip();
-            else if (screen == SCR_JIG) draw_jig();
-            else draw_settings();
-            dots(SCR_COUNT, screen);
+        jig_draw_x = app.jig_x;
+        jig_draw_y = app.jig_y;
+        rect_t dot = dot_rect(jig_draw_x, jig_draw_y);
+        if (full) {
+            drawn_seq = seq;
+            drawn_screen = screen;
+            last_full = last_part = status_ms = now;
+            draw_page(screen, in_bt);
+            display_push();
+            display_wait();
+        } else {
+            last_part = now;
+            rect_t r[2] = {rect_union(prev_dot, dot), JIG_STATUS};
+            int n = 1;
+            if (now - status_ms >= 250) { n = 2; status_ms = now; }
+            for (int i = 0; i < n; i++) {
+                gfx_set_clip(r[i].x, r[i].y, r[i].w, r[i].h);
+                draw_page(screen, in_bt);
+            }
+            gfx_clip_reset();
+            for (int i = 0; i < n; i++) display_push_rect(r[i].x, r[i].y, r[i].w, r[i].h);
         }
-        display_push();
-        display_wait();
+        prev_dot = dot;
         app.frames++;
         if (first) { display_backlight(200); first = false; }
     }

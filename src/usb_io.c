@@ -6,10 +6,17 @@
 //               DBG                    reply with a one-line LOG of liveness/touch stats
 //               VER                    reply VERSION <board> <version> <build date>
 //               SWIPE L|R, BTN [LONG]  inject a swipe / BOOT-button press (scripting/tests)
+//               TAP x y                inject a tap (scripting/tests)
 //               ANIM 1|0               spin the jiggler page's dot without HID (perf tests)
 //               BOOT                   reboot into the UF2 bootloader
+//               WATCH 1|0              start/stop STATE reports (the Windows app's mirror)
+//               JIG ON|OFF, JIG SCALE n   jiggler on/off, scale index 0-2 (saved)
+//               CLIP CLEAR             empty the clip (ignored when empty or pasting)
+//               JIG MENU               start the right-click/Esc sequence now (tests)
 // board -> PC:  COPY                   user tapped COPY
 //               LOG <text>             debug output
+//               STATE jig= letter= scale= phase= x= y= clip= paste=   after WATCH 1: on any
+//                                      change, dot position (letter-box units) at most every 100 ms
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +25,9 @@
 #include "app.h"
 #include "usb_io.h"
 #include "version.h"
+#include "jig_paths.h"
+#include "jiggler.h"
+#include "settings.h"
 
 #define HELPER_TIMEOUT_MS 5000
 
@@ -47,11 +57,50 @@ bool usb_mouse(uint8_t buttons, int8_t dx, int8_t dy) {
     return tud_hid_mouse_report(REPORT_ID_MOUSE, buttons, dx, dy, 0, 0);
 }
 
+// Sends the whole line: a line can be longer than the free TX FIFO (DBG is ~300
+// bytes), so write what fits, flush, and let USB drain it. Bounded, so a host
+// that stops reading can't stall core0.
+static void write_all(const char *p, size_t n, uint32_t give_up) {
+    while (n) {
+        uint32_t w = tud_cdc_write(p, n);
+        p += w;
+        n -= w;
+        if (!n) break;
+        tud_cdc_write_flush();
+        if ((int32_t)(now_ms() - give_up) >= 0) return;
+        tud_task();
+    }
+}
+
 void usb_send_line(const char *s) {
     if (!tud_cdc_connected()) return;
-    tud_cdc_write_str(s);
-    tud_cdc_write_char('\n');
+    uint32_t give_up = now_ms() + 20;
+    write_all(s, strlen(s), give_up);
+    write_all("\n", 1, give_up);
     tud_cdc_write_flush();
+}
+
+// STATE reporting for the app (WATCH 1).
+static bool watching;
+static char state_head[64];          // STATE without x/y/clip/paste, as last sent
+static int state_clip = -1, state_paste = -1;
+static uint32_t state_ms;
+
+void usb_state_poll(void) {
+    if (!watching || !tud_cdc_connected()) return;
+    char head[64], line[112];
+    snprintf(head, sizeof head, "STATE jig=%d letter=%c scale=%d phase=%d", app.jig_on ? 1 : 0,
+             JIG_PATHS[app.jig_letter].name, app.jig_scale_idx, app.jig_phase);
+    int paste = app.clip_state == CLIP_PASTING, clip = app.clip_len;
+    bool moving = (app.jig_on && !app.jig_paused) || app.anim_demo;
+    bool changed = strcmp(head, state_head) != 0 || clip != state_clip || paste != state_paste;
+    if (!changed && !(moving && now_ms() - state_ms >= 100)) return;
+    snprintf(line, sizeof line, "%s x=%d y=%d clip=%d paste=%d", head, (int)app.jig_x, (int)app.jig_y, clip, paste);
+    usb_send_line(line);
+    strcpy(state_head, head);
+    state_clip = clip;
+    state_paste = paste;
+    state_ms = now_ms();
 }
 
 static void commit_clip(void) {
@@ -104,8 +153,30 @@ static void handle_line(char *s) {
     } else if (!strcmp(s, "BTN") || !strcmp(s, "BTN LONG")) {       // scripting / tests
         extern void inject_button(bool long_press);
         inject_button(s[3] == ' ');
+    } else if (!strncmp(s, "TAP ", 4)) {                           // scripting / tests
+        int x, y;
+        extern void inject_tap(int x, int y);
+        if (sscanf(s + 4, "%d %d", &x, &y) == 2) inject_tap(x, y);
     } else if (!strncmp(s, "ANIM ", 5)) {                          // perf tests: animate, no HID
         app.anim_demo = s[5] == '1';
+        if (app.anim_demo) { extern void jiggler_demo_begin(void); jiggler_demo_begin(); }
+    } else if (!strcmp(s, "WATCH 1") || !strcmp(s, "WATCH 0")) {
+        watching = s[6] == '1';
+        state_head[0] = 0;                    // report once right away
+    } else if (!strcmp(s, "JIG MENU")) {                            // tests: menu sequence now
+        jiggler_menu_now();
+    } else if (!strcmp(s, "JIG ON") || !strcmp(s, "JIG OFF")) {
+        jiggler_set(s[5] == 'N');
+        settings_save();
+    } else if (!strncmp(s, "JIG SCALE ", 10)) {
+        int n = s[10] - '0';
+        if (n >= 0 && n < JIG_SCALE_COUNT && !s[11]) {
+            app.jig_scale_idx = n;
+            app_redraw();
+            settings_save();
+        }
+    } else if (!strcmp(s, "CLIP CLEAR")) {
+        clip_clear();
     } else if (!strcmp(s, "BOOT")) {
         reset_usb_boot(0, 0);
     }

@@ -104,3 +104,25 @@ public class BoardLineTests
         Assert.False(fields.ContainsKey("|"));
     }
 }
+
+public class StateProtocolTests
+{
+    [Fact]
+    public void Parses_state()
+    {
+        var m = BoardLine.Parse("STATE jig=1 letter=W scale=2 phase=0 x=412 y=733 clip=58 paste=0");
+        Assert.Equal(new StateReport(true, 'W', 2, 0, 412, 733, 58, false), m);
+    }
+
+    [Fact]
+    public void State_with_unknown_fields_still_parses()
+    {
+        var m = BoardLine.Parse("STATE jig=0 letter=O scale=0 phase=0 x=0 y=500 clip=0 paste=0 extra=7");
+        Assert.IsType<StateReport>(m);
+    }
+
+    [Theory]
+    [InlineData("STATE jig=1")]
+    [InlineData("STATE jig=1 letter=W scale=x phase=0 x=1 y=2 clip=0 paste=0")]
+    public void Malformed_state_is_unknown(string line) => Assert.IsType<UnknownLine>(BoardLine.Parse(line));
+}

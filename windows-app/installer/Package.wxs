@@ -7,8 +7,8 @@
            Scope="perUser"
            Compressed="yes">
 
-    <!-- Newer replaces older in place; installing an older one over a newer is refused. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer Touch Deck is already installed." />
+    <!-- Newer (or a rebuild of the same version) replaces the installed one in place; an older one is refused. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer Touch Deck is already installed." AllowSameVersionUpgrades="yes" />
     <MediaTemplate EmbedCab="yes" />
 
     <Icon Id="app.ico" SourceFile="..\src\TouchDeck.App\Assets\app.ico" />

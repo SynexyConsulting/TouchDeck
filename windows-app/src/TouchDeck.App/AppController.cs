@@ -9,6 +9,7 @@ using TouchDeck.Core.App;
 using TouchDeck.Core.Devices;
 using TouchDeck.Core.Firmware;
 using TouchDeck.Core.Input;
+using TouchDeck.Core.Jiggler;
 using TouchDeck.Core.Protocol;
 using TouchDeck.Core.Selection;
 using TouchDeck.Core.Session;
@@ -64,6 +65,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (settings.StartWithWindows && !autostart.IsEnabled(Environment.ProcessPath!))
             autostart.Set(true, Environment.ProcessPath!);
 
+        // The board mirror: known once the session has either seen STATE or given up waiting.
+        mirrorWatch = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshMirror(), ui);
+
         bootDriveWatch = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => CheckBootDrive(), ui);
         ApplyState(LinkState.Searching);
     }
@@ -107,6 +111,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         manager.Start();
         bootDriveWatch.Start();
+        mirrorWatch.Start();
         AddLog($"Touch Deck {AppVersion} started; bundled firmware: {BundledSummary}");
     }
 
@@ -157,6 +162,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         s.DiagnosticsEnabled = settings.Diagnostics;
         s.Log += text => Post(() => AddLog($"board: {text}"));
         s.Diagnostics += d => Post(() => ShowDiagnostics(d));
+        s.StateReceived += st => Post(() => ApplyBoardState(st));
         s.ClipSent += (text, src, lost) => Post(() =>
         {
             History.Add(text);
@@ -214,6 +220,68 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     public void Swipe(bool left) => manager.Session?.Swipe(left);
+
+    // ---------- board mirror (firmware 1.6.0+) ----------
+
+    public bool JigOn { get => jigOn; private set => Set(ref jigOn, value); }
+    public char JigLetter { get => jigLetter; private set => Set(ref jigLetter, value); }
+    public double JigX { get => jigX; private set => Set(ref jigX, value); }
+    public double JigY { get => jigY; private set => Set(ref jigY, value); }
+    public string JigScaleText { get => jigScaleText; private set => Set(ref jigScaleText, value); }
+    public string JigStatus { get => jigStatus; private set => Set(ref jigStatus, value); }
+    public string BoardClipText { get => boardClipText; private set => Set(ref boardClipText, value); }
+    public bool CanClearBoardClip { get => canClearBoardClip; private set => Set(ref canClearBoardClip, value); }
+    /// <summary>True when the connected board streams STATE (jiggler card live).</summary>
+    public bool MirrorAvailable { get => mirrorAvailable; private set => Set(ref mirrorAvailable, value); }
+    public string MirrorFallbackText { get => mirrorFallbackText; private set => Set(ref mirrorFallbackText, value); }
+
+    private bool jigOn, canClearBoardClip, mirrorAvailable;
+    private char jigLetter = 'O';
+    private double jigX, jigY;
+    private int jigScale;
+    private string jigScaleText = "1.0X", jigStatus = "", boardClipText = "", mirrorFallbackText = "";
+    private readonly DispatcherTimer mirrorWatch;
+
+    private void ApplyBoardState(StateReport st)
+    {
+        JigOn = st.JigOn;
+        JigLetter = st.Letter;
+        JigX = st.X;
+        JigY = st.Y;
+        jigScale = st.Scale;
+        JigScaleText = JigView.ScaleText(st.Scale);
+        JigStatus = JigView.Status(st);
+        BoardClipText = JigView.ClipText(st);
+        CanClearBoardClip = JigView.CanClear(st);
+        MirrorAvailable = true;
+        MirrorFallbackText = "";
+    }
+
+    private void RefreshMirror()
+    {
+        var supported = manager.Session?.MirrorSupported;
+        if (!IsConnected || supported is null)
+        {
+            if (!IsConnected)
+            {
+                // A new board must not inherit the last one's jiggler state.
+                MirrorAvailable = false;
+                MirrorFallbackText = "Connect a board to see and control its jiggler.";
+                JigOn = false;
+                JigLetter = 'O';
+                JigStatus = "";
+                BoardClipText = "";
+                CanClearBoardClip = false;
+            }
+            return;
+        }
+        MirrorAvailable = supported.Value;
+        MirrorFallbackText = supported.Value ? "" : "This board's firmware is older than 1.6.0. Use Install firmware above to see and control its jiggler here.";
+    }
+
+    public void ToggleJiggler() => manager.Session?.SetJiggler(!JigOn);
+    public void CycleScale() => manager.Session?.SetScale((jigScale + 1) % 3);
+    public void ClearBoardClip() => manager.Session?.ClearClip();
     public void PressButton(bool longPress) => manager.Session?.PressButton(longPress);
 
     public void RebootToBootloader()
@@ -396,6 +464,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (disposed) return;
         disposed = true;
         bootDriveWatch.Stop();
+        mirrorWatch.Stop();
         manager.Dispose();               // ends the session, which releases any held key or button
     }
 }

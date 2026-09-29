@@ -7,6 +7,7 @@
 #include "board.h"
 #include "gfx.h"
 #include "icons.h"
+#include "jig_lane.h"
 #include "lcd.h"
 #include "ui.h"
 
@@ -237,13 +238,16 @@ static void frame_usb(void) {
 // ---------- clipboard ----------
 
 static void draw_clip(void) {
-    enum { CX0 = 20, CY0 = 64, CW = 200, CH = 110, ROWS = 8, PITCH = 12 };
+    enum { CX0 = 20, CY0 = 58, CW = 200, CH = 110, ROWS = 8, PITCH = 12 };
     const int cols = (CW - 16) / font_mono.glyphs['M' - ' '].adv;
     char info[40], buf[40];
-    text_c(LCD_W / 2, 48, "Clipboard", &font_title, C_TEXT, 0);
+    bool pasting = app.clip_state == CLIP_PASTING;
+    text_c(LCD_W / 2, TITLE_Y, "Clipboard", &font_title, C_TEXT, 0);
 
     mutex_enter_blocking(&clip_mtx);
     int len = app.clip_len;
+    // Trash: clears the clip; live only when there is text and no paste is typing.
+    icon_trash(TRASH_CX, TRASH_CY, 18.f, len && !pasting ? C_TEXT : C_FAINT);
     gfx_rrect(CX0, CY0, CW, CH, 12.f, len ? C_SURF : C_INNER);
     if (len == 0) {
         text_c(LCD_W / 2, CY0 + 44, "Select text on PC,", &font_body, C_DIM, 0);
@@ -268,49 +272,50 @@ static void draw_clip(void) {
     snprintf(info, sizeof info, len ? "%d chars from %s" : "Empty", len, app.clip_src);
     mutex_exit(&clip_mtx);
 
-    bool pasting = app.clip_state == CLIP_PASTING;
-    if (pasting && len) {
-        gfx_rrect(40, 186, 160, 4, 2.f, C_SURF2);
-        gfx_rrect(40, 186, 160 * app.paste_pos / len + 1, 4, 2.f, C_PC);
-    } else {
-        text_c(LCD_W / 2, 188, msg_or(info, buf, sizeof buf), &font_body, C_DIM, 0);
-    }
-
     button(BTN_COPY_X, BTN_Y, BTN_W, BTN_H, C_SURF2, C_TEXT,
            app.clip_state == CLIP_COPYING ? "..." : "Copy", icon_copy, NULL);
     if (pasting) button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, C_BAD, C_BG, "Stop", NULL, NULL);
     else button(BTN_PASTE_X, BTN_Y, BTN_W, BTN_H, len ? C_PC : C_SURF2, len ? C_BG : C_FAINT,
                 "Paste", NULL, icon_arrow_right);
+    if (pasting && len) {
+        gfx_rrect(40, CLIP_STATUS_Y - 2, 160, 4, 2.f, C_SURF2);
+        gfx_rrect(40, CLIP_STATUS_Y - 2, 160 * app.paste_pos / len + 1, 4, 2.f, C_PC);
+    } else {
+        text_c(LCD_W / 2, CLIP_STATUS_Y, msg_or(info, buf, sizeof buf), &font_body, C_DIM, 0);
+    }
 }
 
 // ---------- jiggler ----------
 
+// Where core1 draws the dot this frame: one sample of core0's position per
+// frame, so the dirty box and the drawing agree.
+static float jig_draw_x, jig_draw_y;
+
+static void jig_pill(int x, const char *label, uint16_t bg, uint16_t fg, uint16_t ring) {
+    pill(x, PILL_Y, PILL_W, PILL_H, ring);
+    if (ring != bg) pill(x + 1, PILL_Y + 1, PILL_W - 2, PILL_H - 2, bg);
+    text_c(x + PILL_W / 2, PILL_Y + PILL_H / 2, label, &font_caps, fg, 1);
+}
+
 static void draw_jig(void) {
-    char s[40], buf[40];
-    bool on = app.jig_on;
-    text_c(LCD_W / 2, 48, "Jiggler", &font_title, C_TEXT, 0);
-    gfx_ring(JIG_CX, JIG_CY, JIG_R, 2.f, on ? C_PC : C_SURF2);
-    gfx_disc(JIG_CX, JIG_CY, 49.f, C_INNER);
-    if (on || app.anim_demo) {
-        // The dot's orbit grows with the BOOT-button scale (1x inside, 2x at the ring).
-        float orbit = 40.f + 15.f * (JIG_SCALES[app.jig_scale_idx] - 1.f);
-        gfx_disc(JIG_CX + cosf(app.jig_angle) * orbit, JIG_CY + sinf(app.jig_angle) * orbit, 6.f, C_PC);
-    }
-    text_c(JIG_CX, JIG_CY - 5, on ? "ON" : "OFF", &font_big, on ? C_PC : C_DIM, 0);
-    text_c(JIG_CX, JIG_CY + 17, on ? "TAP TO STOP" : "TAP TO START", &font_caps, C_DIM, 1);
-    {
-        char sc[8];
-        snprintf(sc, sizeof sc, "%.1fX", (double)JIG_SCALES[app.jig_scale_idx]);
-        int w = gfx_text_aa_width(sc, &font_caps, 1) + 12;
-        pill(JIG_CX - w / 2, JIG_CY + 29, w, 15, C_SURF2);
-        text_c(JIG_CX, JIG_CY + 37, sc, &font_caps, C_PC, 1);
+    char s[40], buf[40], sc[8];
+    bool on = app.jig_on, live = on || app.anim_demo;
+    text_c(LCD_W / 2, TITLE_Y, "Jiggler", &font_title, C_TEXT, 0);
+    snprintf(sc, sizeof sc, "%.1fX", (double)JIG_SCALES[app.jig_scale_idx]);
+    jig_pill(SCALE_PILL_X, sc, C_SURF2, C_PC, C_SURF2);
+    jig_pill(ONOFF_PILL_X, on ? "ON" : "OFF", on ? C_PC_TINT : C_SURF2, on ? C_PC : C_DIM, on ? C_PC : C_SURF2);
+    jig_draw_lane(&JIG_PATHS[app.jig_letter], live ? C_PC : C_SURF2, C_INNER);
+    if (live) {
+        float x, y;
+        jig_dot_screen(jig_draw_x, jig_draw_y, &x, &y);
+        gfx_disc(x, y, JIG_DOT, C_PC);
     }
 
     const char *status = "Tap to start";
     uint16_t scol = C_TEXT;
     if (on && !app.usb_mounted) { status = "Plug into USB"; scol = C_BAD_TXT; }
     else if (on && app.jig_paused) status = "Paused: pasting";
-    else if (on && app.jig_phase == JIG_CIRCLE) {
+    else if (on && app.jig_phase == JIG_MOVING) {
         int secs = (int)((int32_t)(app.jig_next_menu_ms - now_ms()) / 1000);
         snprintf(s, sizeof s, "Next menu in %ds", secs < 0 ? 0 : secs);
         status = s;
@@ -338,13 +343,18 @@ static void page_dots(int screen) {
 }
 
 // Regions that change on an animation frame (everything else is redrawn only
-// when core0 bumps redraw_seq): the jiggler's orbit + pill and status lines,
-// or the clipboard's progress line while pasting.
-static const rect_t JIG_ANIM[] = {
-    {JIG_CX - JIG_R - 3, JIG_CY - JIG_R - 3, 2 * (JIG_R + 3), 2 * (JIG_R + 3)},
-    {0, 206, LCD_W, 44},
-};
-static const rect_t CLIP_ANIM[] = {{0, 178, LCD_W, 20}};
+// when core0 bumps redraw_seq): the jiggler's dot (a small box around its old
+// and new positions) plus its status lines, or the clipboard's progress line.
+static const rect_t JIG_STATUS = {0, 206, LCD_W, 44};
+static const rect_t CLIP_ANIM = {0, CLIP_STATUS_Y - 10, LCD_W, 20};
+
+// Screen box around the dot at box position (bx, by), wide enough for its anti-aliased edge.
+static rect_t dot_rect(float bx, float by) {
+    float x, y;
+    jig_dot_screen(bx, by, &x, &y);
+    int r = (int)JIG_DOT + 2;
+    return (rect_t){(int)x - r, (int)y - r, 2 * r + 2, 2 * r + 2};
+}
 
 static void draw_page(int screen, int t) {
     gfx_fill(C_BG);
@@ -389,6 +399,8 @@ void ui_core1_main(void) {
     bool ready = false;
     rect_t ready_rect = {0, 0, 0, 0};
     rect_t prev_hands = {0, 0, LCD_W, LCD_H};   // where the hands are on screen
+    rect_t prev_dot = {0, 0, 0, 0};             // where the jiggler's dot is on screen
+    uint32_t status_ms = 0;                      // jiggler status lines: last redraw (countdown text)
 
     for (;;) {
         int screen = app.screen;
@@ -412,12 +424,14 @@ void ui_core1_main(void) {
         msg_shown = msg;
         drawn_wtick = wtick;
         last_frame = now_ms();
-        if (app.anim_demo && anim_jig) app.jig_angle += 0.12f;   // ANIM 1: spin the dot, no HID
 
         uint64_t t_draw = time_us_64(), t_push = t_draw;
         bool pushed = true;
         if (full) {
             int t = app.time_s;
+            jig_draw_x = app.jig_x;
+            jig_draw_y = app.jig_y;
+            prev_dot = dot_rect(jig_draw_x, jig_draw_y);
             draw_page(screen, t);
             t_push = time_us_64();
             lcd_push_frame(fb);
@@ -464,8 +478,21 @@ void ui_core1_main(void) {
             ready = true;
             pushed = false;
         } else {
-            const rect_t *r = anim_jig ? JIG_ANIM : CLIP_ANIM;
-            int n = anim_jig ? 2 : 1;
+            rect_t r[2];
+            int n = 1;
+            if (anim_jig) {                          // the dot's old+new box, and the status lines
+                jig_draw_x = app.jig_x;
+                jig_draw_y = app.jig_y;
+                rect_t now = dot_rect(jig_draw_x, jig_draw_y);
+                r[0] = clamp_to_screen(rect_union(prev_dot, now));
+                prev_dot = now;
+                if (now_ms() - status_ms >= 250) {   // the countdown text changes once a second
+                    r[n++] = JIG_STATUS;
+                    status_ms = now_ms();
+                }
+            } else {
+                r[0] = CLIP_ANIM;
+            }
             for (int i = 0; i < n; i++) {           // draw each region clipped, then send just it
                 gfx_set_clip(r[i].x, r[i].y, r[i].w, r[i].h);
                 draw_page(screen, app.time_s);

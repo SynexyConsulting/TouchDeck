@@ -10,7 +10,7 @@
 #define CFG_TUD_VENDOR          0
 
 #define CFG_TUD_CDC_RX_BUFSIZE  1024
-#define CFG_TUD_CDC_TX_BUFSIZE  256
+#define CFG_TUD_CDC_TX_BUFSIZE  1024   // DBG lines are ~300 bytes; STATE streams at 10 Hz
 #define CFG_TUD_CDC_EP_BUFSIZE  64
 
 #define CFG_TUD_HID_EP_BUFSIZE  16

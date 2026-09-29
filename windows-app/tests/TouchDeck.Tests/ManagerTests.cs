@@ -132,4 +132,17 @@ public class ManagerSmokeTests
         Assert.True(m.State.Firmware!.Known, "firmware predates VER");
         Assert.Matches(@"^\d+\.\d+\.\d+$", m.State.Firmware.Version);
     }
+
+    [SkippableFact]
+    public void The_real_board_mirrors_its_state()
+    {
+        Skip.If(DeviceScanner.Scan().Count == 0, "no Touch Deck connected");
+        using var m = DeviceManager.CreateDefault(new FakeSelection("", "select"), new RecordingSink());
+        m.Tick();
+        Skip.If(m.State.Status == LinkStatus.PortBusy, "port busy (helper running?)");
+        Skip.If(m.State.Firmware?.SemVer is { } v && v < new Version(1, 6, 0), "firmware older than 1.6.0");
+        Assert.True(SpinWait.SpinUntil(() => m.Session?.LastState is not null, 3000), "no STATE after WATCH 1");
+        Assert.True(m.Session!.MirrorSupported);
+        Assert.Contains(m.Session.LastState!.Letter, "OWMNZXCVHJLBGD");
+    }
 }

@@ -1,6 +1,7 @@
 using System.Text;
 using TouchDeck.Core.Devices;
 using TouchDeck.Core.Input;
+using TouchDeck.Core.Protocol;
 using TouchDeck.Core.Session;
 
 namespace TouchDeck.Tests;
@@ -172,5 +173,70 @@ public class SessionTests
         Assert.Equal(0, s.Injector.HeldKey);
         Assert.Contains(new KeyStroke(0x1E, false, Up: true), sink.Events);
         Assert.Contains(new KeyStroke(0x2A, false, Up: true), sink.Events);
+    }
+
+    [Fact]
+    public void Handshake_turns_on_the_mirror()
+    {
+        t.Incoming.Enqueue("PONG");
+        Assert.True(Make().Handshake());
+        Assert.Contains("WATCH 1", t.Written);
+    }
+
+    [Fact]
+    public void State_lines_raise_StateReceived_and_mark_mirror_supported()
+    {
+        var s = Make();
+        StateReport? got = null;
+        s.StateReceived += r => got = r;
+        t.Incoming.Enqueue("STATE jig=1 letter=M scale=1 phase=0 x=10 y=20 clip=3 paste=0");
+        s.Step();
+        Assert.Equal('M', got!.Letter);
+        Assert.True(s.MirrorSupported);
+        Assert.Equal(got, s.LastState);
+    }
+
+    [Fact]
+    public void Old_firmware_is_detected_by_missing_state()
+    {
+        t.Incoming.Enqueue("PONG");
+        var s = Make();
+        s.Handshake();
+        s.Step();
+        clock.Now = clock.Now.AddSeconds(2);
+        s.Step();
+        Assert.False(s.MirrorSupported);
+    }
+
+    [Fact]
+    public void Jiggler_and_clip_commands_are_sent()
+    {
+        var s = Make();
+        s.SetJiggler(true); s.SetJiggler(false); s.SetScale(2); s.ClearClip();
+        s.Step();
+        Assert.Equal(["JIG ON", "JIG OFF", "JIG SCALE 2", "CLIP CLEAR"],
+            t.Written.Where(w => w.StartsWith("JIG") || w.StartsWith("CLIP CLEAR")).ToList());
+    }
+
+    [Theory]
+    [InlineData("VERSION rp2040-169 1.5.0 Sep 27 2026")]
+    [InlineData(null)]                                  // pre-VER firmware
+    public void Firmware_older_than_1_6_has_no_mirror_right_away(string? ver)
+    {
+        t.Incoming.Enqueue("PONG");
+        if (ver is not null) t.Incoming.Enqueue(ver);
+        var s = Make();
+        Assert.True(s.Handshake());
+        Assert.False(s.MirrorSupported);
+    }
+
+    [Fact]
+    public void Firmware_1_6_waits_for_state()
+    {
+        t.Incoming.Enqueue("PONG");
+        t.Incoming.Enqueue("VERSION rp2040-169 1.6.0 Sep 28 2026");
+        var s = Make();
+        Assert.True(s.Handshake());
+        Assert.Null(s.MirrorSupported);
     }
 }

@@ -7,17 +7,27 @@ void ui_task(void *);
 // circle, so everything sits inside radius ~115 around (120,120).
 // Layout source of truth: https://claude.ai/artifact/QbZAqAnnHaYKeZfYejQRWz
 
-// Clipboard
-#define BTN_Y       166
+#define TITLE_Y     42          // page titles (centre of capitals); the top chip ends at y 34
+
+// Clipboard: text box, then the buttons, then the status line.
+#define BTN_Y       140
 #define BTN_H       40
 #define BTN_W       79
 #define BTN_COPY_X  38
 #define BTN_PASTE_X 123
+#define CLIP_STATUS_Y 196
+#define TRASH_CX    178
+#define TRASH_CY    42
+#define TRASH_HIT   18          // half-size of the square tap target
 
-// Jiggler
-#define JIG_CX 120
-#define JIG_CY 120
-#define JIG_R  57
+// Jiggler: pills either side of the letter lane (jig_paths.h geometry).
+#define PILL_Y      111
+#define PILL_H      18
+#define PILL_W      44
+#define SCALE_PILL_X 10
+#define ONOFF_PILL_X 186
+#define PILL_PAD    6
+#define JIG_ZONE_PAD 10         // letter box + this = the ON/OFF tap zone
 
 // Settings: output toggle segments and the Bluetooth row
 #define SEG_Y     77

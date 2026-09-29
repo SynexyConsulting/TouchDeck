@@ -8,7 +8,7 @@
 
 enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_COUNT };
 enum { CLIP_IDLE, CLIP_COPYING, CLIP_PASTING };
-enum { JIG_CIRCLE, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
+enum { JIG_MOVING, JIG_STOP, JIG_CLICK_DOWN, JIG_MENU_OPEN, JIG_ESC_DOWN, JIG_RESUME };
 
 #define JIG_SCALE_COUNT 3
 static const float JIG_SCALES[JIG_SCALE_COUNT] = {1.0f, 1.5f, 2.0f};
@@ -21,7 +21,7 @@ typedef struct {
     volatile uint32_t edge_us;      // time_us_32() of the latest second edge
     volatile bool helper;           // PC helper is talking to us
     volatile bool usb_mounted;      // host has enumerated us (keyboard/mouse usable)
-    volatile bool muted;            // silences the tick and touch clicks
+    volatile bool muted;            // silences the once-a-second watch tick
     volatile uint32_t frames;       // core1 frame counter (diagnostics)
     volatile uint32_t loops;        // core0 main-loop counter (diagnostics)
     volatile uint32_t perf_draw_us, perf_push_us, perf_draw_max_us;   // frame timing (DBG)
@@ -42,7 +42,8 @@ typedef struct {
     volatile bool jig_on;
     volatile bool jig_paused;       // held while a paste is typing
     volatile int jig_phase;
-    volatile float jig_angle, jig_radius;
+    volatile int jig_letter;        // index into JIG_PATHS (jig_paths.h)
+    volatile float jig_x, jig_y;    // dot position in letter-box units (0..1000)
     volatile uint32_t jig_next_menu_ms;
     volatile uint32_t jig_menus;
     volatile uint32_t jig_started_ms;
@@ -58,4 +59,6 @@ extern mutex_t clip_mtx;
 
 static inline void app_redraw(void) { app.redraw_seq++; }
 void app_message(const char *text);
+void clip_clear(void);          // empty the clip (ignored when empty or pasting)
+void jig_cycle_scale(void);     // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
 uint32_t now_ms(void);

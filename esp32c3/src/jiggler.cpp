@@ -1,9 +1,11 @@
-// Moves the pointer in a loose, wobbling circle. Every so often it stops,
-// right-clicks to open a context menu, presses ESC to close it, and carries on.
+// Moves the pointer along an outlined letter (jig_paths.h, walked by the shared
+// jig_motion engine). Every so often it stops, right-clicks to open a context
+// menu, presses ESC to close it, then glides on to a new random letter.
 // Identical behaviour to the RP2040 version, sent through the output layer.
 #include <math.h>
 #include "esp_random.h"
 #include "app.h"
+#include "jig_motion.h"
 #include "output.h"
 #include "jiggler.h"
 
@@ -11,10 +13,12 @@
 #define MENU_MIN_S     45     // seconds between context-menu events
 #define MENU_MAX_S     150
 
-static float t;                // circle "time", only advances while circling
-static float angle;
-static float sent_x, sent_y;   // position we have told the host so far
+static jig_motion_t m;
+static float sent_x, sent_y;   // mouse offset from the start point we have told the host so far
+static float scale = 1.f;      // eases toward JIG_SCALES[app.jig_scale_idx] so a change never jumps
 static uint32_t next_ms;
+static uint32_t paused_menu_ms;
+static bool release_mouse, release_key;   // owed to the host after an interrupted menu   // countdown left when switched off while moving (0 = none)
 
 static uint32_t rand_between(uint32_t lo, uint32_t hi) {
     return lo + esp_random() % (hi - lo + 1);
@@ -24,8 +28,10 @@ static void schedule_menu() {
     app.jig_next_menu_ms = now_ms() + 1000 * rand_between(MENU_MIN_S, MENU_MAX_S);
 }
 
-static float radius_at(float tt) {
-    return 60.f + 22.f * sinf(tt * 0.23f) + 9.f * sinf(tt * 0.71f + 1.f);
+static void publish() {
+    app.jig_letter = m.letter;
+    app.jig_x = m.x;
+    app.jig_y = m.y;
 }
 
 void jiggler_toggle() { jiggler_set(!app.jig_on); }
@@ -34,19 +40,33 @@ void jiggler_set(bool on) {
     if (on == app.jig_on) return;
     app.jig_on = on;
     if (on) {
-        t = 0.f;
-        angle = 0.f;
-        sent_x = radius_at(t);   // start "on" the circle so the first step isn't a jump
-        sent_y = 0.f;
-        app.jig_phase = JIG_CIRCLE;
+        scale = JIG_SCALES[app.jig_scale_idx];
+        jm_begin(&m, app.jig_letter);   // keep the letter on screen; it changes after each menu
+        sent_x = sent_y = 0.f;   // the mouse's current spot is the letter's start point
+        publish();
+        app.jig_phase = JIG_MOVING;
         app.jig_menus = 0;
         app.jig_started_ms = now_ms();
         next_ms = now_ms();
-        schedule_menu();
+        if (paused_menu_ms) app.jig_next_menu_ms = now_ms() + paused_menu_ms;   // carry on the countdown
+        else schedule_menu();
+        paused_menu_ms = 0;
+    } else if (app.jig_phase == JIG_MOVING) {
+        // Switched off mid-countdown: remember what was left for the next start.
+        int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
+        paused_menu_ms = left > 0 ? (uint32_t)left : 0;
     } else if (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_ESC_DOWN) {
-        out_mouse(0, 0, 0);      // don't leave a button or key held
-        out_key(0, 0);
+        // Don't leave a button or key held; jiggler_step retries each release
+        // until the output accepts it (a BLE notify can fail).
+        release_mouse = release_key = true;
     }
+    app_redraw();
+}
+
+void jiggler_demo_begin() {
+    jm_begin(&m, jm_pick(-1, esp_random()));
+    publish();
+    next_ms = now_ms();
     app_redraw();
 }
 
@@ -54,48 +74,70 @@ void jiggler_set(bool on) {
 // already released anything held there); start a fresh cycle.
 void jiggler_on_output_change() {
     if (!app.jig_on) return;
-    app.jig_phase = JIG_CIRCLE;
+    app.jig_phase = JIG_MOVING;
     schedule_menu();
     next_ms = now_ms();
 }
 
-bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_CIRCLE; }
+int jiggler_next_menu_s() {
+    if (!app.jig_on) return (int)(paused_menu_ms / 1000);
+    int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
+    return left > 0 ? left / 1000 : 0;
+}
+
+void jiggler_menu_now() {
+    if (app.jig_on && app.jig_phase == JIG_MOVING) app.jig_next_menu_ms = now_ms();
+}
+
+bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING; }
 
 static void set_phase(int phase, uint32_t wait_lo, uint32_t wait_hi) {
     app.jig_phase = phase;
     next_ms = now_ms() + rand_between(wait_lo, wait_hi);
 }
 
-static void circle_step() {
-    float dt = STEP_MS / 1000.f;
-    t += dt;
-    // ~4 s per lap, with speed drifting +/-30% so it never looks mechanical.
-    float omega = 6.2832f / 4.f * (1.f + 0.3f * sinf(t * 0.37f));
-    angle += omega * dt;
-    if (angle > 6.2832f) angle -= 6.2832f;
-    float r = radius_at(t);
-    float tx = r * cosf(angle), ty = r * sinf(angle);
+// Demo (ANIM 1, perf tests): walk the letter on screen without sending HID.
+static void demo_step() {
+    if ((int32_t)(now_ms() - next_ms) < 0) return;
+    next_ms = now_ms() + STEP_MS;
+    jm_step(&m, STEP_MS / 1000.f);
+    publish();
+}
 
+static void move_step() {
+    jm_step(&m, STEP_MS / 1000.f);
+    scale += (JIG_SCALES[app.jig_scale_idx] - scale) * 0.045f;   // ~95% settled after 1 s of 15 ms steps
+    float tx, ty;
+    jm_mouse(&m, scale, &tx, &ty);
     int dx = (int)lroundf(tx - sent_x);
     int dy = (int)lroundf(ty - sent_y);
     dx = dx > 127 ? 127 : (dx < -127 ? -127 : dx);
     dy = dy > 127 ? 127 : (dy < -127 ? -127 : dy);
-    if ((dx || dy) && !out_mouse(0, (int8_t)dx, (int8_t)dy)) return;
+    publish();
+    if ((dx || dy) && !out_mouse(0, (int8_t)dx, (int8_t)dy)) return;   // the next step catches up
     sent_x += dx;
     sent_y += dy;
-    app.jig_angle = angle;
-    app.jig_radius = r;
 }
 
 void jiggler_step() {
-    if (!app.jig_on || app.jig_paused) return;
+    if (release_mouse || release_key) {
+        if (!out_ready()) return;
+        if (release_mouse) { if (out_mouse(0, 0, 0)) release_mouse = false; return; }
+        if (out_key(0, 0)) release_key = false;
+        return;
+    }
+    if (!app.jig_on) {
+        if (app.anim_demo) demo_step();
+        return;
+    }
+    if (app.jig_paused) return;
     if (!out_ready() || (int32_t)(now_ms() - next_ms) < 0) return;
 
     switch (app.jig_phase) {
-    case JIG_CIRCLE:
+    case JIG_MOVING:
         next_ms = now_ms() + STEP_MS;
         if ((int32_t)(now_ms() - app.jig_next_menu_ms) >= 0) set_phase(JIG_STOP, 400, 900);
-        else circle_step();
+        else move_step();
         break;
     case JIG_STOP:            // pointer has settled: open the context menu
         if (out_mouse(0x02, 0, 0)) set_phase(JIG_CLICK_DOWN, 60, 120);   // right button
@@ -112,7 +154,10 @@ void jiggler_step() {
     case JIG_RESUME:
         app.jig_menus++;
         schedule_menu();
-        app.jig_phase = JIG_CIRCLE;
+        jm_switch(&m, jm_pick(m.letter, esp_random()));   // a new letter after every menu
+        publish();
+        app_redraw();                                     // draw the new letter
+        app.jig_phase = JIG_MOVING;
         next_ms = now_ms();
         break;
     }

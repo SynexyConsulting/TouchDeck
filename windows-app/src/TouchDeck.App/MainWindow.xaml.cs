@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.IO;
 using System.Windows.Media;
@@ -44,6 +45,7 @@ public partial class MainWindow : Window
         UpdateStatusDot();
         UpdateDiagnosticsCard();
         UpdateSendInfo();
+        UpdateJigPill();
     }
 
     /// <summary>Creates the window handle without showing it, so the hotkey works from the tray.</summary>
@@ -117,6 +119,11 @@ public partial class MainWindow : Window
             case nameof(AppController.Health):
                 UpdateStatusDot();
                 break;
+            case nameof(AppController.JigOn):
+            case nameof(AppController.MirrorFallbackText):
+            case nameof(AppController.MirrorAvailable):
+                UpdateJigPill();
+                break;
             case nameof(AppController.DiagnosticsEnabled):
             case nameof(AppController.IsConnected):
                 UpdateDiagnosticsCard();
@@ -173,6 +180,23 @@ public partial class MainWindow : Window
     private void OnClearHistory(object sender, RoutedEventArgs e) => app.History.Clear();
 
     private void OnCopyLog(object sender, RoutedEventArgs e) => Win32Clipboard.Write(string.Join(Environment.NewLine, app.LogLines));
+
+    private void OnJigToggle(object sender, RoutedEventArgs e) => app.ToggleJiggler();
+    private void OnLaneClick(object sender, MouseButtonEventArgs e) => app.ToggleJiggler();
+    private void OnScale(object sender, RoutedEventArgs e) => app.CycleScale();
+    private void OnClearBoardClip(object sender, RoutedEventArgs e) => app.ClearBoardClip();
+
+    private void UpdateJigPill()
+    {
+        JigPill.Content = app.JigOn ? "ON" : "OFF";
+        JigPill.Tag = app.JigOn ? "Primary" : null;
+        MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
+        // Without the board mirror (older firmware / no board) the controls would do nothing: hide them.
+        var live = app.MirrorAvailable ? Visibility.Visible : Visibility.Collapsed;
+        JigBody.Visibility = live;
+        JigLaneView.Visibility = live;
+        JigStatusText.Visibility = live;
+    }
 
     private void OnSwipeLeft(object sender, RoutedEventArgs e) => app.Swipe(left: true);
     private void OnSwipeRight(object sender, RoutedEventArgs e) => app.Swipe(left: false);
