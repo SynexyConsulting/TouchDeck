@@ -68,3 +68,48 @@ def merge(previous, app_windows, firmware, published):
 
 def dumps(feed):
     return json.dumps(feed, indent=2) + "\n"
+
+
+# ---------- feed signature (ECDSA P-256 / SHA-256, raw r||s, base64) ----------
+# The app pins the public key (UpdateSource.OfficialPublicKey) and refuses a feed whose
+# updates.json.sig doesn't verify. The private key never lives in the repo.
+
+def _crypto():
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    return hashes, serialization, ec, utils
+
+
+def public_key_b64(private_pem):
+    import base64
+    _, serialization, _, _ = _crypto()
+    key = serialization.load_pem_private_key(private_pem, None)
+    spki = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    return base64.b64encode(spki).decode()
+
+
+def sign(data, private_pem):
+    """Signature file content for `data` (bytes): base64 of r||s (64 bytes)."""
+    import base64
+    hashes, serialization, ec, utils = _crypto()
+    key = serialization.load_pem_private_key(private_pem, None)
+    if not isinstance(key, ec.EllipticCurvePrivateKey) or key.curve.name != "secp256r1":
+        raise ValueError("the feed key must be an ECDSA P-256 private key")
+    r, s = utils.decode_dss_signature(key.sign(data, ec.ECDSA(hashes.SHA256())))
+    return base64.b64encode(r.to_bytes(32, "big") + s.to_bytes(32, "big")).decode()
+
+
+def verify(data, signature, public_b64):
+    import base64
+    hashes, serialization, ec, utils = _crypto()
+    from cryptography.exceptions import InvalidSignature
+    try:
+        raw = base64.b64decode(signature.strip() if isinstance(signature, (str, bytes)) else signature, validate=True)
+        if len(raw) != 64:
+            return False
+        pub = serialization.load_der_public_key(base64.b64decode(public_b64))
+        pub.verify(utils.encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")),
+                   data, ec.ECDSA(hashes.SHA256()))
+        return True
+    except (InvalidSignature, ValueError, TypeError):
+        return False

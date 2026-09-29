@@ -69,3 +69,39 @@ def test_output_is_valid_json_for_the_app(tmp_path):
     app = mu.entry(blob(tmp_path, "TouchDeck-1.2.0.msi", b"a"), "1.2.0", "app-v1.2.0")
     text = mu.dumps(mu.merge(None, app_windows=app, firmware=[], published="p"))
     assert json.loads(text)["app"]["windows"]["url"].startswith(BASE)
+
+
+# ---------- feed signatures (the app pins the public key and refuses anything else) ----------
+
+@pytest.fixture(scope="module")
+def keypair():
+    pytest.importorskip("cryptography")
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    return pem, mu.public_key_b64(pem)
+
+
+def test_signature_is_base64_raw_r_s(keypair):
+    import base64
+    pem, _ = keypair
+    sig = mu.sign(b"feed bytes", pem)
+    assert len(base64.b64decode(sig)) == 64          # r||s, as the app expects (IeeeP1363)
+
+
+def test_sign_then_verify(keypair):
+    pem, pub = keypair
+    assert mu.verify(b"feed bytes", mu.sign(b"feed bytes", pem), pub)
+
+
+def test_tampered_feed_or_wrong_key_fails(keypair):
+    pem, pub = keypair
+    sig = mu.sign(b"feed bytes", pem)
+    assert not mu.verify(b"feed bytez", sig, pub)
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    other = ec.generate_private_key(ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    assert not mu.verify(b"feed bytes", sig, mu.public_key_b64(other))
+    assert not mu.verify(b"feed bytes", b"garbage", pub)

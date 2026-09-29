@@ -55,6 +55,13 @@ It lives in the public repo `SynexyConsulting/TouchDeckUpdates`. The app reads i
   - After it finishes, a detached launcher starts the installed `TouchDeck.exe` again.
 - **Versions:** only strictly newer versions are offered. Downgrades never happen, and the MSI itself also refuses them.
 - **Network:** HTTP timeout 20 s; failures show as text and never throw into the UI; the check runs off the UI thread. `User-Agent: TouchDeck/<version>`.
+- **Signed feed (added after the security review):**
+  - `updates.json.sig` holds an ECDSA P-256 signature over the feed.
+  - The app pins the public key and refuses unsigned or wrongly signed feeds.
+  - The private key stays off the repo: on the maintainer's PC and in the protected `release` environment.
+  - Publishing needs a reviewer's approval.
+  - Test switches exist only in `-UpdateTestHooks` builds.
+  - Downloads have idle timeouts, and the feed has an overall timeout.
 - **Unsigned artefacts, for now:** Windows SmartScreen may warn when the MSI is run by hand. The in-app update goes through `msiexec`, which doesn't show SmartScreen. Code signing (Azure Trusted Signing) is a follow-up. Until then the SHA-256 in the HTTPS feed is the integrity check.
 
 ## 4. Release pipeline (`.github/workflows/release.yml`, private repo)

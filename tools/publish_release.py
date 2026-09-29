@@ -2,12 +2,19 @@
 
     TOUCHDECK_UPDATES_TOKEN=... python tools/publish_release.py --tag app-v1.2.0 \\
         --app-windows windows-app/out/TouchDeck-1.2.0.msi --app-version 1.2.0 \\
-        --firmware rp2040-169=1.6.0=windows-app/firmware/rp2040-169.uf2 [--dry-run]
+        --firmware rp2040-169=1.6.0=windows-app/firmware/rp2040-169.uf2 \\
+        --key-file ~/.touchdeck/feed-signing-key.pem [--dry-run]
 
-Creates the release, uploads the files and a complete updates.json (merged with the
-previous latest feed, see make_updates.py). The token needs Contents: read and write on
-the update repo only; it is read from the environment and never printed. Used by
-.github/workflows/release.yml and by hand.
+Creates the release, uploads the files, a complete updates.json (merged with the
+previous latest feed, see make_updates.py) and its signature updates.json.sig.
+
+- The token needs Contents: read and write on the update repo only. It is read from
+  TOUCHDECK_UPDATES_TOKEN and never printed.
+- The signing key comes from TOUCHDECK_FEED_KEY (PEM text) or --key-file. It must match
+  the public key pinned in the app, or nothing is published.
+- The previous feed is merged only if its own signature verifies.
+
+Used by .github/workflows/release.yml and by hand.
 """
 import argparse
 import base64
@@ -17,6 +24,7 @@ import os
 import shutil
 import sys
 import tempfile
+import re
 import urllib.error
 import urllib.request
 
@@ -26,13 +34,41 @@ import make_updates as mu
 API = "https://api.github.com"
 UPLOADS = "https://uploads.github.com"
 FEED = f"https://github.com/{mu.REPO}/releases/latest/download/updates.json"
+APP_KEY_SOURCE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "windows-app", "src", "TouchDeck.Core", "Updates", "Updates.cs")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Authenticated API calls must not carry the token to wherever a redirect points."""
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_AUTH_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def token():
-    t = os.environ.get("TOUCHDECK_UPDATES_TOKEN") or os.environ.get("GH_TOKEN")
+    t = os.environ.get("TOUCHDECK_UPDATES_TOKEN")
     if not t:
         sys.exit("Set TOUCHDECK_UPDATES_TOKEN (fine-grained token: Contents read/write on the update repo).")
     return t
+
+
+def pinned_public_key():
+    """The public key compiled into the app (UpdateSource.OfficialPublicKey)."""
+    m = re.search(r'OfficialPublicKey = "([A-Za-z0-9+/=]+)"', open(APP_KEY_SOURCE, encoding="utf-8").read())
+    if not m:
+        sys.exit("Can't find OfficialPublicKey in the app source.")
+    return m.group(1)
+
+
+def signing_key(path):
+    pem = os.environ.get("TOUCHDECK_FEED_KEY", "").encode() or (open(path, "rb").read() if path else b"")
+    if not pem:
+        return None
+    if mu.public_key_b64(pem) != pinned_public_key():
+        sys.exit("The signing key does not match the public key pinned in the app; refusing to publish.")
+    return pem
 
 
 def call(method, url, tok, body=None, data=None, content_type="application/json"):
@@ -46,22 +82,33 @@ def call(method, url, tok, body=None, data=None, content_type="application/json"
         headers["Content-Type"] = content_type
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=120) as r:
+        with _AUTH_OPENER.open(req, timeout=120) as r:
             raw = r.read()
             return r.status, (json.loads(raw) if raw and r.headers.get_content_type() == "application/json" else raw)
     except urllib.error.HTTPError as e:
         return e.code, e.read()
 
 
-def previous_feed():
-    """The latest published feed, or None when nothing is published yet."""
+def _get_public(url):
+    """Unauthenticated GET (public release assets); None on 404."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(FEED, headers={"User-Agent": "touchdeck-publish"}), timeout=30) as r:
-            return json.loads(r.read())
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "touchdeck-publish"}), timeout=30) as r:
+            return r.read()
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
         raise
+
+
+def previous_feed():
+    """The latest published feed (signature verified), or None when nothing is published yet."""
+    raw = _get_public(FEED)
+    if raw is None:
+        return None
+    sig = _get_public(FEED + ".sig")
+    if sig is None or not mu.verify(raw, sig, pinned_public_key()):
+        sys.exit("The published feed's signature doesn't verify; refusing to build on it.")
+    return json.loads(raw)
 
 
 def ensure_initialized(tok):
@@ -92,6 +139,7 @@ def main():
     ap.add_argument("--app-version")
     ap.add_argument("--firmware", action="append", default=[], metavar="BOARD=VERSION=PATH")
     ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "touchdeck-release"))
+    ap.add_argument("--key-file", help="PEM signing key (else TOUCHDECK_FEED_KEY)")
     ap.add_argument("--dry-run", action="store_true", help="build the feed and list the files; publish nothing")
     a = ap.parse_args()
 
@@ -125,9 +173,20 @@ def main():
     published = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     feed = mu.merge(previous_feed(), app_windows=app, firmware=firmware, published=published)
     feed_path = os.path.join(a.out, "updates.json")
-    with open(feed_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(mu.dumps(feed))
+    feed_bytes = mu.dumps(feed).encode("utf-8")
+    with open(feed_path, "wb") as f:
+        f.write(feed_bytes)
     files.append(feed_path)
+    key = signing_key(a.key_file)
+    if key is None and not a.dry_run:
+        sys.exit("No signing key (TOUCHDECK_FEED_KEY or --key-file): the app refuses unsigned feeds.")
+    if key is not None:
+        sig_path = feed_path + ".sig"
+        with open(sig_path, "w", encoding="ascii", newline="") as f:
+            f.write(mu.sign(feed_bytes, key))
+        if not mu.verify(feed_bytes, open(sig_path, "rb").read(), pinned_public_key()):
+            sys.exit("Self-check failed: the new signature doesn't verify against the pinned key.")
+        files.append(sig_path)
 
     print(f"Release {tag}:")
     for p in files:
@@ -148,7 +207,7 @@ def main():
     for p in files:
         with open(p, "rb") as f:
             data = f.read()
-        ctype = "application/json" if p.endswith(".json") else "application/octet-stream"
+        ctype = "application/json" if p.endswith(".json") else "text/plain" if p.endswith(".sig") else "application/octet-stream"
         url = f"{UPLOADS}/repos/{mu.REPO}/releases/{rel['id']}/assets?name={os.path.basename(p)}"
         status, _ = call("POST", url, tok, data=data, content_type=ctype)
         if status != 201:

@@ -3,10 +3,11 @@
   End-to-end in-app update test on this PC, against a loopback feed.
 
 .DESCRIPTION
-  Builds and installs version -From, builds -To, serves updates.json and the -To MSI
-  from http://127.0.0.1:<port>/, runs the installed app with
-  --update-feed ... --smoke-update, and checks that the installed exe becomes -To and
-  that the app restarted itself. Leaves -To installed (install the real release over it).
+  Builds (with -UpdateTestHooks) and installs version -From, builds -To, serves a feed
+  signed with a throwaway test key plus the -To MSI from http://127.0.0.1:<port>/, runs
+  the installed app with --update-feed/--update-key/--smoke-update, and checks that
+  the installed exe becomes -To and that the app restarted itself. Leaves -To installed
+  (install the real release over it). Needs Python with the cryptography package.
 #>
 param(
     [string]$From = "1.1.98",
@@ -24,8 +25,8 @@ function Expect($ok, $what) {
 }
 
 Write-Host "==> Building $From and $To" -ForegroundColor Cyan
-& (Join-Path $root "build.ps1") -SkipTests -Version $From | Out-Null
-& (Join-Path $root "build.ps1") -SkipTests -Version $To | Out-Null
+& (Join-Path $root "build.ps1") -SkipTests -UpdateTestHooks -Version $From | Out-Null
+& (Join-Path $root "build.ps1") -SkipTests -UpdateTestHooks -Version $To | Out-Null
 $fromMsi = Join-Path $out "TouchDeck-$From.msi"
 $toMsi = Join-Path $out "TouchDeck-$To.msi"
 
@@ -51,6 +52,16 @@ $sha = (Get-FileHash $toMsi -Algorithm SHA256).Hash.ToLower()
 $size = (Get-Item $toMsi).Length
 $feed = "{`"schema`": 1, `"app`": {`"windows`": {`"version`": `"$To`", `"url`": `"http://127.0.0.1:$Port/TouchDeck-$To.msi`", `"sha256`": `"$sha`", `"size`": $size}}, `"firmware`": []}"
 [IO.File]::WriteAllText((Join-Path $site "updates.json"), $feed)
+# Sign it with a throwaway key, exactly as tools/publish_release.py signs the real feed.
+$tools = Join-Path (Split-Path $root -Parent) "tools"
+$testKey = & python -c "import sys; sys.path.insert(0, r'$tools'); import make_updates as mu
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import serialization
+pem = ec.generate_private_key(ec.SECP256R1()).private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+data = open(r'$site\updates.json', 'rb').read()
+open(r'$site\updates.json.sig', 'w').write(mu.sign(data, pem))
+print(mu.public_key_b64(pem))"
+if (-not $testKey) { throw "signing the test feed failed (python + cryptography needed)" }
 $server = Start-Process python -ArgumentList "-m", "http.server", "$Port", "--bind", "127.0.0.1", "--directory", "`"$site`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 
@@ -60,7 +71,7 @@ try {
     if (Test-Path $report) { Remove-Item $report -Recurse -Force }
     # Wait for this process only: Start-Process -Wait (PS 5.1) also waits for descendants,
     # and the relaunched app is one, so it would never return.
-    $old = Start-Process $exe -ArgumentList "--update-feed", "http://127.0.0.1:$Port/updates.json", "--smoke-update", "`"$report`"" -PassThru
+    $old = Start-Process $exe -ArgumentList "--update-feed", "http://127.0.0.1:$Port/updates.json", "--update-key", $testKey, "--smoke-update", "`"$report`"" -PassThru
     if (-not $old.WaitForExit(120000)) { throw "the app did not quit for the installer within 2 minutes" }
     $facts = @{}
     Get-Content (Join-Path $report "update.txt") | ForEach-Object { $k, $v = $_ -split "=", 2; $facts[$k] = $v }

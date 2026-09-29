@@ -4,6 +4,8 @@ The Windows companion app for the Touch Deck boards (it replaced the old Python 
 
 ![Main window](docs/img/main-window.png)
 
+![Settings](docs/img/settings.png)
+
 ## What it does
 
 - **Finds the board.** It scans USB serial ports for `CAFE:4011` (RP2040-Touch-LCD-1.69) and `303A:1001` (ESP32-2424S012C), checks each with `HELLO`→`PONG`, and reconnects after an unplug.

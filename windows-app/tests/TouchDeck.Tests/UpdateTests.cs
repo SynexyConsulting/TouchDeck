@@ -30,6 +30,13 @@ internal sealed class LoopServer : IDisposable
     public void Serve(string path, byte[] body, int status = 200) =>
         routes[path] = r => { r.StatusCode = status; return body; };
 
+    /// <summary>Serves a feed and its signature, like a published release.</summary>
+    public void ServeSignedFeed(TestSigner signer, byte[] feed)
+    {
+        Serve("/updates.json", feed);
+        Serve("/updates.json.sig", signer.Sign(feed));
+    }
+
     public void Redirect(string path, string location, int status = 302) =>
         routes[path] = r => { r.StatusCode = status; r.RedirectLocation = location; return []; };
 
@@ -117,8 +124,8 @@ public sealed class UpdateFeedTests
     [Fact]
     public void Test_feeds_must_be_loopback()
     {
-        Assert.Throws<ArgumentException>(() => UpdateSource.ForTest(new Uri("http://example.com/updates.json")));
-        var t = UpdateSource.ForTest(new Uri("http://localhost:5000/updates.json"));
+        Assert.Throws<ArgumentException>(() => UpdateSource.ForTest(new Uri("http://example.com/updates.json"), "k"));
+        var t = UpdateSource.ForTest(new Uri("http://localhost:5000/updates.json"), "k");
         Assert.True(t.IsAllowedAsset(new Uri("http://localhost:5000/a.msi")));
         Assert.False(t.IsAllowedAsset(new Uri("http://localhost:5001/a.msi")));      // other port
         Assert.False(Official.IsAllowedAsset(new Uri("http://localhost:5000/a.msi")));
@@ -163,11 +170,12 @@ public sealed class UpdateSelectionTests
 public sealed class UpdateClientTests : IDisposable
 {
     private readonly LoopServer server = new();
+    private readonly TestSigner signer = new();
     private readonly string dir = Directory.CreateTempSubdirectory("td-upd-").FullName;
     private static readonly byte[] Payload = Encoding.ASCII.GetBytes(new string('M', 5000));
     private static string Hex(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
-    private UpdateClient Client() => new(UpdateSource.ForTest(new Uri($"{server.Base}/updates.json")));
+    private UpdateClient Client() => new(UpdateSource.ForTest(new Uri($"{server.Base}/updates.json"), signer.PublicKey));
 
     [Fact]
     public async Task Missing_feed_means_nothing_published()
@@ -178,7 +186,7 @@ public sealed class UpdateClientTests : IDisposable
     [Fact]
     public async Task Fetches_and_validates_the_feed()
     {
-        server.Serve("/updates.json", Encoding.UTF8.GetBytes($$"""
+        server.ServeSignedFeed(signer, Encoding.UTF8.GetBytes($$"""
             { "schema": 1, "app": { "windows": { "version": "9.9.9", "url": "{{server.Base}}/a.msi", "sha256": "{{Hex(Payload)}}", "size": {{Payload.Length}} } }, "firmware": [] }
             """));
         var feed = await Client().FetchFeedAsync(CancellationToken.None);
@@ -249,6 +257,7 @@ public sealed class UpdateClientTests : IDisposable
     public void Dispose()
     {
         server.Dispose();
+        signer.Dispose();
         Directory.Delete(dir, true);
     }
 }
@@ -256,19 +265,20 @@ public sealed class UpdateClientTests : IDisposable
 public sealed class UpdateServiceTests : IDisposable
 {
     private readonly LoopServer server = new();
+    private readonly TestSigner signer = new();
     private readonly string dir = Directory.CreateTempSubdirectory("td-svc-").FullName;
     private static readonly byte[] Msi = Encoding.ASCII.GetBytes(new string('I', 3000));
     private static readonly byte[] Uf2 = Encoding.ASCII.GetBytes(new string('U', 2048));
     private static string Hex(byte[] b) => Convert.ToHexString(SHA256.HashData(b)).ToLowerInvariant();
 
     private UpdateService Service() =>
-        new(new UpdateClient(UpdateSource.ForTest(new Uri($"{server.Base}/updates.json"))), dir);
+        new(new UpdateClient(UpdateSource.ForTest(new Uri($"{server.Base}/updates.json"), signer.PublicKey)), dir);
 
     private void Publish(string app = "1.3.0", string fw = "1.7.0")
     {
         server.Serve("/app.msi", Msi);
         server.Serve("/fw.uf2", Uf2);
-        server.Serve("/updates.json", Encoding.UTF8.GetBytes($$"""
+        server.ServeSignedFeed(signer, Encoding.UTF8.GetBytes($$"""
             { "schema": 1,
               "app": { "windows": { "version": "{{app}}", "url": "{{server.Base}}/app.msi", "sha256": "{{Hex(Msi)}}", "size": {{Msi.Length}} } },
               "firmware": [ { "board": "rp2040-169", "version": "{{fw}}", "url": "{{server.Base}}/fw.uf2", "sha256": "{{Hex(Uf2)}}", "size": {{Uf2.Length}} } ] }
@@ -295,7 +305,7 @@ public sealed class UpdateServiceTests : IDisposable
     [Fact]
     public async Task Failures_are_text_not_exceptions()
     {
-        server.Serve("/updates.json", Encoding.UTF8.GetBytes("{ broken"));
+        server.ServeSignedFeed(signer, Encoding.UTF8.GetBytes("{ broken"));
         var r = await Service().CheckAsync(new Version(1, 2, 0), null, CancellationToken.None);
         Assert.NotNull(r.Error);
         Assert.Null(r.Choice);
@@ -305,12 +315,12 @@ public sealed class UpdateServiceTests : IDisposable
     public async Task Downloads_use_fixed_names_in_a_cleared_folder()
     {
         Publish();
-        File.WriteAllText(Path.Combine(dir, "leftover.msi"), "old");
+        File.WriteAllText(Path.Combine(dir, "TouchDeck-update.msi.part"), "old");
         var s = Service();
         var r = await s.CheckAsync(new Version(1, 2, 0), new FirmwareInfo("rp2040-169", "1.6.0", ""), CancellationToken.None);
         var msi = await s.DownloadAppAsync(r.Choice!.App!, null, CancellationToken.None);
         Assert.Equal(Path.Combine(dir, "TouchDeck-update.msi"), msi);
-        Assert.False(File.Exists(Path.Combine(dir, "leftover.msi")));
+        Assert.False(File.Exists(Path.Combine(dir, "TouchDeck-update.msi.part")));
         var uf2 = await s.DownloadFirmwareAsync(r.Choice.Firmware!, null, CancellationToken.None);
         Assert.Equal(Path.Combine(dir, "rp2040-169-update.uf2"), uf2);
         Assert.Equal(Uf2, File.ReadAllBytes(uf2));
@@ -319,6 +329,7 @@ public sealed class UpdateServiceTests : IDisposable
     public void Dispose()
     {
         server.Dispose();
+        signer.Dispose();
         Directory.Delete(dir, true);
     }
 }

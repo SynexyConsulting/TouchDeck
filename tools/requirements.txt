@@ -2,3 +2,4 @@
 pyserial>=3.5
 pytest>=8
 Pillow>=10
+cryptography>=42       # feed signing (tools/publish_release.py, tests)

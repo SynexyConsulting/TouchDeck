@@ -35,10 +35,26 @@ public sealed class UpdateService(UpdateClient client, string downloadDir)
     public Task<string> DownloadFirmwareAsync(FirmwarePackage p, IProgress<double>? progress, CancellationToken ct) =>
         DownloadAsync(p.Url, p.Sha256, p.Size, $"{p.Board}-update.uf2", progress, ct);
 
+    private static readonly System.Text.RegularExpressions.Regex OwnFile =
+        new(@"^(TouchDeck-update\.msi|[a-z0-9][a-z0-9-]*-update\.uf2)(\.part)?$");
+
+    /// <summary>
+    /// Removes the updater's own files (never anything else), after checking the folder is a real
+    /// folder: a junction planted in its place would redirect the deletes and the downloads.
+    /// </summary>
+    public static void ClearDownloads(string dir)
+    {
+        if (!Directory.Exists(dir)) return;
+        if (new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint))
+            throw new UpdateVerificationException("The update folder is a link; refusing to use it.");
+        foreach (var f in Directory.GetFiles(dir))
+            if (OwnFile.IsMatch(Path.GetFileName(f))) File.Delete(f);
+    }
+
     private async Task<string> DownloadAsync(Uri url, string sha, long size, string name, IProgress<double>? progress, CancellationToken ct)
     {
         Directory.CreateDirectory(downloadDir);
-        foreach (var old in Directory.GetFiles(downloadDir)) File.Delete(old);   // nothing stale is ever reused
+        ClearDownloads(downloadDir);                                           // nothing stale is ever reused
         var dest = Path.Combine(downloadDir, name);
         await client.DownloadAsync(url, sha, size, dest, progress, ct);
         return dest;

@@ -48,7 +48,11 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
 ## Updates and Settings
 
 - **`Core/Updates`:**
-  - `UpdateSource` (the official feed, or a loopback feed via `--update-feed`) fixes which URLs are allowed.
+  - `UpdateSource` (the official feed, or a loopback test feed) fixes which URLs are allowed, and which public key (`OfficialPublicKey`, pinned) must have signed the feed.
+  - `FeedSignature`: `updates.json.sig` is base64 raw r||s ECDSA P-256 over the feed's exact bytes. An unsigned or wrongly signed feed is refused before it is parsed.
+  - `UpdateClient` has timeouts: 30 s for the whole feed check, and 30 s of idle per download read. The feed and signature reads are size-capped.
+  - The test switches `--update-feed`, `--update-key` and `--smoke-update` exist only in builds made with `build.ps1 -UpdateTestHooks`, never in a release.
+  - `ClearDownloads` removes only the updater's own file names and refuses a junction in place of the folder.
   - `UpdateFeed.Parse` validates everything and rejects the whole feed on any bad entry: repo-only https URLs, 64-hex SHA-256, size caps of 200 MB for the app and 4 MB for firmware.
   - `UpdateClient` follows redirects by hand, only to GitHub https hosts, and hashes and size-checks while streaming. A mismatch leaves no file.
   - `UpdateService` downloads to `%LOCALAPPDATA%\TouchDeck\Updates` under fixed names.

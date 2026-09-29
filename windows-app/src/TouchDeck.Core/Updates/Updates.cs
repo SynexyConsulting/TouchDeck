@@ -22,23 +22,33 @@ public sealed class UpdateSource
 {
     public const string OfficialAssetPrefix = "https://github.com/SynexyConsulting/TouchDeckUpdates/releases/download/";
     public static readonly Uri OfficialFeed = new("https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest/download/updates.json");
-    public static UpdateSource Official { get; } = new(OfficialFeed, test: false);
+
+    /// <summary>
+    /// The feed-signing public key (ECDSA P-256, SubjectPublicKeyInfo). Only a feed signed with its
+    /// private key is trusted; that key never lives in this repo (see the README's release section).
+    /// </summary>
+    public const string OfficialPublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEme/lCuDrapxNW0d+7Lk9/qQTKbXAPhv1RjJLIDbe8Go9JWZFXQOyQ41g/o2OlU5LJHjA01RYYgCOG7+Irdtwhw==";
+
+    public static UpdateSource Official { get; } = new(OfficialFeed, OfficialPublicKey, test: false);
 
     public Uri FeedUrl { get; }
+    public Uri SignatureUrl => new(FeedUrl.AbsoluteUri + ".sig");
+    public string PublicKey { get; }
     public bool IsTest { get; }
 
-    private UpdateSource(Uri feed, bool test)
+    private UpdateSource(Uri feed, string publicKey, bool test)
     {
         FeedUrl = feed;
+        PublicKey = publicKey;
         IsTest = test;
     }
 
-    /// <summary>A loopback feed for end-to-end tests (--update-feed). Anything else is refused.</summary>
-    public static UpdateSource ForTest(Uri feed)
+    /// <summary>A loopback feed and its test key, for end-to-end tests only. Anything but loopback is refused.</summary>
+    public static UpdateSource ForTest(Uri feed, string publicKey)
     {
         if (!feed.IsAbsoluteUri || !feed.IsLoopback || feed.Scheme is not ("http" or "https"))
             throw new ArgumentException("A test update feed must be an http(s) loopback URL.", nameof(feed));
-        return new UpdateSource(feed, test: true);
+        return new UpdateSource(feed, publicKey, test: true);
     }
 
     /// <summary>Asset URLs a feed may name: the update repo's release downloads (or, in test mode, the feed's own server).</summary>
@@ -62,6 +72,27 @@ public sealed class UpdateSource
 
     private static bool SameServer(Uri a, Uri b) =>
         a.Scheme == b.Scheme && a.IdnHost == b.IdnHost && a.Port == b.Port;
+}
+
+/// <summary>updates.json.sig: base64 of the raw ECDSA P-256 signature (r||s, 64 bytes) over the feed's bytes.</summary>
+public static class FeedSignature
+{
+    public static bool Verify(byte[] feed, byte[] signatureFile, string publicKeySpki)
+    {
+        try
+        {
+            var sig = Convert.FromBase64String(System.Text.Encoding.ASCII.GetString(signatureFile).Trim());
+            if (sig.Length != 64) return false;
+            using var key = ECDsa.Create();
+            key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKeySpki), out _);
+            if (key.KeySize != 256) return false;
+            return key.VerifyData(feed, sig, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        }
+        catch (Exception e) when (e is FormatException or CryptographicException or ArgumentException)
+        {
+            return false;
+        }
+    }
 }
 
 /// <summary>The published updates.json: newest app per OS and newest firmware per board.</summary>
@@ -157,33 +188,62 @@ public static class UpdateSelector
 /// </summary>
 public sealed class UpdateClient
 {
+    private const int MaxFeedBytes = 1_000_000, MaxSignatureBytes = 1024;
     private readonly UpdateSource source;
     private readonly HttpClient http;
+    private readonly TimeSpan feedTimeout, idleTimeout;
 
-    public UpdateClient(UpdateSource source, HttpMessageHandler? handler = null)
+    /// <param name="feedTimeout">Whole feed check (feed + signature), default 30 s.</param>
+    /// <param name="idleTimeout">Longest wait for the next bytes of a download, default 30 s.</param>
+    public UpdateClient(UpdateSource source, HttpMessageHandler? handler = null, TimeSpan? feedTimeout = null, TimeSpan? idleTimeout = null)
     {
         this.source = source;
+        this.feedTimeout = feedTimeout ?? TimeSpan.FromSeconds(30);
+        this.idleTimeout = idleTimeout ?? TimeSpan.FromSeconds(30);
         http = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"TouchDeck/{CoreInfo.Version}");
     }
 
-    /// <summary>The feed, or null when nothing has been published yet (404).</summary>
+    /// <summary>
+    /// The feed, or null when nothing has been published yet (404). The feed must carry a valid
+    /// signature (updates.json.sig) from the pinned key, or it is refused before it is parsed.
+    /// </summary>
     public async Task<UpdateFeed?> FetchFeedAsync(CancellationToken ct)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(feedTimeout);
         try
         {
-            using var resp = await SendFollowingAsync(source.FeedUrl, ct);
-            if (resp.StatusCode == HttpStatusCode.NotFound) return null;
-            if (!resp.IsSuccessStatusCode) throw new UpdateFeedException($"The update server answered {(int)resp.StatusCode}.");
-            var len = resp.Content.Headers.ContentLength;
-            if (len > 1_000_000) throw new UpdateFeedException("The update feed is too large.");
-            var json = await resp.Content.ReadAsStringAsync(ct);
-            if (json.Length > 1_000_000) throw new UpdateFeedException("The update feed is too large.");
-            return UpdateFeed.Parse(json, source);
+            var feed = await ReadSmallAsync(source.FeedUrl, MaxFeedBytes, deadline.Token);
+            if (feed is null) return null;
+            var sig = await ReadSmallAsync(source.SignatureUrl, MaxSignatureBytes, deadline.Token)
+                ?? throw new UpdateFeedException("The update feed has no signature; it is not trusted.");
+            if (!FeedSignature.Verify(feed, sig, source.PublicKey))
+                throw new UpdateFeedException("The update feed's signature doesn't match; it is not trusted.");
+            return UpdateFeed.Parse(System.Text.Encoding.UTF8.GetString(feed), source);
         }
         catch (HttpRequestException e) { throw new UpdateFeedException($"Couldn't reach the update server: {e.Message}", e); }
-        catch (TaskCanceledException e) when (!ct.IsCancellationRequested) { throw new UpdateFeedException("The update server timed out.", e); }
+        catch (OperationCanceledException e) when (!ct.IsCancellationRequested) { throw new UpdateFeedException("The update server timed out.", e); }
         catch (UpdateVerificationException e) { throw new UpdateFeedException(e.Message); }
+    }
+
+    /// <summary>A small resource (feed, signature), read with a hard size cap; null on 404.</summary>
+    private async Task<byte[]?> ReadSmallAsync(Uri url, int max, CancellationToken ct)
+    {
+        using var resp = await SendFollowingAsync(url, ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return null;
+        if (!resp.IsSuccessStatusCode) throw new UpdateFeedException($"The update server answered {(int)resp.StatusCode}.");
+        if (resp.Content.Headers.ContentLength > max) throw new UpdateFeedException("The update feed is too large.");
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var ms = new MemoryStream();
+        var buf = new byte[16384];
+        int n;
+        while ((n = await stream.ReadAsync(buf, ct)) > 0)
+        {
+            if (ms.Length + n > max) throw new UpdateFeedException("The update feed is too large.");
+            ms.Write(buf, 0, n);
+        }
+        return ms.ToArray();
     }
 
     /// <summary>Downloads <paramref name="url"/> to <paramref name="dest"/>; any mismatch deletes it and throws.</summary>
@@ -204,7 +264,7 @@ public sealed class UpdateClient
                 var buf = new byte[81920];
                 long total = 0;
                 int n;
-                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                while ((n = await ReadWithIdleTimeoutAsync(src, buf, ct)) > 0)
                 {
                     total += n;
                     if (total > size) throw new UpdateVerificationException("Download refused: longer than the update feed says.");
@@ -223,10 +283,21 @@ public sealed class UpdateClient
         {
             throw new UpdateVerificationException($"Download failed: {e.Message}");
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new UpdateVerificationException("Download stalled; try again.");
+        }
         finally
         {
             if (File.Exists(tmp)) File.Delete(tmp);
         }
+    }
+
+    private async Task<int> ReadWithIdleTimeoutAsync(Stream src, byte[] buf, CancellationToken ct)
+    {
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        idle.CancelAfter(idleTimeout);
+        return await src.ReadAsync(buf, idle.Token);
     }
 
     private async Task<HttpResponseMessage> SendFollowingAsync(Uri url, CancellationToken ct)

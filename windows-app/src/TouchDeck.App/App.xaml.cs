@@ -54,11 +54,14 @@ public partial class App : Application
             ex.Handled = true;
         };
 
-        // --update-feed URL: a loopback feed for end-to-end update tests (anything else is refused).
         Core.Updates.UpdateSource? feed = null;
-        int f = Array.IndexOf(e.Args, "--update-feed");
-        if (f >= 0 && f + 1 < e.Args.Length && Uri.TryCreate(e.Args[f + 1], UriKind.Absolute, out var feedUri))
-            feed = Core.Updates.UpdateSource.ForTest(feedUri);
+#if UPDATE_TEST_HOOKS
+        // Test builds only (build.ps1 -UpdateTestHooks): a loopback feed signed with a test key.
+        int f = Array.IndexOf(e.Args, "--update-feed"), k = Array.IndexOf(e.Args, "--update-key");
+        if (f >= 0 && f + 1 < e.Args.Length && k >= 0 && k + 1 < e.Args.Length &&
+            Uri.TryCreate(e.Args[f + 1], UriKind.Absolute, out var feedUri))
+            feed = Core.Updates.UpdateSource.ForTest(feedUri, e.Args[k + 1]);
+#endif
 
         controller = new AppController(Dispatcher, null, feed);
         controller.QuitForUpdate += Quit;
@@ -75,10 +78,13 @@ public partial class App : Application
 
         int smoke = Array.IndexOf(e.Args, "--smoke");
         if (smoke >= 0 && smoke + 1 < e.Args.Length) _ = RunSmokeAsync(e.Args[smoke + 1]);
+#if UPDATE_TEST_HOOKS
         int smokeUpdate = Array.IndexOf(e.Args, "--smoke-update");
         if (smokeUpdate >= 0 && smokeUpdate + 1 < e.Args.Length) _ = RunSmokeUpdateAsync(e.Args[smokeUpdate + 1]);
+#endif
     }
 
+#if UPDATE_TEST_HOOKS
     /// <summary>
     /// --smoke-update DIR: check the feed, write DIR\update.txt, and install an app update if one
     /// is offered (the installer restarts the app). Used by the end-to-end update test.
@@ -102,6 +108,7 @@ public partial class App : Application
         if (controller.CanInstallApp) await controller.InstallAppUpdateAsync();   // quits for the installer
         else Quit();
     }
+#endif
 
     /// <summary>
     /// --smoke DIR: wait for a board (up to 10 s), then write DIR\smoke.png (the window) and

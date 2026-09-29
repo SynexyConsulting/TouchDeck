@@ -463,6 +463,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     // ---------- updates ----------
 
+    private const string FlashableBoard = "rp2040-169";
     private readonly UpdateService updates;
     private UpdateChoice? lastChoice;
     private bool checkedOnce;
@@ -531,8 +532,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var app = o.Choice?.App;
         AppUpdateText = app is null ? "Up to date" : $"{app.Version.ToString(3)} available";
         CanInstallApp = app is not null;
-        var fw = o.Choice?.Firmware;
+        // The app flashes RP2040 boards only (UF2); other boards are updated with their own tools.
+        var fw = o.Choice?.Firmware is { Board: FlashableBoard } f ? f : null;
         FirmwareUpdateText = device is not { Known: true } ? "Connect a board to check its firmware"
+            : device.Board != FlashableBoard ? "This board is updated with PlatformIO"
             : fw is null ? "Up to date" : $"{fw.Version.ToString(3)} available";
         CanInstallFirmware = fw is not null && device is not null;
         if (app is not null) Notify?.Invoke("Touch Deck update", $"Version {app.Version.ToString(3)} is available. Open Settings to install it.");
