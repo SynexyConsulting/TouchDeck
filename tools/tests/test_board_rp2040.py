@@ -160,3 +160,21 @@ def test_clip_clear_ignored_while_empty(board):
     board.send("CLIP CLEAR"); board.pump(0.3)          # empty: a no-op, no error
     assert latest_state(board)["clip"] == "0"
     board.send("WATCH 0"); board.pump(0.2)
+
+def test_restart_keeps_letter_and_resumes_countdown(board):
+    """Moves the real mouse for ~2 s (the RP2040 is a USB mouse)."""
+    board.send("JIG OFF"); board.pump(0.2)
+    shown = board.field("letter")
+    try:
+        board.send("JIG ON"); board.pump(0.3)
+        assert board.field("letter") == shown             # the displayed letter, not a new pick
+        first = int(board.field("jnext"))
+        board.pump(1.0)
+        board.send("JIG OFF"); board.pump(2.0)             # off for 2 s: the countdown pauses
+        paused = int(board.field("jnext"))
+        board.send("JIG ON"); board.pump(0.3)
+        assert board.field("letter") == shown
+        resumed = int(board.field("jnext"))
+        assert first - 3 <= resumed <= first and abs(resumed - paused) <= 1, (first, paused, resumed)
+    finally:
+        board.send("JIG OFF"); board.pump(0.2)

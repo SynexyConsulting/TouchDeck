@@ -4,5 +4,6 @@
 void jiggler_set(bool on);
 void jiggler_toggle(void);
 bool jiggler_idle(void);   // off, or moving along the letter (safe to start typing)
+int jiggler_next_menu_s(void);   // DBG: countdown to the next menu (paused value when off)
 void jiggler_demo_begin(void);   // ANIM 1: walk a letter on screen, no HID
 void jiggler_step(void);   // call from the main loop

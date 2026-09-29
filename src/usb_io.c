@@ -56,10 +56,26 @@ bool usb_mouse(uint8_t buttons, int8_t dx, int8_t dy) {
     return tud_hid_mouse_report(REPORT_ID_MOUSE, buttons, dx, dy, 0, 0);
 }
 
+// Sends the whole line: a line can be longer than the free TX FIFO (DBG is ~300
+// bytes), so write what fits, flush, and let USB drain it. Bounded, so a host
+// that stops reading can't stall core0.
+static void write_all(const char *p, size_t n, uint32_t give_up) {
+    while (n) {
+        uint32_t w = tud_cdc_write(p, n);
+        p += w;
+        n -= w;
+        if (!n) break;
+        tud_cdc_write_flush();
+        if ((int32_t)(now_ms() - give_up) >= 0) return;
+        tud_task();
+    }
+}
+
 void usb_send_line(const char *s) {
     if (!tud_cdc_connected()) return;
-    tud_cdc_write_str(s);
-    tud_cdc_write_char('\n');
+    uint32_t give_up = now_ms() + 20;
+    write_all(s, strlen(s), give_up);
+    write_all("\n", 1, give_up);
     tud_cdc_write_flush();
 }
 

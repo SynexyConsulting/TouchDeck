@@ -17,6 +17,7 @@ static jig_motion_t m;
 static float sent_x, sent_y;   // mouse offset from the start point we have told the host so far
 static float scale = 1.f;      // eases toward JIG_SCALES[app.jig_scale_idx] so a change never jumps
 static uint32_t next_ms;
+static uint32_t paused_menu_ms;   // countdown left when switched off while moving (0 = none)
 
 static uint32_t rand_between(uint32_t lo, uint32_t hi) {
     return lo + esp_random() % (hi - lo + 1);
@@ -39,14 +40,20 @@ void jiggler_set(bool on) {
     app.jig_on = on;
     if (on) {
         scale = JIG_SCALES[app.jig_scale_idx];
-        jm_begin(&m, jm_pick(-1, esp_random()));
+        jm_begin(&m, app.jig_letter);   // keep the letter on screen; it changes after each menu
         sent_x = sent_y = 0.f;   // the mouse's current spot is the letter's start point
         publish();
         app.jig_phase = JIG_MOVING;
         app.jig_menus = 0;
         app.jig_started_ms = now_ms();
         next_ms = now_ms();
-        schedule_menu();
+        if (paused_menu_ms) app.jig_next_menu_ms = now_ms() + paused_menu_ms;   // carry on the countdown
+        else schedule_menu();
+        paused_menu_ms = 0;
+    } else if (app.jig_phase == JIG_MOVING) {
+        // Switched off mid-countdown: remember what was left for the next start.
+        int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
+        paused_menu_ms = left > 0 ? (uint32_t)left : 0;
     } else if (app.jig_phase == JIG_CLICK_DOWN || app.jig_phase == JIG_ESC_DOWN) {
         out_mouse(0, 0, 0);      // don't leave a button or key held
         out_key(0, 0);
@@ -68,6 +75,12 @@ void jiggler_on_output_change() {
     app.jig_phase = JIG_MOVING;
     schedule_menu();
     next_ms = now_ms();
+}
+
+int jiggler_next_menu_s() {
+    if (!app.jig_on) return (int)(paused_menu_ms / 1000);
+    int32_t left = (int32_t)(app.jig_next_menu_ms - now_ms());
+    return left > 0 ? left / 1000 : 0;
 }
 
 bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING; }
