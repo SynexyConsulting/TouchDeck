@@ -100,3 +100,63 @@ def test_letter_zone_tap_toggles_the_jiggler(board):
     assert board.field("jig") != was
     board.send("TAP 120 140"); board.pump(0.3)
     assert board.field("jig") == was
+
+def state_lines(board, secs):
+    board.take(); board.pump(secs)
+    return [l for l in board.take() if l.startswith("STATE ")]
+
+def fields(line):
+    return dict(kv.split("=", 1) for kv in line.split()[1:])
+
+def test_watch_streams_state(board):
+    board.send("WATCH 1")
+    lines = state_lines(board, 0.5)
+    assert lines, "no STATE after WATCH 1"
+    f = fields(lines[-1])
+    assert set(f) >= {"jig", "letter", "scale", "phase", "x", "y", "clip", "paste"}
+    assert f["letter"] in "OWMNZXCVHJLBGD"
+    board.send("WATCH 0"); board.pump(0.2)
+    assert not state_lines(board, 0.6), "STATE kept coming after WATCH 0"
+
+def test_anim_demo_moves_the_dot_in_state(board):
+    board.send("WATCH 1"); board.send("ANIM 1")
+    try:
+        pts = {(fields(l)["x"], fields(l)["y"]) for l in state_lines(board, 1.2)}
+        assert len(pts) >= 5, "dot position did not stream"
+    finally:
+        board.send("ANIM 0"); board.send("WATCH 0"); board.pump(0.2)
+
+def test_jig_scale_command(board):
+    board.send("WATCH 1")
+    start = int(fields(state_lines(board, 0.4)[-1])["scale"])
+    try:
+        for want in (2, 0, 1):
+            board.send(f"JIG SCALE {want}"); board.pump(0.2)
+            assert board.field("jscale") == ["1.0", "1.5", "2.0"][want]
+    finally:
+        board.send(f"JIG SCALE {start}"); board.send("WATCH 0"); board.pump(0.2)
+
+def test_jig_on_off_command(board):
+    """Moves the real mouse a few px for ~0.3 s (the RP2040 is a USB mouse)."""
+    was = board.field("jig")
+    try:
+        board.send("JIG ON"); board.pump(0.3)
+        assert board.field("jig") == "1"
+        board.send("JIG OFF"); board.pump(0.2)
+        assert board.field("jig") == "0"
+    finally:
+        board.send("JIG ON" if was == "1" else "JIG OFF"); board.pump(0.2)
+
+def latest_state(board):
+    """Forces a fresh report (WATCH 1 re-sends once) and returns its fields."""
+    board.send("WATCH 1")
+    return fields(state_lines(board, 0.3)[-1])
+
+def test_clip_clear_ignored_while_empty(board):
+    put_clip(board, "hello")
+    assert latest_state(board)["clip"] == "5"
+    board.send("CLIP CLEAR"); board.pump(0.3)
+    assert latest_state(board)["clip"] == "0"
+    board.send("CLIP CLEAR"); board.pump(0.3)          # empty: a no-op, no error
+    assert latest_state(board)["clip"] == "0"
+    board.send("WATCH 0"); board.pump(0.2)
