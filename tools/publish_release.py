@@ -1,0 +1,161 @@
+"""Publishes a Touch Deck release to the public update repo (SynexyConsulting/TouchDeckUpdates).
+
+    TOUCHDECK_UPDATES_TOKEN=... python tools/publish_release.py --tag app-v1.2.0 \\
+        --app-windows windows-app/out/TouchDeck-1.2.0.msi --app-version 1.2.0 \\
+        --firmware rp2040-169=1.6.0=windows-app/firmware/rp2040-169.uf2 [--dry-run]
+
+Creates the release, uploads the files and a complete updates.json (merged with the
+previous latest feed, see make_updates.py). The token needs Contents: read and write on
+the update repo only; it is read from the environment and never printed. Used by
+.github/workflows/release.yml and by hand.
+"""
+import argparse
+import base64
+import datetime
+import json
+import os
+import shutil
+import sys
+import tempfile
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import make_updates as mu
+
+API = "https://api.github.com"
+UPLOADS = "https://uploads.github.com"
+FEED = f"https://github.com/{mu.REPO}/releases/latest/download/updates.json"
+
+
+def token():
+    t = os.environ.get("TOUCHDECK_UPDATES_TOKEN") or os.environ.get("GH_TOKEN")
+    if not t:
+        sys.exit("Set TOUCHDECK_UPDATES_TOKEN (fine-grained token: Contents read/write on the update repo).")
+    return t
+
+
+def call(method, url, tok, body=None, data=None, content_type="application/json"):
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
+               "User-Agent": "touchdeck-publish"}
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+    if body is not None:
+        data = json.dumps(body).encode()
+    if data is not None:
+        headers["Content-Type"] = content_type
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            raw = r.read()
+            return r.status, (json.loads(raw) if raw and r.headers.get_content_type() == "application/json" else raw)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def previous_feed():
+    """The latest published feed, or None when nothing is published yet."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(FEED, headers={"User-Agent": "touchdeck-publish"}), timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def ensure_initialized(tok):
+    """A release needs a commit to tag: give an empty repo its README first."""
+    status, _ = call("GET", f"{API}/repos/{mu.REPO}/commits?per_page=1", tok)
+    if status == 200:
+        return
+    if status != 409:  # 409 = empty repository
+        sys.exit(f"Can't read {mu.REPO} (HTTP {status}). Check the token's repository access.")
+    readme = (
+        "# Touch Deck updates\n\n"
+        "Release packages for the Touch Deck Windows app and board firmware.\n"
+        "The app reads `updates.json` from the latest release and verifies each\n"
+        "download against its SHA-256 before installing.\n"
+    )
+    status, resp = call("PUT", f"{API}/repos/{mu.REPO}/contents/README.md", tok,
+                        body={"message": "Initial README", "content": base64.b64encode(readme.encode()).decode()})
+    if status not in (200, 201):
+        sys.exit(f"Couldn't initialise {mu.REPO} (HTTP {status}).")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--tag", required=True)
+    ap.add_argument("--title")
+    ap.add_argument("--notes", default="")
+    ap.add_argument("--app-windows", metavar="MSI")
+    ap.add_argument("--app-version")
+    ap.add_argument("--firmware", action="append", default=[], metavar="BOARD=VERSION=PATH")
+    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "touchdeck-release"))
+    ap.add_argument("--dry-run", action="store_true", help="build the feed and list the files; publish nothing")
+    a = ap.parse_args()
+
+    tag = mu.check_tag(a.tag)
+    if os.path.isdir(a.out):
+        shutil.rmtree(a.out)
+    os.makedirs(a.out)
+
+    files = []
+    app = None
+    if a.app_windows:
+        if not a.app_version:
+            sys.exit("--app-version is required with --app-windows")
+        name = f"TouchDeck-{a.app_version}.msi"
+        dst = os.path.join(a.out, name)
+        shutil.copyfile(a.app_windows, dst)
+        app = mu.entry(dst, a.app_version, tag)
+        files.append(dst)
+    firmware = []
+    for spec in a.firmware:
+        board, version, path = spec.split("=", 2)
+        if not mu.BOARD.match(board):
+            sys.exit(f"bad board id {board!r}")
+        dst = os.path.join(a.out, f"{board}-{version}.uf2")
+        shutil.copyfile(path, dst)
+        firmware.append(dict(mu.entry(dst, version, tag), board=board))
+        files.append(dst)
+    if not files:
+        sys.exit("Nothing to publish.")
+
+    published = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    feed = mu.merge(previous_feed(), app_windows=app, firmware=firmware, published=published)
+    feed_path = os.path.join(a.out, "updates.json")
+    with open(feed_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(mu.dumps(feed))
+    files.append(feed_path)
+
+    print(f"Release {tag}:")
+    for p in files:
+        print(f"  {os.path.basename(p)}  {os.path.getsize(p)} bytes")
+    if a.dry_run:
+        print(mu.dumps(feed))
+        return
+
+    tok = token()
+    ensure_initialized(tok)
+    status, _ = call("GET", f"{API}/repos/{mu.REPO}/releases/tags/{tag}", tok)
+    if status == 200:
+        sys.exit(f"Release {tag} already exists; bump the version instead of overwriting it.")
+    status, rel = call("POST", f"{API}/repos/{mu.REPO}/releases", tok, body={
+        "tag_name": tag, "name": a.title or f"Touch Deck {tag}", "body": a.notes, "make_latest": "true"})
+    if status != 201:
+        sys.exit(f"Creating the release failed (HTTP {status}).")
+    for p in files:
+        with open(p, "rb") as f:
+            data = f.read()
+        ctype = "application/json" if p.endswith(".json") else "application/octet-stream"
+        url = f"{UPLOADS}/repos/{mu.REPO}/releases/{rel['id']}/assets?name={os.path.basename(p)}"
+        status, _ = call("POST", url, tok, data=data, content_type=ctype)
+        if status != 201:
+            sys.exit(f"Uploading {os.path.basename(p)} failed (HTTP {status}); the release is incomplete.")
+        print(f"  uploaded {os.path.basename(p)}")
+    print(f"Published: {rel['html_url']}")
+
+
+if __name__ == "__main__":
+    main()
