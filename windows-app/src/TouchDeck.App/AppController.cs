@@ -490,6 +490,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (Busy) return false;
         Busy = true;
+        manager.RequiredBoard = model.Board;      // another RP board (also CAFE:4011) must not take the session
         var old = manager.Session;
         bool ok = false;
         AddLog($"Installing firmware {label}");
@@ -497,6 +498,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             EnterBootloader = enterBootloader ?? (() => old?.RequestBootloader()),
             FindBootDrive = () => Uf2.FindBootDrive(Uf2.RemovableRoots(), model.Chip),
+            BootloaderChip = () => Uf2.FindBootDrive(Uf2.RemovableRoots(), Uf2Chip.Rp2350) is not null ? Uf2Chip.Rp2350
+                                 : Uf2.FindBootDrive(Uf2.RemovableRoots(), Uf2Chip.Rp2040) is not null ? Uf2Chip.Rp2040 : null,
             CopyImage = CopyToBootDrive,
             // Only a new session counts: the old one may not have noticed the reboot yet.
             ReadRunningFirmware = () => manager.Session is { } s && s != old ? s.Firmware : null,
@@ -519,6 +522,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         finally
         {
+            manager.RequiredBoard = null;
             Busy = false;
         }
         return ok;

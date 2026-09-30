@@ -129,5 +129,37 @@ public sealed class OnboardingTests : IDisposable
         Assert.Contains("rp2040-169", result.Message);
     }
 
+    [Fact]
+    public async Task Another_board_answering_first_is_waited_past()
+    {
+        // Two RP boards plugged in: the other one may answer before the flashed one is back.
+        int probes = 0;
+        var result = await FirmwareUpdater.InstallAsync(Uf2("rp2350-128", Rp2350ArmS), Round, Steps([], () => @"J:\",
+            () => ++probes < 5 ? new FirmwareInfo("rp2040-169", "1.7.0", "x") : new FirmwareInfo("rp2350-128", "1.7.0", "x")));
+        Assert.True(result.Ok, result.Message);
+        Assert.Equal("rp2350-128", result.Running!.Board);
+    }
+
+    [Fact]
+    public async Task A_board_of_the_other_chip_is_named_not_told_to_hold_BOOT()
+    {
+        // VER missed its window on a round RP2350, so the app offered the 1.69's firmware. BOOT puts the
+        // board in its RP2350 bootloader, which the RP2040 install rightly never uses: say what it is.
+        var log = new List<string>();
+        var steps = Steps(log, () => null, () => null);
+        steps = new UpdateSteps
+        {
+            EnterBootloader = steps.EnterBootloader, FindBootDrive = steps.FindBootDrive, CopyImage = steps.CopyImage,
+            ReadRunningFirmware = steps.ReadRunningFirmware, PollEvery = steps.PollEvery,
+            BootloaderTimeout = steps.BootloaderTimeout, RebootTimeout = steps.RebootTimeout,
+            BootloaderChip = () => Uf2Chip.Rp2350,
+        };
+        var result = await FirmwareUpdater.InstallAsync(Uf2("rp2040-169", Rp2040), Rect, steps);
+        Assert.False(result.Ok);
+        Assert.Contains("RP2350", result.Message);
+        Assert.DoesNotContain("Hold BOOT", result.Message);
+        Assert.DoesNotContain(log, l => l.StartsWith("copy"));
+    }
+
     public void Dispose() => Directory.Delete(dir, true);
 }

@@ -10,7 +10,14 @@
 #include "app.h"
 #include "settings.h"
 
+#if PICO_RP2040
 #define SETTINGS_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
+#else
+// RP2350: the second-to-last sector. SDK 2.x UF2s end with a block at the top
+// of flash (the RP2350-E10 bootrom workaround), and the bootrom erases the last
+// sector to write it, so settings there were lost on every firmware install.
+#define SETTINGS_OFFSET (PICO_FLASH_SIZE_BYTES - 2 * FLASH_SECTOR_SIZE)
+#endif
 #define PAGES (FLASH_SECTOR_SIZE / FLASH_PAGE_SIZE)
 #define MAGIC    0x334B4454u   // "TDK3"
 #define MAGIC_V2 0x324B4454u   // "TDK2": {magic, muted, jig_on, check}, still readable

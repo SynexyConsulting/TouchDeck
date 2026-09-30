@@ -146,6 +146,9 @@ public sealed class UpdateSteps
     public required Action<string, string> CopyImage { get; init; }
     /// <summary>The firmware running after the copy, or null while the board hasn't come back.</summary>
     public required Func<FirmwareInfo?> ReadRunningFirmware { get; init; }
+    /// <summary>The chip of any RP bootloader drive present (either chip), or null: used to explain a
+    /// board that rebooted into the other chip's bootloader.</summary>
+    public Func<Uf2Chip?>? BootloaderChip { get; init; }
     public TimeSpan PollEvery { get; init; } = TimeSpan.FromMilliseconds(250);
     public TimeSpan BootloaderTimeout { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan RebootTimeout { get; init; } = TimeSpan.FromSeconds(20);
@@ -186,6 +189,12 @@ public static class FirmwareUpdater
             progress?.Report("Rebooting the board into its bootloader...");
             steps.EnterBootloader();
             drive = await PollAsync(steps.FindBootDrive, steps.BootloaderTimeout, steps.PollEvery, ct);
+            if (drive is null && steps.BootloaderChip?.Invoke() is { } seen && seen != model.Chip)
+            {
+                var seenName = seen == Uf2Chip.Rp2350 ? "RP2350" : "RP2040";
+                return new(false, $"This is an {seenName} board, not the {model.Name}; it is waiting in its bootloader. " +
+                                  "Touch Deck will offer the right firmware for it.");
+            }
             if (drive is null)
             {
                 var driveName = model.Chip == Uf2Chip.Rp2350 ? "RP2350" : "RPI-RP2";
@@ -197,11 +206,18 @@ public static class FirmwareUpdater
         steps.CopyImage(uf2Path, drive);
 
         progress?.Report("Waiting for the board to restart...");
-        var running = await PollAsync(steps.ReadRunningFirmware, steps.RebootTimeout, steps.PollEvery, ct);
-        if (running is null) return new(false, "Firmware copied, but the board did not come back as a Touch Deck.");
-        if (running.Board != model.Board)
-            return new(false, $"Firmware copied, but the board came back as {running.Board}, not {model.Board}.", running);
-        return new(true, $"Installed: {running.Board} {running.Version}", running);
+        // Another RP board (also CAFE:4011) may answer first: keep waiting for this model.
+        FirmwareInfo? other = null;
+        var running = await PollAsync(() =>
+        {
+            var r = steps.ReadRunningFirmware();
+            if (r is not null && r.Board != model.Board) { other = r; return null; }
+            return r;
+        }, steps.RebootTimeout, steps.PollEvery, ct);
+        if (running is not null) return new(true, $"Installed: {running.Board} {running.Version}", running);
+        return other is null
+            ? new(false, "Firmware copied, but the board did not come back as a Touch Deck.")
+            : new(false, $"Firmware copied, but only {other.Board} answered, not {model.Board}.", other);
     }
 
     private static async Task<T?> PollAsync<T>(Func<T?> probe, TimeSpan timeout, TimeSpan every, CancellationToken ct) where T : class

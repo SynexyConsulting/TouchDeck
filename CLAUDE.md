@@ -105,6 +105,7 @@ Waveshare RP2350-Touch-LCD-1.28: RP2350 (Cortex-M33 with FPU, 520 KB RAM, 16 MB 
 
   Both firmwares embed `TDBOARD:<model>;` as Pico binary info. The app checks it before flashing.
 - **Bootloader:** a drive whose `INFO_UF2.TXT` has `Board-ID: RP2350`, USB `2E8A:000F`. Waveshare's factory demo is a stock SDK program (`2E8A:0009`, COM port) that reboots to the bootloader when its port is opened at 1200 baud. `picotool` only reaches the board before Touch Deck is on it; afterwards use `flash.py` (BOOT over serial). The factory firmware is backed up at `%USERPROFILE%\.touchdeck\backups\rp2350-touch-lcd-1.28-factory.uf2`.
+- **Settings sector:** the second-to-last flash sector on the RP2350 (`settings.c`). SDK 2.x RP2350 UF2s end with an RP2350-E10 workaround block at the top of flash, and writing it erased the last sector, so settings kept there were lost on every install. The RP2040 keeps the last sector.
 - **Tests:** `test_board_rp2350.py` and `test_board_mirror_rp2350.py` (FBCRC host vs board). They skip when no `rp2350-128` answers.
 - **Performance:** about 10x the RP2040. A full jiggler page is 9-12 ms, the clipboard 5.8 ms, and the jiggler animation holds 19.7 fps at 1 ms per frame.
 

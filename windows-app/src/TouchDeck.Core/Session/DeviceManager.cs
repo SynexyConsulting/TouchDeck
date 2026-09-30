@@ -73,7 +73,25 @@ public sealed class DeviceManager(
             Publish(LinkState.Searching);
             return;
         }
+        if (RequiredBoard is { } required)
+        {
+            // Only the board being flashed may connect: try each candidate, keep the one whose VER matches.
+            foreach (var d in found.OrderBy(d => d.Port == PreferredPort ? 0 : 1))
+                if (TryConnect(d, required)) return;
+            Publish(LinkState.Searching);
+            return;
+        }
+        TryConnect(device, null);
+    }
 
+    /// <summary>
+    /// While set (during a firmware install), only a board whose VER reports this model is connected:
+    /// both RP boards are CAFE:4011, and the manager must not settle on the other one.
+    /// </summary>
+    public string? RequiredBoard { get; set; }
+
+    private bool TryConnect(DeviceCandidate device, string? requiredBoard)
+    {
         var transport = openTransport(device);
         try
         {
@@ -81,17 +99,22 @@ public sealed class DeviceManager(
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException)
         {
-            transport.Dispose();                 // another program (the Python helper?) holds it
-            Publish(new LinkState(LinkStatus.PortBusy, device));
-            return;
+            transport.Dispose();                 // another program holds it
+            if (requiredBoard is null) Publish(new LinkState(LinkStatus.PortBusy, device));
+            return false;
         }
 
         var session = makeSession(transport);
         if (!session.Handshake())
         {
             transport.Dispose();
-            Publish(new LinkState(LinkStatus.NotResponding, device));
-            return;
+            if (requiredBoard is null) Publish(new LinkState(LinkStatus.NotResponding, device));
+            return false;
+        }
+        if (requiredBoard is not null && session.Firmware?.Board != requiredBoard)
+        {
+            transport.Dispose();                 // another board: leave it for after the install
+            return false;
         }
 
         var cts = new CancellationTokenSource();
@@ -114,6 +137,7 @@ public sealed class DeviceManager(
                 }
             });
         }
+        return true;
     }
 
     /// <summary>Ends the current session (e.g. before flashing firmware) and waits for it.</summary>
