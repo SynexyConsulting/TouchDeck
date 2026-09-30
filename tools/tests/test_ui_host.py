@@ -16,7 +16,7 @@ from tdui_host import UiState
 ROOT = jig_host.ROOT
 C_BG = 0x0041           # RGB(7, 9, 13)
 PC_AMBER = 0xF507       # RGB(242, 163, 58)
-PAGES = {"rp2040": 3, "esp32c3": 3}
+PAGES = {"rp2040": 3, "esp32c3": 3, "rp2350": 2}
 
 
 @pytest.fixture(scope="module")
@@ -60,9 +60,20 @@ def test_struct_layout_matches_the_c_header(tdui):
 def test_panel_sizes(tdui):
     assert (tdui["rp2040"].w, tdui["rp2040"].h) == (240, 280)
     assert (tdui["esp32c3"].w, tdui["esp32c3"].h) == (240, 240)
+    assert (tdui["rp2350"].w, tdui["rp2350"].h) == (240, 240)
 
 
-@pytest.mark.parametrize("board", ["rp2040", "esp32c3"])
+def test_round_usb_board_shows_one_dot_per_page(tdui):
+    """The RP2350 has Clipboard and Jiggler only: two page dots (x 114 and 126), not the
+    ESP32-C3's three (108, 120, 132)."""
+    r = tdui["rp2350"]
+    for page in range(2):
+        f = r.render(state(screen=page))
+        assert pixel(r, f, 114, 229) != C_BG and pixel(r, f, 126, 229) != C_BG, page
+        assert pixel(r, f, 120, 229) == C_BG and pixel(r, f, 108, 229) == C_BG, page
+
+
+@pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
 def test_every_page_renders_differently_and_deterministically(tdui, board):
     r = tdui[board]
     frames = [r.render(state(screen=p)) for p in range(PAGES[board])]
@@ -77,7 +88,7 @@ def test_esp32c3_bluetooth_sub_page(tdui):
         assert r.render(state(screen=2, sub=1, bt_state=bts, bt_passkey=123456, bt_host=b"DESK")) != settings
 
 
-@pytest.mark.parametrize("board", ["rp2040", "esp32c3"])
+@pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
 def test_pages_stay_inside_the_panel_shape(tdui, board):
     """Outside the glass (RP2040: 44 px rounded corners; C3: 240 px circle) stays background."""
     r = tdui[board]
@@ -85,7 +96,7 @@ def test_pages_stay_inside_the_panel_shape(tdui, board):
         f = r.render(state(screen=p, clip_len=5, clip=b"hello", jig_on=1))
         for y in range(r.h):
             for x in range(r.w):
-                if board == "esp32c3":
+                if board != "rp2040":
                     out = (x + 0.5 - 120) ** 2 + (y + 0.5 - 120) ** 2 > 120.5 ** 2
                 else:
                     cx = min(max(x + 0.5, 44), 240 - 44)

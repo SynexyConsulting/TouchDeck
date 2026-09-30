@@ -129,7 +129,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         State = s;
         IsConnected = s.Status == LinkStatus.Connected;
         Port = s.Device?.Port ?? "";
-        BoardName = s.Device is null ? "No board" : BoardKinds.DisplayName(s.Device.Kind);
+        BoardName = s.Device is null ? "No board" : BoardKinds.DisplayName(s.Device.Kind, s.Firmware?.Board);
         FirmwareVersion = s.Firmware switch
         {
             null => "",
@@ -172,7 +172,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         s.DiagnosticsEnabled = settings.Diagnostics;
         s.Log += text => Post(() => AddLog($"board: {text}"));
         s.Diagnostics += d => Post(() => ShowDiagnostics(d));
-        var mirror = new MirrorState(s.Kind);
+        var mirror = new MirrorState(UiModels.For(s.Kind, s.Firmware?.Board));   // both RP boards are CAFE:4011
         Post(() => StartMirror(mirror));
         s.StateReceived += st => Post(() => { ApplyBoardState(st); ApplyMirror(mirror, st); });
         s.TextReceived += t => Post(() => ApplyMirror(mirror, t));
@@ -306,8 +306,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>The board streams its whole UI and the renderer loaded: the device view is live.</summary>
     public bool FullMirror { get => fullMirror; private set => Set(ref fullMirror, value); }
     /// <summary>Which device the mirror draws (its shape and renderer).</summary>
-    public BoardKind MirrorKind { get => mirrorKind; private set => Set(ref mirrorKind, value); }
-    /// <summary>The latest device frame: RGB565, <see cref="NativeUi.Size"/> of <see cref="MirrorKind"/>.</summary>
+    public UiModel MirrorModel { get => mirrorModel; private set => Set(ref mirrorModel, value); }
+    /// <summary>The latest device frame: RGB565, <see cref="NativeUi.Size"/> of <see cref="MirrorModel"/>.</summary>
     public ushort[]? MirrorFrame { get; private set; }
     /// <summary>Raised on the UI thread when <see cref="MirrorFrame"/> has a new frame.</summary>
     public event Action? MirrorFrameChanged;
@@ -315,16 +315,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public string? RendererError { get; private set; }
 
     private bool fullMirror;
-    private BoardKind mirrorKind = BoardKind.Rp2040;
+    private UiModel mirrorModel = UiModel.Rp2040Rect;
 
     private void StartMirror(MirrorState m)
     {
         mirror = m;
-        MirrorKind = m.Kind;
+        MirrorModel = m.Model;
         FullMirror = false;
         MirrorFrame = null;
         MirrorFrameChanged?.Invoke();
-        if (!NativeUi.Available(m.Kind, out var error))
+        if (!NativeUi.Available(m.Model, out var error))
         {
             RendererError = error;
             AddLog($"Device view unavailable: {error}");
@@ -347,9 +347,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             mirrorFramePending = false;
             if (disposed || mirror is null || !FullMirror) return;
-            var (w, h) = NativeUi.Size(mirror.Kind);
+            var (w, h) = NativeUi.Size(mirror.Model);
             var frame = MirrorFrame is { } f && f.Length == w * h ? f : new ushort[w * h];   // reused: 134 KB per frame would churn the LOH
-            NativeUi.Render(mirror.Kind, mirror.State, frame);
+            NativeUi.Render(mirror.Model, mirror.State, frame);
             MirrorFrame = frame;
             MirrorFrameChanged?.Invoke();
         });

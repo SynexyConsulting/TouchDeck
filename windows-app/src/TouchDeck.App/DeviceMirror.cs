@@ -29,7 +29,7 @@ public sealed class DeviceMirror : Grid
         Margin = new Thickness(40, 0, 40, 0),
     };
     private WriteableBitmap? bitmap;
-    private BoardKind kind = BoardKind.Rp2040;
+    private UiModel kind = UiModel.Rp2040Rect;
     private Point? pressed;
 
     /// <summary>A click or drag on the panel, in device pixels.</summary>
@@ -51,10 +51,10 @@ public sealed class DeviceMirror : Grid
         screen.MouseLeftButtonDown += OnDown;
         screen.MouseLeftButtonUp += OnUp;
         screen.LostMouseCapture += (_, _) => pressed = null;
-        SetKind(BoardKind.Rp2040);
+        SetModel(UiModel.Rp2040Rect);
     }
 
-    public BoardKind Kind => kind;
+    public UiModel Model => kind;
 
     /// <summary>Text over a dark panel (no board, or nothing to show yet); null shows the frame.</summary>
     public string? Placeholder
@@ -68,14 +68,14 @@ public sealed class DeviceMirror : Grid
         }
     }
 
-    public void SetKind(BoardKind k)
+    public void SetModel(UiModel k)
     {
         kind = k;
         var (w, h) = NativeUi.Size(k);
         double pw = w * Scale, ph = h * Scale;
         screen.Width = pw;
         screen.Height = ph;
-        bool round = k == BoardKind.Esp32C3;
+        bool round = k.IsRound();
         // The glass: panel corners (RP2040: 44 px) or a circle, and a bezel that follows it.
         double r = round ? pw / 2 : 44 * Scale;
         screen.Clip = new RectangleGeometry(new Rect(0, 0, pw, ph), r, r);
@@ -87,9 +87,9 @@ public sealed class DeviceMirror : Grid
     }
 
     /// <summary>Shows a frame from the renderer (RGB565, which WPF calls Bgr565).</summary>
-    public void Show(BoardKind k, ushort[] pixels)
+    public void Show(UiModel k, ushort[] pixels)
     {
-        if (k != kind || bitmap is null) SetKind(k);
+        if (k != kind || bitmap is null) SetModel(k);
         var (w, h) = NativeUi.Size(k);
         bitmap!.WritePixels(new Int32Rect(0, 0, w, h), pixels, w * 2, 0);
     }

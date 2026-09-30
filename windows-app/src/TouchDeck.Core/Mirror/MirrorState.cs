@@ -7,7 +7,7 @@ namespace TouchDeck.Core.Mirror;
 /// The board's UI state as the device mirror knows it, built from the board's STATE, TEXT and
 /// CLIPTEXT lines (firmware 1.7.0+; the protocol is at the top of src/usb_io.c).
 /// </summary>
-public sealed class MirrorState(BoardKind kind)
+public sealed class MirrorState(UiModel model)
 {
     // STATE key -> field. tools/tests/tdui_host.py has the same table.
     private static readonly (string Key, Setter Set)[] Numbers =
@@ -44,7 +44,7 @@ public sealed class MirrorState(BoardKind kind)
 
     private UiState state = Initial();
 
-    public BoardKind Kind { get; } = kind;
+    public UiModel Model { get; } = model;
 
     /// <summary>A STATE with the full mirror fields has arrived (firmware 1.7.0+).</summary>
     public bool Complete { get; private set; }
@@ -66,7 +66,7 @@ public sealed class MirrorState(BoardKind kind)
             case StateReport st:
                 foreach (var (key, set) in Numbers)
                     if (st.Fields.Contains(key)) set(ref state, st.Fields.Get(key));
-                int li = NativeUi.LetterIndex(Kind, st.Letter);
+                int li = NativeUi.LetterIndex(Model, st.Letter);
                 state.JigLetter = li < 0 ? 0 : li;
                 Complete |= st.IsFullMirror;
                 return true;

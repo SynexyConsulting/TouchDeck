@@ -14,8 +14,10 @@
 #include "ui_pages.h"
 
 // The top chip's name for wired output: "PC" on the ESP32-C3 (the app types for
-// it); a board that is itself a USB keyboard/mouse (RP2350) builds with "USB".
-#ifndef UI_PC_LABEL
+// it); "USB" on a board that is itself a USB keyboard/mouse (UI_USB_ONLY: RP2350).
+#ifdef UI_USB_ONLY
+#define UI_PC_LABEL "USB"
+#else
 #define UI_PC_LABEL "PC"
 #endif
 

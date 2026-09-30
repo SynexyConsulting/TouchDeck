@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <!-- The device mirror's renderers: the firmware's own page code (src/, esp32c3/src/) built
-       with MSVC by hostui/build.bat into tdui_rp2040.dll and tdui_esp32c3.dll, then copied
+       with MSVC by hostui/build.bat into tdui_rp2040.dll, tdui_esp32c3.dll and tdui_rp2350.dll, then copied
        next to every exe that references Core (the app, the tests, the published MSI payload). -->
   <PropertyGroup>
     <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\'))</RepoRoot>
@@ -24,11 +24,13 @@
   <ItemGroup>
     <TduiSource Include="$(RepoRoot)hostui\*.c;$(RepoRoot)hostui\*.h;$(RepoRoot)hostui\build.bat" />
     <TduiSource Include="$(RepoRoot)src\*.c;$(RepoRoot)src\*.h;$(RepoRoot)esp32c3\src\*.c;$(RepoRoot)esp32c3\src\*.h" />
+    <TduiSource Include="$(RepoRoot)src\round\*.c;$(RepoRoot)src\round\*.h;$(RepoRoot)src\boards\*.h" />
     <None Include="$(TduiOut)\tdui_rp2040.dll" Link="tdui_rp2040.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(TduiOut)\tdui_esp32c3.dll" Link="tdui_esp32c3.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(TduiOut)\tdui_rp2350.dll" Link="tdui_rp2350.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
   <Target Name="BuildTdui" BeforeTargets="BeforeBuild" Inputs="@(TduiSource)"
-          Outputs="$(TduiOut)\tdui_rp2040.dll;$(TduiOut)\tdui_esp32c3.dll">
+          Outputs="$(TduiOut)\tdui_rp2040.dll;$(TduiOut)\tdui_esp32c3.dll;$(TduiOut)\tdui_rp2350.dll">
     <Exec Command="&quot;$(RepoRoot)hostui\build.bat&quot; &quot;$(TduiOut)&quot;" />
   </Target>
 </Project>

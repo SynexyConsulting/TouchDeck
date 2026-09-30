@@ -128,7 +128,7 @@ public partial class MainWindow : Window
             case nameof(AppController.MirrorFallbackText):
             case nameof(AppController.MirrorAvailable):
             case nameof(AppController.FullMirror):
-            case nameof(AppController.MirrorKind):
+            case nameof(AppController.MirrorModel):
                 UpdateMirror();
                 break;
             case nameof(AppController.DiagnosticsEnabled):
@@ -220,8 +220,8 @@ public partial class MainWindow : Window
         MirrorHint.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
         LegacyJiggler.Visibility = legacy ? Visibility.Visible : Visibility.Collapsed;
         MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
-        BootButtons.Visibility = app.IsConnected && app.MirrorKind == BoardKind.Esp32C3 ? Visibility.Collapsed : Visibility.Visible;
-        if (Mirror.Kind != app.MirrorKind) Mirror.SetKind(app.MirrorKind);
+        BootButtons.Visibility = app.IsConnected && app.MirrorModel == UiModel.Esp32Round ? Visibility.Collapsed : Visibility.Visible;
+        if (Mirror.Model != app.MirrorModel) Mirror.SetModel(app.MirrorModel);
         if (!full || app.MirrorFrame is null)
             Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck"
                 : full || !string.IsNullOrEmpty(app.MirrorFallbackText) ? ""     // the note below says why
@@ -232,7 +232,7 @@ public partial class MainWindow : Window
     {
         if (app.MirrorFrame is { } frame && app.FullMirror)
         {
-            Mirror.Show(app.MirrorKind, frame);
+            Mirror.Show(app.MirrorModel, frame);
             Mirror.Placeholder = null;
         }
         else UpdateMirror();
@@ -251,7 +251,7 @@ public partial class MainWindow : Window
     public bool SaveMirror(string path)
     {
         if (app.MirrorFrame is not { } frame || !app.FullMirror) return false;
-        var (w, h) = NativeUi.Size(app.MirrorKind);
+        var (w, h) = NativeUi.Size(app.MirrorModel);
         var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr565, null, frame, w * 2);
         var png = new PngBitmapEncoder();
         png.Frames.Add(BitmapFrame.Create(bmp));

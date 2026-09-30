@@ -2,6 +2,7 @@
 rem Builds the device renderers for the Windows app with MSVC (x64):
 rem   tdui_rp2040.dll   from src\          (RP2040-Touch-LCD-1.69, 240x280)
 rem   tdui_esp32c3.dll  from esp32c3\src\  (ESP32-2424S012C, 240x240 round)
+rem   tdui_rp2350.dll   from src\ with the round pages in src\round\ (RP2350-Touch-LCD-1.28, 240x240)
 rem Usage: hostui\build.bat OUTDIR
 rem C4244/C4305 (int/double to float) are off: the firmware passes small pixel values as floats.
 rem Finds Visual Studio's C++ tools with vswhere, unless already in an x64 developer prompt.
@@ -21,9 +22,12 @@ call "%VCVARS%" >nul 2>&1
 if errorlevel 1 exit /b 1
 
 :build
-call :board rp2040 "%ROOT%\src" ""
+call :board rp2040 "%ROOT%\src" "" "%ROOT%\src\ui_pages.c"
 if errorlevel 1 exit /b 1
-call :board esp32c3 "%ROOT%\esp32c3\src" "/DTDUI_FB_PTR"
+call :board esp32c3 "%ROOT%\esp32c3\src" "/DTDUI_FB_PTR" "%ROOT%\esp32c3\src\ui_pages.c"
+if errorlevel 1 exit /b 1
+rem RP2350-Touch-LCD-1.28: the RP tree with the round pages (src\round), USB only.
+call :board rp2350 "%ROOT%\src" "/DTD_BOARD_RP2350_128 /DTD_ROUND /DUI_USB_ONLY" "%ROOT%\src\round\ui_pages.c"
 if errorlevel 1 exit /b 1
 exit /b 0
 
@@ -32,7 +36,7 @@ set "SRC=%~2"
 set "OBJ=%OUT%\obj_%1"
 if not exist "%OBJ%" mkdir "%OBJ%"
 cl /nologo /LD /O2 /W3 /wd4244 /wd4305 /fp:precise /D_CRT_SECURE_NO_WARNINGS %~3 /I"%SRC%" /I"%HOSTUI%." ^
-   "%HOSTUI%tdui.c" "%SRC%\ui_pages.c" "%SRC%\ui_sync.c" "%SRC%\gfx.c" "%SRC%\icons.c" ^
+   "%HOSTUI%tdui.c" "%~4" "%SRC%\ui_sync.c" "%SRC%\gfx.c" "%SRC%\icons.c" ^
    "%SRC%\jig_lane.c" "%SRC%\jig_paths.c" "%SRC%\aa_fonts.c" ^
    /Fo"%OBJ%\\" /Fe"%OUT%\tdui_%1.dll" /link /NOLOGO >"%OBJ%\build.log"
 if errorlevel 1 (

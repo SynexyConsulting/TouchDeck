@@ -157,7 +157,7 @@ public partial class App : Application
     private async Task RunSmokeStepsAsync(string dir)
     {
         var c = controller!;
-        int clipPage = c.MirrorKind == Core.Devices.BoardKind.Esp32C3 ? 0 : 1;
+        int clipPage = Core.Mirror.UiModels.ClipPage(c.MirrorModel);
         async Task Go(int page)
         {
             for (int i = 0; i < 3; i++) c.Swipe(left: false);
