@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Firmware (Pico SDK, C) for the **Waveshare RP2040-Touch-LCD-1.69** ("Touch Deck"): three swipeable screens — analog watch with buzzer tick, a device-memory clipboard that *types* its text over USB HID, and a mouse jiggler — plus Python tools in `tools/`.
 
-A second port lives in `esp32c3/` for the **ESP32-2424S012C** (see "ESP32-C3 port" below).
+A second port lives in `esp32c3/` for the **ESP32-2424S012C** (see "ESP32-C3 port" below). The same `src/` tree also builds for the round **Waveshare RP2350-Touch-LCD-1.28** (see "RP2350 round board" below).
 
 The Windows companion app (C# .NET 8 WPF, per-user MSI) is in `windows-app/`. It has its own CLAUDE.md. A macOS app will go beside it in `macos-app/`. Firmware and apps share one repo so a protocol change can land in a single PR. It replaced the old Python helper (`clip_helper.py`, removed) and bundles `build/watch.uf2` for in-app firmware updates. When you change the protocol in `usb_io.c`/`link.cpp`, update the app's `TouchDeck.Core/Protocol` too. Bump `FW_VERSION` in both `version.h` files so the app offers the update. The app holds the serial port while it runs: quit it (tray → Quit, or `TouchDeck.exe --quit`) before `flash.py`, `perf_rp2040.py` or the board tests.
 
@@ -86,6 +86,27 @@ Pin map lives in `src/board.h`. Non-obvious points:
 - **Performance:** the core runs at **200 MHz** (1.15 V). `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1` keeps SPI/I2C on that clock; without it the SDK moves clk_peri to 48 MHz and the LCD push gets 2.5x slower. Drawing is software float (no FPU), so it dominates frame time. Running the gfx loops from RAM gave no gain. `gfx_line` walks only each row's capsule span, not its whole bounding box. That's pixel-identical to the original, host-tested, and cut the watch from 141 to 22 ms. `python tools/perf_rp2040.py [--watch]` forces 20 full redraws per page (a `TIME` command) and reads each one's `drawmax`, then measures the animation rates; `--watch` streams the mirror as the app does. Full-redraw times move by a few ms with code layout alone (XIP cache), so compare runs with the same letters and more than one round. `ANIM 1` animates the jiggler page without sending HID.
 - **BOOT button** (`button.c`): read through the flash chip-select from RAM inside `flash_safe_execute`, so `button_init()` must run before core1 starts. On the watch, short press starts/pauses the stopwatch and long press resets it. On the jiggler page it cycles the circle scale 1x/1.5x/2x (saved in the v3 settings record). `BTN [LONG]` and `SWIPE L|R` inject these over serial for `tools/tests/test_board_rp2040.py`.
 - **Visual language** matches the ESP32-C3 port: fixed amber `USB` chip (dot = `tud_mounted()`), a rounded edge ring (`gfx_rrect_ring`), and pill buttons on the Clipboard and Jiggler pages. The watch face and mute icon keep their own look. `src/icons.c` is a copy of `esp32c3/src/icons.c`; keep the two in sync.
+
+## RP2350 round board (`rp2350-128`)
+
+Waveshare RP2350-Touch-LCD-1.28: RP2350 (Cortex-M33 with FPU, 520 KB RAM, 16 MB flash), round GC9A01A 240x240, CST816 touch (ID 0xB5 on ours). It has **the same pins as the 1.69** (`src/boards/rp2350_128.h`). The LCD reset is GPIO 13, as in Waveshare's demo; the Pico SDK's `waveshare_rp2350_touch_lcd_1.28.h` wrongly says 12, which is MISO. There's no buzzer, power latch or RTC.
+- **Build:** `cmake -S . -B build-rp2350 -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_BOARD=rp2350_128`, then `ninja -C build-rp2350`, giving `build-rp2350/deck128.uf2`. `TD_BOARD` defaults to `rp2040_169` (`build/watch.uf2`). The SDK fixes the chip per configure, so each board has its own build directory. The RP2040 source list stays in its original order: link order sets the flash layout, which shifts draw timings.
+- **One tree, per-board headers:**
+  - `board.h`, `ui.h`, `ui_pages.h`, `jig_paths.h` and `version.h` switch on `TD_BOARD_RP2350_128` / `TD_ROUND`. A quoted include finds the including file's own folder first, so shared `src/*.c` always get these switches.
+  - `src/round/` holds **byte copies** of the ESP32-C3's `ui_pages.c/.h` and `ui.h`, plus the generated `jig_paths.h`. `test_ui_host.py` keeps them identical, so change them in `esp32c3/src/` and copy.
+  - `UI_USB_ONLY` gives 2 pages (`UI_PAGE_COUNT`) and a `USB` chip.
+  - `main.c`/`ui.c` compile the watch, buzzer and power-latch paths out under `TD_ROUND`.
+  - `lcd.c` holds both panels' init sequences. The GC9A01A one is converted from Waveshare's `LCD_1in28.c`, and the round panel has no row offset.
+  - `button.c` reads QSPI CSN at bit 27 of `gpio_hi_in` on the RP2350 (bit 1 on the RP2040).
+- **Identity:** `VER` says `rp2350-128`. The USB ID is the same `CAFE:4011` as the 1.69, so tools and the app choose by `VER`:
+  - `touchdeck.find_board(model)`;
+  - `flash.py --board rp2350-128`;
+  - `perf_rp2040.py --board rp2350-128`.
+
+  Both firmwares embed `TDBOARD:<model>;` as Pico binary info. The app checks it before flashing.
+- **Bootloader:** a drive whose `INFO_UF2.TXT` has `Board-ID: RP2350`, USB `2E8A:000F`. Waveshare's factory demo is a stock SDK program (`2E8A:0009`, COM port) that reboots to the bootloader when its port is opened at 1200 baud. `picotool` only reaches the board before Touch Deck is on it; afterwards use `flash.py` (BOOT over serial). The factory firmware is backed up at `%USERPROFILE%\.touchdeck\backups\rp2350-touch-lcd-1.28-factory.uf2`.
+- **Tests:** `test_board_rp2350.py` and `test_board_mirror_rp2350.py` (FBCRC host vs board). They skip when no `rp2350-128` answers.
+- **Performance:** about 10x the RP2040. A full jiggler page is 9-12 ms, the clipboard 5.8 ms, and the jiggler animation holds 19.7 fps at 1 ms per frame.
 
 ## ESP32-C3 port (`esp32c3/`)
 

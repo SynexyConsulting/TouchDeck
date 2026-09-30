@@ -12,14 +12,14 @@ A small touch-screen board that sits on your desk and works as a **clipboard tha
 
 | Folder | What | Stack |
 |---|---|---|
-| [`src/`](src) | Firmware for the **Waveshare RP2040-Touch-LCD-1.69** | C, Pico SDK 2.1.1, TinyUSB, dual core |
+| [`src/`](src) | Firmware for the **Waveshare RP2040-Touch-LCD-1.69** and **RP2350-Touch-LCD-1.28** (round) | C, Pico SDK 2.1.1, TinyUSB, dual core |
 | [`esp32c3/`](esp32c3) | Firmware for the **ESP32-2424S012C** (1.28" round) | Arduino-ESP32 on PlatformIO, LovyanGFX, NimBLE |
 | [`windows-app/`](windows-app) | **Touch Deck for Windows**: companion app and MSI installer | C# .NET 8 WPF, WiX v5 |
 | [`tools/`](tools) | Flasher, font and letter generators, release publisher, perf script, tests | Python 3, pyserial, Pillow, pytest |
 | [`.github/workflows/`](.github/workflows) | Release pipeline: a tag builds firmware and the MSI and publishes them | GitHub Actions |
 | [`docs/`](docs) | Design specs and implementation plans | Markdown |
 
-Both boards speak the same serial line protocol, which is documented at the top of [`src/usb_io.c`](src/usb_io.c). Any PC-side tool (the Windows app, and a future macOS app) talks to either board the same way.
+All the boards speak the same serial line protocol, which is documented at the top of [`src/usb_io.c`](src/usb_io.c). Any PC-side tool (the Windows app, and a future macOS app) talks to either board the same way.
 
 ## The boards
 
@@ -43,6 +43,12 @@ The ESP32-C3 has no USB keyboard/mouse hardware, so it has two **output modes**:
 
 It has Clipboard, Jiggler and Settings pages with the same trash can and letter lanes. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
 
+### RP2350-Touch-LCD-1.28 (240x240 round, touch)
+
+The round screen on an RP2350 (Pico 2 chip). It is a real USB keyboard and mouse like the 1.69 (`CAFE:4011`, the same firmware tree), with the ESP32-C3's round **Clipboard** and **Jiggler** pages and a `USB` chip. There's no watch, speaker or Bluetooth. The BOOT button cycles the jiggler size, like the scale pill. The RP2350 has a floating-point unit, so it draws about ten times faster than the RP2040: a full jiggler page takes about 10 ms instead of about 120 ms.
+
+A new board still runs Waveshare's factory demo. Plug it in with the Windows app open and it offers **Install Touch Deck** (see below); no buttons needed.
+
 ## Touch Deck for Windows
 
 Install `TouchDeck-<version>.msi`. It installs just for you, needs no admin rights, and doesn't need .NET installed. The app:
@@ -51,7 +57,8 @@ Install `TouchDeck-<version>.msi`. It installs just for you, needs no admin righ
 - finds the board and shows its **firmware version**;
 - handles COPY by reading the selected text (or, if nothing is selected, the clipboard);
 - performs keys and mouse input in PC mode;
-- updates the RP2040 firmware with one click, from firmware bundled in the app;
+- updates the firmware of RP boards (the 1.69 and the round RP2350) with one click, from firmware bundled in the app;
+- finds a **new board** (a Raspberry Pi board on its factory firmware, or in its bootloader) and offers **Install Touch Deck** with the right firmware for that model. It checks that the file is for that chip and board before touching the board;
 - sends the current selection to the board with **Ctrl+Alt+C** from any app;
 - keeps a list of recent clips in memory only;
 - gives you remote page and button controls, live board diagnostics, and dry-run mode;
@@ -62,14 +69,18 @@ See [`windows-app/README.md`](windows-app/README.md) for details and build steps
 
 ## Build
 
-**RP2040 firmware.** The toolchain comes from the VS Code Pico extension in `~/.pico-sdk`:
+**RP firmware (RP2040 1.69 and RP2350 1.28).** The toolchain comes from the VS Code Pico extension in `~/.pico-sdk`. One source tree, one build directory per board:
 
 ```bash
 P=~/.pico-sdk; export PATH="$P/ninja/v1.12.1:$P/cmake/v3.31.5/bin:$PATH"
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # once
-ninja -C build                                            # -> build/watch.uf2
-python tools/flash.py                                     # BOOT over serial, copy to the UF2 drive
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release                                   # once
+ninja -C build                                                                           # -> build/watch.uf2 (1.69)
+cmake -S . -B build-rp2350 -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_BOARD=rp2350_128      # once
+ninja -C build-rp2350                                                                    # -> build-rp2350/deck128.uf2 (round)
+python tools/flash.py [--board rp2350-128]              # BOOT over serial, copy to the UF2 drive
 ```
+
+Both RP boards enumerate as `CAFE:4011`, so the tools pick a board by the model its `VER` reports (`rp2040-169` or `rp2350-128`).
 
 You can also flash from the Windows app with **Install firmware**.
 
@@ -88,7 +99,7 @@ cd windows-app
 .\build.ps1          # bundle firmware from ../build, test, publish, MSI -> out\TouchDeck-<ver>.msi
 ```
 
-The app build also compiles the device renderers (`hostui/build.bat`, needs Visual Studio's C++ tools): the firmware's page code as `tdui_rp2040.dll` and `tdui_esp32c3.dll`. `hostui/build.sh` builds the same libraries for macOS or Linux.
+The app build also compiles the device renderers (`hostui/build.bat`, needs Visual Studio's C++ tools): the firmware's page code as `tdui_rp2040.dll`, `tdui_esp32c3.dll` and `tdui_rp2350.dll`. `hostui/build.sh` builds the same libraries for macOS or Linux.
 
 Only one program can hold the board's serial port at a time. Quit the app (tray → Quit) before using `flash.py` or the board tests.
 
@@ -141,5 +152,5 @@ git tag fw-v1.7.0  && git push origin fw-v1.7.0      # firmware only
 ## Credits
 
 - Fonts: [Barlow](https://github.com/jpt/barlow) and [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) under the SIL Open Font License, and [DSEG7](https://github.com/keshikan/DSEG) for the stopwatch. Their license texts are in [`tools/fonts/`](tools/fonts).
-- Hardware: Waveshare RP2040-Touch-LCD-1.69 and ESP32-2424S012C.
+- Hardware: Waveshare RP2040-Touch-LCD-1.69, Waveshare RP2350-Touch-LCD-1.28 and ESP32-2424S012C.
 - This project has no license file yet.

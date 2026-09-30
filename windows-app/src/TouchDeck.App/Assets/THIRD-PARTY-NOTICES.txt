@@ -14,7 +14,9 @@ App
   License 1.1 (OFL-JetBrainsMono.txt).
 - The installer is built with the WiX Toolset, Microsoft Reciprocal License.
 
-Bundled RP2040 firmware (firmware\watch.uf2)
+Bundled RP firmware (firmware\rp2040-169.uf2, firmware\rp2350-128.uf2)
+p2040-169.uf2, firmware
+p2350-128.uf2)
 - Raspberry Pi Pico SDK, (c) Raspberry Pi (Trading) Ltd., BSD 3-Clause License.
   https://github.com/raspberrypi/pico-sdk
 - TinyUSB, (c) Ha Thach (tinyusb.org), MIT License.
@@ -23,5 +25,5 @@ Bundled RP2040 firmware (firmware\watch.uf2)
   https://sourceware.org/newlib/
 - Barlow and JetBrains Mono (as above) and DSEG7 Classic, (c) keshikan,
   SIL Open Font License 1.1, rendered into bitmap fonts.
-- The LCD initialisation sequence follows Waveshare's RP2040-Touch-LCD-1.69
-  example code.
+- The LCD initialisation sequences follow Waveshare's RP2040-Touch-LCD-1.69
+  (ST7789) and RP2350-Touch-LCD-1.28 (GC9A01A) example code.
