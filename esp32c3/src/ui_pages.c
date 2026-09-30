@@ -269,7 +269,7 @@ void ui_draw_page(const ui_state_t *s) {
         if (s->screen == SCR_CLIP) draw_clip(s);
         else if (s->screen == SCR_JIG) draw_jig(s);
         else draw_settings(s);
-        dots(SCR_COUNT, s->screen);
+        dots(UI_PAGE_COUNT, s->screen);
     }
 }
 

@@ -57,7 +57,7 @@ set(TD_COMMON
 
 if(TD_TARGET STREQUAL "deck128")
     # Round GC9A01 panel, the ESP32-C3's round pages (src/round), USB only, no buzzer.
-    add_executable(deck128 ${TD_COMMON} src/lcd_gc9a01.c src/round/ui_pages.c)
+    add_executable(deck128 ${TD_COMMON} src/lcd.c src/round/ui_pages.c)
     target_compile_definitions(deck128 PRIVATE TD_BOARD_RP2350_128 TD_ROUND UI_USB_ONLY UI_PC_LABEL="USB")
 else()
     # Listed in full, in the original order: the link order sets the flash layout,

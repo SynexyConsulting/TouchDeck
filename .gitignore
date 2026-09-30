@@ -1,5 +1,6 @@
 # Build output
 build/
+build-rp2350/
 build.log
 esp32c3/.pio/
 esp32c3/.vscode/
