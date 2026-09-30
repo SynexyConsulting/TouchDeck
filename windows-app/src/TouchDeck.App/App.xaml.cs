@@ -50,8 +50,10 @@ public partial class App : Application
         {
             LogError(ex.Exception);
             if (window is null) return;
-            controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}");
             ex.Handled = true;
+            // The backstop must not throw: if showing the error in the activity log fails too, the file has it.
+            try { controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}"); }
+            catch (Exception again) { LogError(again); }
         };
 
         Core.Updates.UpdateSource? feed = null;

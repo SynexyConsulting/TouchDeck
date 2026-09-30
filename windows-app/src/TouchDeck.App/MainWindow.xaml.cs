@@ -35,10 +35,16 @@ public partial class MainWindow : Window
         Title = $"Touch Deck {AppController.AppVersion}";
 
         app.PropertyChanged += OnAppChanged;
+        // Scroll after the ListBox has seen the new line: this handler is subscribed before the
+        // ListBox's own binding, and scrolling here forces a layout while its item generator is still
+        // one line behind ("ItemsControl is inconsistent with its items source").
         app.LogLines.CollectionChanged += (_, e) =>
         {
-            if (e.Action == NotifyCollectionChangedAction.Add && LogList.Items.Count > 0)
-                LogList.ScrollIntoView(LogList.Items[^1]);
+            if (e.Action != NotifyCollectionChangedAction.Add) return;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
+            {
+                if (LogList.Items.Count > 0) LogList.ScrollIntoView(LogList.Items[^1]);
+            });
         };
         app.HistoryItems.CollectionChanged += (_, _) => UpdateHistoryEmpty();
         UpdateHistoryEmpty();
