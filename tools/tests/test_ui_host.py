@@ -45,6 +45,13 @@ def test_shared_files_identical_in_both_trees(shared):
     assert filecmp.cmp(os.path.join(ROOT, "src", shared), os.path.join(ROOT, "esp32c3", "src", shared), shallow=False)
 
 
+@pytest.mark.parametrize("shared", ["ui_pages.c", "ui_pages.h", "ui.h", "jig_paths.h"])
+def test_round_layout_is_the_esp32_copy(shared):
+    """The RP2350 round board (src/round) draws the ESP32-C3's round pages."""
+    assert filecmp.cmp(os.path.join(ROOT, "src", "round", shared), os.path.join(ROOT, "esp32c3", "src", shared),
+                       shallow=False)
+
+
 def test_struct_layout_matches_the_c_header(tdui):
     for r in tdui.values():
         assert r.lib.tdui_state_size() == ctypes.sizeof(UiState) == 1248

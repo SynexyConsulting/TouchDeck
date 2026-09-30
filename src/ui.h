@@ -1,4 +1,7 @@
 #pragma once
+#ifdef TD_ROUND
+#include "round/ui.h"   // the RP2350 round board uses the ESP32-C3's round geometry
+#else
 #include "touch.h"
 #include "ui_state.h"
 
@@ -36,3 +39,4 @@ void ui_state_fill(ui_state_t *s, int with_clip);
 #define ONOFF_PILL_X 178
 #define PILL_PAD   6            // extra tap margin around the pills
 #define JIG_ZONE_PAD 10         // letter box + this = the ON/OFF tap zone
+#endif   // TD_ROUND

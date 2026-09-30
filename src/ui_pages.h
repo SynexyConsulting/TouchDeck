@@ -2,6 +2,9 @@
 // no SDK calls: the firmware (ui.c) and the PC app's device mirror (hostui/)
 // both run it, so the app shows exactly what the device does.
 #pragma once
+#ifdef TD_ROUND
+#include "round/ui_pages.h"   // the RP2350 round board draws the ESP32-C3's round pages
+#else
 #include "ui_state.h"
 #ifdef __cplusplus
 extern "C" {
@@ -24,3 +27,4 @@ rect_t ui_rect_union(rect_t a, rect_t b);
 #ifdef __cplusplus
 }
 #endif
+#endif   // TD_ROUND

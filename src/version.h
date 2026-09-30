@@ -3,5 +3,9 @@
 // compares FW_VERSION with the firmware it bundles to offer updates.
 #pragma once
 
-#define FW_BOARD   "rp2040-169"
+#ifdef TD_BOARD_RP2350_128
+#define FW_BOARD   "rp2350-128"   // Waveshare RP2350-Touch-LCD-1.28 (round)
+#else
+#define FW_BOARD   "rp2040-169"   // Waveshare RP2040-Touch-LCD-1.69
+#endif
 #define FW_VERSION "1.7.0"

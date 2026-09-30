@@ -1,5 +1,8 @@
 // Pin map for Waveshare RP2040-Touch-LCD-1.69 (from RP2040-Touch-LCD-1.69-Sch.pdf).
 #pragma once
+#ifdef TD_BOARD_RP2350_128
+#include "boards/rp2350_128.h"   // Waveshare RP2350-Touch-LCD-1.28
+#else
 
 #define LCD_SPI      spi1
 #define LCD_PIN_DC   8
@@ -27,3 +30,4 @@
 
 #define LCD_W 240
 #define LCD_H 280
+#endif   // TD_BOARD_RP2350_128
