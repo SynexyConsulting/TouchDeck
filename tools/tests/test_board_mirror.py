@@ -11,10 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 import serial
 import tdui_host
-from touchdeck import PID, VID, find_port
+from touchdeck import find_board
 from test_board_pc_mode import Board
 
-RP_PORT = find_port(VID, PID)
+RP_PORT = find_board("rp2040-169")   # not the round RP2350, also CAFE:4011
 pytestmark = pytest.mark.skipif(RP_PORT is None, reason="RP2040 Touch Deck not connected")
 
 

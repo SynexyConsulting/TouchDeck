@@ -1,5 +1,6 @@
-"""Frame-time report for the RP2040 Touch Deck, from the firmware's DBG counters.
-    python tools/perf_rp2040.py [--rounds N] [--watch]     (quit the Touch Deck app first)
+"""Frame-time report for an RP Touch Deck (RP2040 1.69 or RP2350 1.28), from DBG counters.
+    python tools/perf_rp2040.py [--board rp2040-169|rp2350-128] [--rounds N] [--watch]
+    (quit the Touch Deck app first)
 
 Two tables:
   full frames  each page is fully redrawn 20 times per round (a TIME command
@@ -15,9 +16,11 @@ import sys
 import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests"))
 from test_board_pc_mode import Board
-from touchdeck import PID, VID, find_port
+from touchdeck import find_board
 
-PAGES = [(0, "watch"), (1, "clipboard"), (2, "jiggler")]
+# Page order per board: the round RP2350 has no watch.
+PAGES = {"rp2040-169": [(0, "watch"), (1, "clipboard"), (2, "jiggler")],
+         "rp2350-128": [(0, "clipboard"), (1, "jiggler")]}
 REDRAWS = 20
 
 
@@ -60,22 +63,29 @@ def animation(b, idx, cmd, secs=5.0):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--board", default="rp2040-169", choices=sorted(PAGES))
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--watch", action="store_true", help="stream the device mirror (WATCH 1) as the app does")
     args = ap.parse_args()
-    b = Board(find_port(VID, PID))
+    port = find_board(args.board)
+    if not port:
+        sys.exit(f"No {args.board} board answering (is the Touch Deck app holding it?)")
+    b = Board(port)
+    pages = PAGES[args.board]
+    jig = next(i for i, n in pages if n == "jiggler")
     try:
         if args.watch:
             b.send("WATCH 1")
         full = {}
-        anim = {"watch": [], "jig anim": []}
+        anim = {"watch": [], "jig anim": []} if jig == 2 else {"jig anim": []}
         for _ in range(args.rounds):
-            for idx, name in PAGES:
-                if idx == 2:                  # the jiggler's cost depends on its letter (ANIM picks new ones)
+            for idx, name in pages:
+                if idx == jig:                  # the jiggler's cost depends on its letter (ANIM picks new ones)
                     name += " " + b.field("letter")
                 full.setdefault(name, []).append(full_frames(b, idx))
-            anim["watch"].append(animation(b, 0, None))
-            anim["jig anim"].append(animation(b, 2, "ANIM 1"))
+            if "watch" in anim:
+                anim["watch"].append(animation(b, 0, None))
+            anim["jig anim"].append(animation(b, jig, "ANIM 1"))
         print(f"full frames ({args.rounds} rounds x {REDRAWS} redraws)")
         for name, rows in full.items():
             s = sorted(x for r in rows for x in r)
