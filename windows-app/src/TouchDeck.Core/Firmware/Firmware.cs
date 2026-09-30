@@ -29,40 +29,104 @@ public sealed record BundledFirmware(
     }
 }
 
+public enum Uf2Chip { Unknown, Rp2040, Rp2350 }
+
+/// <summary>What a firmware file is for: its chip (UF2 family IDs) and board (the TDBOARD marker, or null).</summary>
+public sealed record Uf2Info(bool Valid, Uf2Chip Chip, string? Board);
+
 public static class Uf2
 {
     private const uint Magic0 = 0x0A324655, Magic1 = 0x9E5D5157, MagicEnd = 0x0AB16F30;
     private const uint FlagFamilyId = 0x00002000;
     public const uint Rp2040Family = 0xE48BFF56;
+    public const uint Rp2350ArmSFamily = 0xE48BFF59;
+    /// <summary>SDK 2.x adds one block of this family to RP2350 images (a bootrom erratum workaround).</summary>
+    public const uint Rp2350AbsoluteFamily = 0xE48BFF57;
+    private static readonly byte[] Marker = "TDBOARD:"u8.ToArray();
 
     /// <summary>
-    /// True if every 512-byte block is a UF2 block for the RP2040. Checked before copying:
-    /// the bootloader silently ignores anything else and the board would just sit there.
+    /// Checks every 512-byte block and names the chip and board. Checked before copying: a bootloader
+    /// silently ignores blocks for another chip, and another board's firmware would show nothing useful.
+    /// Valid only if every block is well formed and all blocks are for one chip: RP2040, or RP2350
+    /// (ARM-S, plus the absolute block). The board comes from the firmware's "TDBOARD:&lt;model&gt;;"
+    /// marker, found in the payload reassembled by address, so a marker split across blocks counts.
     /// </summary>
-    public static bool IsRp2040Image(ReadOnlySpan<byte> image)
+    public static Uf2Info Inspect(ReadOnlySpan<byte> image)
     {
-        if (image.Length == 0 || image.Length % 512 != 0) return false;
+        var invalid = new Uf2Info(false, Uf2Chip.Unknown, null);
+        if (image.Length == 0 || image.Length % 512 != 0) return invalid;
+        int rp2040 = 0, rp2350 = 0, absolute = 0;
+        var payload = new SortedDictionary<uint, byte[]>();
         for (int off = 0; off < image.Length; off += 512)
         {
             var b = image.Slice(off, 512);
-            if (U32(b, 0) != Magic0 || U32(b, 4) != Magic1 || U32(b, 508) != MagicEnd) return false;
-            if ((U32(b, 8) & FlagFamilyId) == 0 || U32(b, 28) != Rp2040Family) return false;
+            if (U32(b, 0) != Magic0 || U32(b, 4) != Magic1 || U32(b, 508) != MagicEnd) return invalid;
+            if ((U32(b, 8) & FlagFamilyId) == 0) return invalid;
+            uint family = U32(b, 28), addr = U32(b, 12), size = U32(b, 16);
+            if (family == Rp2040Family) rp2040++;
+            else if (family == Rp2350ArmSFamily) rp2350++;
+            else if (family == Rp2350AbsoluteFamily) absolute++;
+            else return invalid;
+            if (size > 476) return invalid;
+            payload[addr] = b.Slice(32, (int)size).ToArray();
         }
-        return true;
+        if ((rp2040 > 0) == (rp2350 > 0)) return invalid;               // one chip, and some program
+        if (rp2040 > 0 && absolute > 0) return invalid;                 // no RP2350 blocks in an RP2040 image
+        return new Uf2Info(true, rp2040 > 0 ? Uf2Chip.Rp2040 : Uf2Chip.Rp2350, FindBoard(payload));
+    }
+
+    /// <summary>True if the image is a valid RP2040 image (any board).</summary>
+    public static bool IsRp2040Image(ReadOnlySpan<byte> image) => Inspect(image) is { Valid: true, Chip: Uf2Chip.Rp2040 };
+
+    // Joins address-contiguous blocks and looks for TDBOARD:<model>; in each run.
+    private static string? FindBoard(SortedDictionary<uint, byte[]> blocks)
+    {
+        var run = new List<byte>();
+        uint next = 0;
+        foreach (var (addr, data) in blocks)
+        {
+            if (run.Count > 0 && addr != next)
+            {
+                if (MarkerIn(run) is { } found) return found;
+                run.Clear();
+            }
+            run.AddRange(data);
+            next = addr + (uint)data.Length;
+        }
+        return MarkerIn(run);
+    }
+
+    private static string? MarkerIn(List<byte> run)
+    {
+        var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(run);
+        int at = span.IndexOf(Marker);
+        if (at < 0) return null;
+        var rest = span[(at + Marker.Length)..];
+        int end = rest.IndexOf((byte)';');
+        if (end <= 0 || end > 32) return null;
+        var name = System.Text.Encoding.ASCII.GetString(rest[..end]);
+        return name.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? name : null;
     }
 
     private static uint U32(ReadOnlySpan<byte> b, int at) => BitConverter.ToUInt32(b.Slice(at, 4));
 
-    /// <summary>The RP2040 bootloader's drive: a root holding INFO_UF2.TXT that names RPI-RP2.</summary>
-    public static string? FindBootDrive(IEnumerable<string> roots)
+    /// <summary>Board-ID in each chip's bootloader drive INFO_UF2.TXT.</summary>
+    private static string BootId(Uf2Chip chip) => chip == Uf2Chip.Rp2350 ? "RP2350" : "RPI-RP2";
+
+    /// <summary>An RP bootloader's drive: a root whose INFO_UF2.TXT names Board-ID RPI-RP2 (RP2040)
+    /// or RP2350; with <paramref name="chip"/>, only that chip's.</summary>
+    public static string? FindBootDrive(IEnumerable<string> roots, Uf2Chip chip = Uf2Chip.Unknown)
     {
+        string[] ids = chip == Uf2Chip.Unknown ? [BootId(Uf2Chip.Rp2040), BootId(Uf2Chip.Rp2350)] : [BootId(chip)];
         foreach (var root in roots)
         {
             try
             {
                 var info = Path.Combine(root, "INFO_UF2.TXT");
-                if (File.Exists(info) && File.ReadAllText(info).Contains("RPI-RP2", StringComparison.Ordinal))
-                    return root;
+                if (!File.Exists(info)) continue;
+                var id = File.ReadAllLines(info).Where(l => l.StartsWith("Board-ID:", StringComparison.Ordinal))
+                    .Select(l => l["Board-ID:".Length..].Trim()).FirstOrDefault();
+                if (id is not null && ids.Contains(id)) return root;
             }
             catch (IOException) { }                    // drive vanished mid-check
             catch (UnauthorizedAccessException) { }

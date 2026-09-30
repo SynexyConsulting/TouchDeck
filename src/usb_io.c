@@ -33,6 +33,12 @@
 #include "app.h"
 #include "usb_io.h"
 #include "version.h"
+#include "pico/binary_info.h"
+
+// The board this firmware is for, readable in the UF2 file itself: the Windows app
+// (Uf2.Inspect) refuses to install a file whose marker isn't the board it flashes.
+// As binary info it is always kept by the linker (and shown by picotool info).
+bi_decl(bi_program_feature("TDBOARD:" FW_BOARD ";"))
 #include "jig_paths.h"
 #include "jiggler.h"
 #include "settings.h"
