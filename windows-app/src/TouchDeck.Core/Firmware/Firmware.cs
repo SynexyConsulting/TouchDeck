@@ -155,14 +155,30 @@ public sealed record UpdateResult(bool Ok, string Message, FirmwareInfo? Running
 
 public static class FirmwareUpdater
 {
-    /// <summary>BOOT (unless already in the bootloader), copy the UF2, wait for the board to answer VER.</summary>
-    public static async Task<UpdateResult> UpdateRp2040Async(
-        string uf2Path, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default)
+    /// <summary>The RP2040 1.69 update (the app's original flow): <see cref="InstallAsync"/> for rp2040-169.</summary>
+    public static Task<UpdateResult> UpdateRp2040Async(
+        string uf2Path, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default) =>
+        InstallAsync(uf2Path, BoardModels.Find("rp2040-169")!, steps, progress, ct);
+
+    /// <summary>
+    /// Installs firmware for <paramref name="model"/>: checks the file is for that chip and board
+    /// (before touching the board), gets it into its bootloader unless already there, copies the UF2,
+    /// and waits for a Touch Deck of that model to answer VER.
+    /// </summary>
+    public static async Task<UpdateResult> InstallAsync(
+        string uf2Path, BoardModel model, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         byte[] image;
+        var name = Path.GetFileName(uf2Path);
         try { image = await File.ReadAllBytesAsync(uf2Path, ct); }
-        catch (IOException e) { return new(false, $"Can't read {Path.GetFileName(uf2Path)}: {e.Message}"); }
-        if (!Uf2.IsRp2040Image(image)) return new(false, $"{Path.GetFileName(uf2Path)} is not an RP2040 UF2 image.");
+        catch (IOException e) { return new(false, $"Can't read {name}: {e.Message}"); }
+        var info = Uf2.Inspect(image);
+        string chipName = model.Chip == Uf2Chip.Rp2350 ? "RP2350" : "RP2040";
+        if (!info.Valid || info.Chip != model.Chip) return new(false, $"{name} is not {chipName} firmware.");
+        // Firmware from before the model marker was always the RP2040 1.69's.
+        bool legacy = info.Board is null && model.Board == "rp2040-169";
+        if (info.Board != model.Board && !legacy)
+            return new(false, $"{name} is firmware for {info.Board ?? "an unknown board"}, not {model.Board}.");
 
         var drive = steps.FindBootDrive();
         if (drive is null)
@@ -171,7 +187,10 @@ public static class FirmwareUpdater
             steps.EnterBootloader();
             drive = await PollAsync(steps.FindBootDrive, steps.BootloaderTimeout, steps.PollEvery, ct);
             if (drive is null)
-                return new(false, "The bootloader drive (RPI-RP2) did not appear. Hold BOOT while plugging the board in, then try again.");
+            {
+                var driveName = model.Chip == Uf2Chip.Rp2350 ? "RP2350" : "RPI-RP2";
+                return new(false, $"The bootloader drive ({driveName}) did not appear. Hold BOOT while plugging the board in, then try again.");
+            }
         }
 
         progress?.Report($"Copying firmware to {drive}...");
@@ -179,9 +198,10 @@ public static class FirmwareUpdater
 
         progress?.Report("Waiting for the board to restart...");
         var running = await PollAsync(steps.ReadRunningFirmware, steps.RebootTimeout, steps.PollEvery, ct);
-        return running is null
-            ? new(false, "Firmware copied, but the board did not come back as a Touch Deck.")
-            : new(true, $"Updated: {running.Board} {running.Version}", running);
+        if (running is null) return new(false, "Firmware copied, but the board did not come back as a Touch Deck.");
+        if (running.Board != model.Board)
+            return new(false, $"Firmware copied, but the board came back as {running.Board}, not {model.Board}.", running);
+        return new(true, $"Installed: {running.Board} {running.Version}", running);
     }
 
     private static async Task<T?> PollAsync<T>(Func<T?> probe, TimeSpan timeout, TimeSpan every, CancellationToken ct) where T : class

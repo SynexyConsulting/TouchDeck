@@ -9,10 +9,10 @@ namespace TouchDeck.Tests;
 /// </summary>
 public class Uf2InspectTests
 {
-    private const uint Rp2040 = 0xE48BFF56, Rp2350ArmS = 0xE48BFF59, Rp2350Absolute = 0xE48BFF57, Esp32 = 0x1C5F21B0;
+    internal const uint Rp2040 = 0xE48BFF56, Rp2350ArmS = 0xE48BFF59, Rp2350Absolute = 0xE48BFF57, Esp32 = 0x1C5F21B0;
 
     /// <summary>A UF2 image of <paramref name="payload"/> at 0x10000000 in 256-byte blocks.</summary>
-    private static byte[] Image(byte[] payload, uint family, bool absoluteBlock = false)
+    internal static byte[] Image(byte[] payload, uint family, bool absoluteBlock = false)
     {
         var blocks = new List<byte[]>();
         int n = (payload.Length + 255) / 256;
@@ -37,7 +37,7 @@ public class Uf2InspectTests
     }
 
     /// <summary>Code-ish filler with the marker at <paramref name="at"/>.</summary>
-    private static byte[] Payload(string board, int at, int size = 1024)
+    internal static byte[] Payload(string board, int at, int size = 1024)
     {
         var p = Enumerable.Range(0, size).Select(i => (byte)(i * 7)).ToArray();
         Encoding.ASCII.GetBytes($"TDBOARD:{board};").CopyTo(p, at);

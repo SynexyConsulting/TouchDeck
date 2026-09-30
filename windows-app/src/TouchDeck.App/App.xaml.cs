@@ -143,6 +143,8 @@ public partial class App : Application
             $"letter={controller.JigLetter}",
             $"boardclip={controller.BoardClipText}",
             $"bundled={controller.BundledSummary}",
+            $"newboard={controller.NewBoard?.Describe()}",
+            $"offer={controller.UpdateText}",
             $"exe={Environment.ProcessPath}",
         ]);
         Quit();

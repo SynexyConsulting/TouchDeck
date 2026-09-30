@@ -75,7 +75,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // The board mirror: known once the session has either seen STATE or given up waiting.
         mirrorWatch = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshMirror(), ui);
 
-        bootDriveWatch = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => CheckBootDrive(), ui);
+        bootDriveWatch = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => CheckNewBoards(), ui);
         ApplyState(LinkState.Searching);
     }
 
@@ -104,7 +104,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public string FirmwareVersion { get => firmwareVersion; private set => Set(ref firmwareVersion, value); }
     public string FirmwareBuild { get => firmwareBuild; private set => Set(ref firmwareBuild, value); }
     public bool IsConnected { get => isConnected; private set => Set(ref isConnected, value); }
-    public string? BootDrive { get => bootDrive; private set => Set(ref bootDrive, value); }
+    /// <summary>A Raspberry Pi board without Touch Deck (factory firmware or its bootloader), while none is connected.</summary>
+    public NewBoard? NewBoard { get => newBoard; private set => Set(ref newBoard, value); }
+    /// <summary>The models the app has firmware for on that board's chip (one choice today per chip).</summary>
+    public IReadOnlyList<BoardModel> NewBoardModels { get => newBoardModels; private set => Set(ref newBoardModels, value); }
+    public BoardModel? SelectedModel
+    {
+        get => selectedModel;
+        set { Set(ref selectedModel, value); RefreshUpdateOffer(); }
+    }
     public string UpdateText { get => updateText; private set => Set(ref updateText, value); }
     public bool CanUpdate { get => canUpdate; private set => Set(ref canUpdate, value); }
     public bool Busy { get => busy; private set { Set(ref busy, value); RefreshUpdateOffer(); } }
@@ -112,7 +120,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private Health health;
     private string statusText = "", boardName = "", port = "", firmwareVersion = "", firmwareBuild = "", updateText = "";
     private bool isConnected, canUpdate, busy;
-    private string? bootDrive;
+    private NewBoard? newBoard;
+    private IReadOnlyList<BoardModel> newBoardModels = [];
+    private BoardModel? selectedModel;
+    private bool scanningNewBoards;
 
     public void Start()
     {
@@ -397,7 +408,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             CanUpdate = false;
             return;
         }
-        if (State.Device?.Kind == BoardKind.Esp32C3)
+        if (!IsConnected)
+        {
+            if (NewBoard is not { } nb) (CanUpdate, UpdateText) = (false, "");
+            else if (SelectedModel is { } m && BundledFirmware.For(Bundled, m.Board) is { } nfw)
+                (CanUpdate, UpdateText) = (true, $"Found an {nb.Describe()}. Install Touch Deck {nfw.Version} for the {m.Name}?");
+            else (CanUpdate, UpdateText) = (false, $"Found an {nb.Describe()}, but this app has no firmware for it.");
+        }
+        else if (State.Device?.Kind == BoardKind.Esp32C3)
         {
             (CanUpdate, UpdateText) = (false, "ESP32-C3 firmware is updated with PlatformIO.");
         }
@@ -405,45 +423,70 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             (CanUpdate, UpdateText) = (false, "");
         }
-        else if (IsConnected)
+        else
         {
             bool newer = fw.IsNewerThan(State.Firmware);
             CanUpdate = true;
             UpdateText = newer ? $"Firmware {fw.Version} is available." : $"Up to date (bundled {fw.Version}).";
         }
-        else if (BootDrive is not null)
-        {
-            (CanUpdate, UpdateText) = (true, $"A board is waiting in its bootloader ({BootDrive}). Install firmware {fw.Version}?");
-        }
-        else
-        {
-            (CanUpdate, UpdateText) = (false, "");
-        }
     }
 
     public bool UpdateIsUpgrade => UpdateCandidate() is { } fw && fw.IsNewerThan(State.Firmware);
 
-    private void CheckBootDrive()
+    // Every 2 s while no Touch Deck is connected: a Raspberry Pi board on its factory firmware or
+    // in its bootloader (by USB ID). The WMI query runs off the UI thread.
+    private async void CheckNewBoards()
     {
         if (Busy || IsConnected)
         {
-            if (BootDrive is not null) BootDrive = null;
+            if (NewBoard is not null) { NewBoard = null; RefreshUpdateOffer(); }
             return;
         }
-        var drive = Uf2.FindBootDrive(Uf2.RemovableRoots());
-        if (drive == BootDrive) return;
-        BootDrive = drive;
-        RefreshUpdateOffer();
+        if (scanningNewBoards) return;
+        scanningNewBoards = true;
+        try
+        {
+            var found = await Task.Run(() =>
+            {
+                try { return NewBoards.Scan(); }
+                catch (System.Management.ManagementException) { return []; }
+            });
+            if (disposed || Busy || IsConnected) return;
+            var board = found.FirstOrDefault();
+            if (board == NewBoard) return;
+            NewBoard = board;
+            NewBoardModels = board is null ? [] : BoardModels.For(board.Chip);
+            SelectedModel = NewBoardModels.FirstOrDefault(m => BundledFirmware.For(Bundled, m.Board) is not null) ?? NewBoardModels.FirstOrDefault();
+            if (board is not null) AddLog($"Found an {board.Describe()}");
+            RefreshUpdateOffer();
+        }
+        finally
+        {
+            scanningNewBoards = false;
+        }
     }
 
     public async Task UpdateFirmwareAsync()
     {
-        if (UpdateCandidate() is not { } fw || Busy) return;
-        await FlashAsync(Path.Combine(FirmwareDir, fw.File), $"{fw.Version} ({fw.File})");
+        if (Busy) return;
+        if (!IsConnected)
+        {
+            if (NewBoard is not { } nb || SelectedModel is not { } model || BundledFirmware.For(Bundled, model.Board) is not { } nfw) return;
+            // A stock program reboots at 1200 baud; a board already in its bootloader needs nothing.
+            Action reboot = nb is { State: NewBoardState.StockFirmware, Port: { } p } ? () => NewBoards.RebootToBootloader(p) : () => { };
+            await FlashAsync(Path.Combine(FirmwareDir, nfw.File), $"{nfw.Version} ({nfw.File}) on a new {model.Name}", model, reboot);
+            return;
+        }
+        if (UpdateCandidate() is not { } fw || BoardModels.Find(fw.Board) is not { } m) return;
+        await FlashAsync(Path.Combine(FirmwareDir, fw.File), $"{fw.Version} ({fw.File})", m);
     }
 
-    /// <summary>Flashes a UF2 (bundled, or downloaded and verified) with the RP2040 update flow.</summary>
-    private async Task<bool> FlashAsync(string uf2, string label)
+    /// <summary>
+    /// Installs a UF2 (bundled, or downloaded and verified) for <paramref name="model"/>: chip and model
+    /// are checked before the board is touched. <paramref name="enterBootloader"/> overrides BOOT over
+    /// the session (a new board has no Touch Deck session).
+    /// </summary>
+    private async Task<bool> FlashAsync(string uf2, string label, BoardModel model, Action? enterBootloader = null)
     {
         if (Busy) return false;
         Busy = true;
@@ -452,8 +495,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         AddLog($"Installing firmware {label}");
         var steps = new UpdateSteps
         {
-            EnterBootloader = () => old?.RequestBootloader(),
-            FindBootDrive = () => Uf2.FindBootDrive(Uf2.RemovableRoots()),
+            EnterBootloader = enterBootloader ?? (() => old?.RequestBootloader()),
+            FindBootDrive = () => Uf2.FindBootDrive(Uf2.RemovableRoots(), model.Chip),
             CopyImage = CopyToBootDrive,
             // Only a new session counts: the old one may not have noticed the reboot yet.
             ReadRunningFirmware = () => manager.Session is { } s && s != old ? s.Firmware : null,
@@ -461,7 +504,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var progress = new Progress<string>(m => { AddLog(m); UpdateText = m; });
         try
         {
-            var result = await FirmwareUpdater.UpdateRp2040Async(uf2, steps, progress);
+            var result = await FirmwareUpdater.InstallAsync(uf2, model, steps, progress);
             ok = result.Ok;
             AddLog(result.Message);
             Notify?.Invoke(result.Ok ? "Firmware updated" : "Firmware update failed", result.Message);
@@ -546,7 +589,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     // ---------- updates ----------
 
-    private const string FlashableBoard = "rp2040-169";
     private readonly UpdateService updates;
     private UpdateChoice? lastChoice;
     private bool checkedOnce;
@@ -615,10 +657,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var app = o.Choice?.App;
         AppUpdateText = app is null ? "Up to date" : $"{app.Version.ToString(3)} available";
         CanInstallApp = app is not null;
-        // The app flashes RP2040 boards only (UF2); other boards are updated with their own tools.
-        var fw = o.Choice?.Firmware is { Board: FlashableBoard } f ? f : null;
+        // The app flashes the RP boards (UF2); the ESP32-C3 is updated with PlatformIO.
+        var fw = o.Choice?.Firmware is { } f && BoardModels.Find(f.Board) is not null ? f : null;
         FirmwareUpdateText = device is not { Known: true } ? "Connect a board to check its firmware"
-            : device.Board != FlashableBoard ? "This board is updated with PlatformIO"
+            : BoardModels.Find(device.Board) is null ? "This board is updated with PlatformIO"
             : fw is null ? "Up to date" : $"{fw.Version.ToString(3)} available";
         CanInstallFirmware = fw is not null && device is not null;
         if (app is not null) Notify?.Invoke("Touch Deck update", $"Version {app.Version.ToString(3)} is available. Open Settings to install it.");
@@ -650,14 +692,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public async Task InstallFirmwareUpdateAsync()
     {
-        if (lastChoice?.Firmware is not { } fw || State.Firmware is not { Known: true } dev || dev.Board != fw.Board) return;
+        if (lastChoice?.Firmware is not { } fw || State.Firmware is not { Known: true } dev || dev.Board != fw.Board
+            || BoardModels.Find(fw.Board) is not { } model) return;
         CanInstallFirmware = false;
         FirmwareUpdateText = "Downloading...";
         try
         {
             var uf2 = await updates.DownloadFirmwareAsync(fw, null, CancellationToken.None);
             FirmwareUpdateText = "Installing...";
-            bool ok = await FlashAsync(uf2, $"{fw.Version.ToString(3)} (downloaded, verified)");
+            bool ok = await FlashAsync(uf2, $"{fw.Version.ToString(3)} (downloaded, verified)", model);
             FirmwareUpdateText = ok ? $"Updated to {fw.Version.ToString(3)}" : "Install failed: see the activity log";
             CanInstallFirmware = !ok;
         }

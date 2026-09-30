@@ -40,12 +40,22 @@ function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed (exit $LA
 # 1. Bundled firmware
 $fwRepo = Split-Path $root -Parent
 $uf2 = Join-Path $fwRepo "build\watch.uf2"
+$uf2Round = Join-Path $fwRepo "build-rp2350\deck128.uf2"
 $versionH = Join-Path $fwRepo "src\version.h"
 if ((Test-Path $uf2) -and (Test-Path $versionH)) {
+    # One src\version.h for both RP boards: the RP2040 1.69 and the round RP2350 1.28.
     $fwVersion = (Select-String -Path $versionH -Pattern '#define FW_VERSION\s+"([^"]+)"').Matches[0].Groups[1].Value
     Step "Bundling RP2040 firmware $fwVersion"
     Copy-Item $uf2 (Join-Path $root "firmware\rp2040-169.uf2") -Force
-    $manifest = "[`n  { `"board`": `"rp2040-169`", `"version`": `"$fwVersion`", `"file`": `"rp2040-169.uf2`" }`n]`n"
+    $entries = @("  { `"board`": `"rp2040-169`", `"version`": `"$fwVersion`", `"file`": `"rp2040-169.uf2`" }")
+    if (Test-Path $uf2Round) {
+        Step "Bundling RP2350 round firmware $fwVersion"
+        Copy-Item $uf2Round (Join-Path $root "firmware\rp2350-128.uf2") -Force
+        $entries += "  { `"board`": `"rp2350-128`", `"version`": `"$fwVersion`", `"file`": `"rp2350-128.uf2`" }"
+    } else {
+        Write-Warning "build-rp2350\deck128.uf2 not built: the app will not be able to install the round RP2350 board"
+    }
+    $manifest = "[`n" + ($entries -join ",`n") + "`n]`n"
     [IO.File]::WriteAllText((Join-Path $root "firmware\manifest.json"), $manifest)
 } else {
     Step "Firmware repo build not found; keeping the committed firmware\"

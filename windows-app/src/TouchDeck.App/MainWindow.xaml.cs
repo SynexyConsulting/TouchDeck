@@ -138,7 +138,11 @@ public partial class MainWindow : Window
                 UpdateMirror();
                 break;
             case nameof(AppController.UpdateText):
-                UpdateButton.Content = app.IsConnected && !app.UpdateIsUpgrade ? "Reinstall firmware" : "Install firmware";
+                UpdateButton.Content = app.IsConnected && !app.UpdateIsUpgrade ? "Reinstall firmware"
+                    : !app.IsConnected && app.NewBoard is not null ? "Install Touch Deck" : "Install firmware";
+                break;
+            case nameof(AppController.NewBoardModels):
+                ModelPicker.Visibility = app.NewBoardModels.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
                 break;
         }
     }

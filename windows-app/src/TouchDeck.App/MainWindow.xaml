@@ -100,10 +100,13 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
+                        <!-- A new board whose chip has more than one Touch Deck model: pick the screen. -->
+                        <ComboBox x:Name="ModelPicker" ItemsSource="{Binding NewBoardModels}" SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
+                                  DisplayMemberPath="Name" Visibility="Collapsed" Margin="0,10,0,0" HorizontalAlignment="Left" MinWidth="220" />
                         <WrapPanel Margin="0,12,0,0">
                             <Button x:Name="UpdateButton" Content="Install firmware" Click="OnUpdate" IsEnabled="{Binding CanUpdate}" Margin="0,0,8,6" />
                             <Button Content="Bootloader" Click="OnBootloader" IsEnabled="{Binding IsConnected}" Margin="0,0,8,6"
-                                    ToolTip="Reboot the board into its UF2 drive (RPI-RP2)" />
+                                    ToolTip="Reboot the board into its UF2 drive (RPI-RP2 or RP2350)" />
                         </WrapPanel>
                     </StackPanel>
                 </Border>
