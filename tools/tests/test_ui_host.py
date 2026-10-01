@@ -20,6 +20,7 @@ PAGES = {"rp2040": 3, "esp32c3": 3, "rp2350": 2}
 JIG = {"rp2040": 2, "esp32c3": 1, "rp2350": 1}      # the Jiggler page; its settings open over it (sub=2)
 SUB_JIGSET = 2
 COG = {"rp2040": (30, 230), "esp32c3": (40, 188), "rp2350": (40, 188)}
+ROW2_Y = {"rp2040": 84 + 2 * 40, "esp32c3": 76 + 2 * 32, "rp2350": 76 + 2 * 32}   # JS_ROW_Y(2)
 CLOSE = {"rp2040": (30, 42), "esp32c3": (50, 48), "rp2350": (50, 48)}
 
 
@@ -100,6 +101,12 @@ def test_menu_open_row_is_dimmed_when_the_menu_is_off(tdui, board):
     on = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg(menu=1, open_s=5)))
     off = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg(menu=0, open_s=5)))
     assert on != off
+    # With the menu off, "Menu open" is still drawn (dimmed): its value changes only that row.
+    off17 = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg(menu=0, open_s=17)))
+    rows = [y for y in range(r.h) if off[y * r.w * 2:(y + 1) * r.w * 2] != off17[y * r.w * 2:(y + 1) * r.w * 2]]
+    assert rows, "the dimmed row's value isn't drawn"
+    row_y = ROW2_Y[board]
+    assert all(abs(y - row_y) <= 13 for y in rows), (rows[0], rows[-1], row_y)
 
 
 @pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
@@ -135,8 +142,9 @@ def test_esp32c3_bluetooth_sub_page(tdui):
 def test_pages_stay_inside_the_panel_shape(tdui, board):
     """Outside the glass (RP2040: 44 px rounded corners; C3: 240 px circle) stays background."""
     r = tdui[board]
-    for p in range(PAGES[board]):
-        f = r.render(state(screen=p, clip_len=5, clip=b"hello", jig_on=1))
+    frames = [r.render(state(screen=p, clip_len=5, clip=b"hello", jig_on=1)) for p in range(PAGES[board])]
+    frames.append(r.render(state(screen=JIG[board], sub=SUB_JIGSET, jig_on=1, **cfg())))   # the Jiggler menu panel
+    for p, f in enumerate(frames):
         for y in range(r.h):
             for x in range(r.w):
                 if board != "rp2040":

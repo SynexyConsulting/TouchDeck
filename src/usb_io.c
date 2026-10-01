@@ -143,7 +143,7 @@ void usb_state_poll(void) {
     if ((d & UI_SYNC_FIELDS) || ((d & UI_SYNC_DOT) && now - sync_state_ms >= 50)) {
         ui_sync_state_line(&sync_cur, sync_line, sizeof sync_line);
         if (usb_send_line(sync_line)) {
-            memcpy(&sync_last, &sync_cur, offsetof(ui_state_t, clip_src));   // the numbers; strings go with TEXT
+            ui_sync_commit_fields(&sync_last, &sync_cur);   // the numbers; strings go with TEXT
             sync_state_ms = now;
         } else ok = false;
     }

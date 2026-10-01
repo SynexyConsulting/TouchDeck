@@ -88,7 +88,8 @@ void jiggler_menu_now(void) {
 }
 
 bool jiggler_idle(void) {
-    return !app.jig_on || app.jig_phase == JIG_MOVING;
+    return !app.jig_on || app.jig_phase == JIG_MOVING ||
+           app.jig_phase == JIG_RESUME;   // the post-key pause holds nothing: a paste may type now
 }
 
 // Demo (ANIM 1, perf tests): walk the letter on screen without sending HID.

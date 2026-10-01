@@ -41,7 +41,7 @@ The ESP32-C3 has no USB keyboard/mouse hardware, so it has two **output modes**:
 - **BT:** a Bluetooth LE keyboard and mouse, paired explicitly with an on-screen 6-digit passkey.
 - **PC:** the board sends its key and mouse reports over USB serial, and the PC app performs them.
 
-It has Clipboard, Jiggler and Settings pages with the same trash can and letter lanes. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
+It has Clipboard, Jiggler and Settings pages with the same trash can, letter lanes and Jiggler menu panel. **F15 over Bluetooth:** firmware 1.8.0 widened the board's keyboard description so it can send F15. If F15 doesn't arrive after updating, Windows is using the copy it saved when you paired, so remove the board in Windows Bluetooth settings and pair it again. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
 
 ### RP2350-Touch-LCD-1.28 (240x240 round, touch)
 

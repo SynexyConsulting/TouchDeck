@@ -90,7 +90,8 @@ void jiggler_menu_now() {
     if (app.jig_on && app.jig_phase == JIG_MOVING) app.jig_next_menu_ms = now_ms();
 }
 
-bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING; }
+// Off, moving, or in the post-key pause (holds nothing): a paste may start typing.
+bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING || app.jig_phase == JIG_RESUME; }
 
 // Demo (ANIM 1, perf tests): walk the letter on screen without sending HID.
 static void demo_step() {

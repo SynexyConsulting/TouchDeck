@@ -21,6 +21,12 @@ int ui_sync_diff(const ui_state_t *a, const ui_state_t *b) {
     return d;
 }
 
+void ui_sync_commit_fields(ui_state_t *prev, const ui_state_t *cur) {
+    memcpy(prev, cur, offsetof(ui_state_t, clip_src));
+    // and the numbers appended after the clip (the Jiggler settings, firmware 1.8.0)
+    memcpy(&prev->jig_menu_on, &cur->jig_menu_on, sizeof *cur - offsetof(ui_state_t, jig_menu_on));
+}
+
 int ui_sync_state_line(const ui_state_t *s, char *out, int n) {
     int li = s->jig_letter >= 0 && s->jig_letter < JIG_PATH_COUNT ? s->jig_letter : 0;
     // The first eight fields are the 1.6.0 STATE, which older apps parse.

@@ -266,3 +266,13 @@ def test_a_settings_change_is_streamed_without_asking(board):
     finally:
         board.send("WATCH 0")
         board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_an_idle_board_is_quiet_while_watched(board):
+    """With the app watching (WATCH 1), a board that isn't changing sends STATE once, not on every poll."""
+    board.send("JIG OFF"); board.goto(0); board.pump(0.5)
+    board.send("WATCH 1"); board.pump(0.6); board.take()
+    board.pump(1.0)
+    n = len([l for l in board.take() if l.startswith("STATE ")])
+    board.send("WATCH 0"); board.pump(0.2)
+    assert n <= 2, f"{n} STATE lines in 1 s from an idle board"
