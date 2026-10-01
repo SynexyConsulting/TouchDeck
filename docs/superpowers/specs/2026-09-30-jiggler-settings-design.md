@@ -28,21 +28,26 @@ Each menu event (still every 45-150 s while the jiggler runs):
 
 `JIG MENU` (tests) runs the event now, with these settings. A paste waiting for the jiggler still waits until it is back to moving.
 
-## Device page: "Jiggler settings"
+## Device panel: "Jiggler menu"
 
-- A new page right after **Jiggler** on every board:
-  - **RP2040 1.69:** Watch, Clipboard, Jiggler, **Jiggler settings**.
-  - **RP2350 round:** Clipboard, Jiggler, **Jiggler settings**.
-  - **ESP32-C3 round:** Clipboard, Jiggler, **Jiggler settings**, Settings.
-- Rows:
+Changed after the first on-device check, at the owner's request: the settings are a **panel**, not a swipe page.
+- The page lists are unchanged:
+  - **1.69:** Watch, Clipboard, Jiggler.
+  - **RP2350:** Clipboard, Jiggler.
+  - **ESP32:** Clipboard, Jiggler, Settings.
+- **Open:** a **cog** at the Jiggler page's lower left opens the "Jiggler menu" panel over it.
+- **Close:** an **X** left of the title closes it, and so does a right swipe, like Settings > Bluetooth.
+- The board reports the open panel as `ui_state_t.sub = UI_SUB_JIGSET` (2), so the app mirror shows it; DBG says `jset=`.
+- The jiggler's dot animation doesn't draw over the panel.
+- **Rows:**
   - Context menu ON/OFF pill;
   - Key segmented ESC | F15;
   - Menu open: − value +;
   - Pause: − value +.
-- The visual language is that of the existing pages: pills, edge ring, the top chip and the page dots.
+- A hint line underneath summarises the sequence.
 - When Context menu is OFF, the Menu open row is dimmed and its −/+ do nothing.
-- Each tap gives the usual feedback click on the RP2040 1.69 and changes the value immediately. Saving is debounced, so a run of taps writes flash once, about 1 s after the last tap.
-- Rect and round layouts each get their own geometry in their `ui.h`. The round one stays inside the 240 px circle. All labels are added to `test_fontgen.py`'s fit checks.
+- Each tap changes the value at once. RP saves are debounced (~1 s after the last tap); the 1.69 clicks on each tap.
+- **The 1.69's touch panel squeezes its top band:** a finger on the X, drawn at y 42, reports y ≈ 2 (measured). So targets near the top (the X, the trash, the jiggler's pills) take taps up to the top edge.
 
 ## Persistence
 

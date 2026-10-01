@@ -17,6 +17,10 @@ ROOT = jig_host.ROOT
 C_BG = 0x0041           # RGB(7, 9, 13)
 PC_AMBER = 0xF507       # RGB(242, 163, 58)
 PAGES = {"rp2040": 3, "esp32c3": 3, "rp2350": 2}
+JIG = {"rp2040": 2, "esp32c3": 1, "rp2350": 1}      # the Jiggler page; its settings open over it (sub=2)
+SUB_JIGSET = 2
+COG = {"rp2040": (30, 230), "esp32c3": (40, 188), "rp2350": (40, 188)}
+CLOSE = {"rp2040": (30, 42), "esp32c3": (50, 48), "rp2350": (50, 48)}
 
 
 @pytest.fixture(scope="module")
@@ -63,14 +67,53 @@ def test_panel_sizes(tdui):
     assert (tdui["rp2350"].w, tdui["rp2350"].h) == (240, 240)
 
 
-def test_round_usb_board_shows_one_dot_per_page(tdui):
-    """The RP2350 has Clipboard and Jiggler only: two page dots (x 114 and 126), not the
-    ESP32-C3's three (108, 120, 132)."""
-    r = tdui["rp2350"]
-    for page in range(2):
-        f = r.render(state(screen=page))
-        assert pixel(r, f, 114, 229) != C_BG and pixel(r, f, 126, 229) != C_BG, page
-        assert pixel(r, f, 120, 229) == C_BG and pixel(r, f, 108, 229) == C_BG, page
+def test_round_boards_show_one_dot_per_page(tdui):
+    """Round dots sit 12 px apart around x 120: RP2350 Clipboard and Jiggler (114, 126);
+    ESP32-C3 adds Settings (108, 120, 132)."""
+    for board, xs, gaps in (("rp2350", (114, 126), (108, 120, 132)),
+                            ("esp32c3", (108, 120, 132), (114, 126))):
+        r = tdui[board]
+        for page in range(PAGES[board]):
+            f = r.render(state(screen=page))
+            assert all(pixel(r, f, x, 229) != C_BG for x in xs), (board, page)
+            assert all(pixel(r, f, x, 229) == C_BG for x in gaps), (board, page)
+
+
+def cfg(menu=1, key=0, open_s=2, pause_s=0, **kw):
+    return dict(jig_menu_on=menu, jig_key=key, jig_open_s=open_s, jig_pause_s=pause_s, **kw)
+
+
+@pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
+def test_jiggler_settings_page_shows_each_setting(tdui, board):
+    """Every control changes the picture: the toggle, the key, both times."""
+    r = tdui[board]
+    base = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg()))
+    for change in (cfg(menu=0), cfg(key=1), cfg(open_s=17), cfg(pause_s=9)):
+        assert r.render(state(screen=JIG[board], sub=SUB_JIGSET, **change)) != base, change
+
+
+@pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
+def test_menu_open_row_is_dimmed_when_the_menu_is_off(tdui, board):
+    """With the context menu off, changing "Menu open" changes nothing that matters, but it is still
+    drawn (dimmed): the two renders differ only in that row's value."""
+    r = tdui[board]
+    on = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg(menu=1, open_s=5)))
+    off = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg(menu=0, open_s=5)))
+    assert on != off
+
+
+@pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])
+def test_cog_opens_the_panel_and_the_panel_has_an_x(tdui, board):
+    """The Jiggler page shows a cog (lower left); the settings panel replaces the page and shows an X."""
+    r = tdui[board]
+    jig = r.render(state(screen=JIG[board], **cfg()))
+    panel = r.render(state(screen=JIG[board], sub=SUB_JIGSET, **cfg()))
+    assert panel != jig
+    cx, cy = COG[board]
+    assert any(pixel(r, jig, x, y) != C_BG for x in range(cx - 6, cx + 7) for y in range(cy - 6, cy + 7))
+    assert all(pixel(r, panel, x, y) == C_BG for x in range(cx - 6, cx + 7) for y in range(cy - 6, cy + 7))
+    xx, xy = CLOSE[board]
+    assert pixel(r, panel, xx, xy) != C_BG                 # the X's crossing point
 
 
 @pytest.mark.parametrize("board", ["rp2040", "esp32c3", "rp2350"])

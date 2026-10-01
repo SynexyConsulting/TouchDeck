@@ -203,3 +203,39 @@ def test_jig_cfg_round_trips_and_rejects_bad_values(board):
         assert jig_cfg(board) == ("0", "1", "7", "3")
     finally:
         board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_jiggler_settings_page_taps(board):
+    """Each control on the Jiggler settings page (firmware 1.8.0) changes its setting; Menu open
+    ignores taps while the context menu is off."""
+    start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+    try:
+        board.send("JIG CFG 1 0 2 0"); board.pump(0.3)
+        board.goto(2)
+        assert board.field("screen") == "2" and board.field("jset") == "0"
+        board.send("TAP 30 230"); board.pump(0.25)            # the cog opens the panel
+        assert board.field("jset") == "1"
+        def tap(xy):
+            board.send("TAP %d %d" % xy); board.pump(0.25)
+        def cfg():
+            return tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+        tap((203, 164)); tap((203, 164))
+        assert cfg() == ("1", "0", "4", "0")
+        tap((139, 164))
+        assert cfg() == ("1", "0", "3", "0")
+        tap((203, 204))
+        assert cfg() == ("1", "0", "3", "1")
+        tap((196, 124)); assert cfg()[1] == "1"
+        tap((150, 124)); assert cfg()[1] == "0"
+        tap((191, 84)); assert cfg()[0] == "0"
+        tap((203, 164))                                   # dimmed: no change
+        assert cfg() == ("0", "0", "3", "1")
+        tap((139, 204)); tap((139, 204))             # stops at 0
+        assert cfg()[3] == "0"
+        board.send("TAP 30 42"); board.pump(0.25)        # X closes it
+        assert board.field("jset") == "0" and board.field("screen") == "2"
+        board.send("TAP 30 230"); board.pump(0.25)
+        board.send("SWIPE R"); board.pump(0.25)                        # so does a right swipe
+        assert board.field("jset") == "0" and board.field("screen") == "2"
+    finally:
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)

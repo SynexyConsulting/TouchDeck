@@ -144,3 +144,21 @@ def test_watch_page_is_pixel_identical(mirror):
             st.time_s = (t + dt) % 86400
             want.append(mirror.r.crc(mirror.r.render(st)))
         assert got in want, (t, hex(got), [hex(w) for w in want])
+
+
+def test_jiggler_settings_page_is_pixel_identical(mirror):
+    """The Jiggler settings page (firmware 1.8.0), with the menu on and off (dimmed row)."""
+    start = None
+    try:
+        settle(mirror, 2, 1.0)
+        mirror.b.send("TAP 30 230"); mirror.pump(0.6)      # open the panel
+        assert mirror.st.sub == 2
+        start = (mirror.st.jig_menu_on, mirror.st.jig_key, mirror.st.jig_open_s, mirror.st.jig_pause_s)
+        for cfg in ("1 0 2 0", "0 1 17 9"):
+            mirror.b.send("JIG CFG " + cfg)
+            mirror.pump(0.8)
+            assert mirror.fbcrc() == mirror.r.crc(mirror.r.render(mirror.st)), cfg
+    finally:
+        if start:
+            mirror.b.send("JIG CFG %d %d %d %d" % start); mirror.pump(0.3)
+        mirror.b.send("SWIPE R"); mirror.pump(0.3)                      # close it

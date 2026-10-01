@@ -1,4 +1,4 @@
-// The RP2040 Touch Deck's pages (watch, clipboard, jiggler), drawn from a
+// The RP2040 Touch Deck's pages (watch, clipboard, jiggler, jiggler settings), drawn from a
 // ui_state_t only: no SDK, no clock, no shared app state. ui.c calls it on the
 // device; hostui/ compiles it for the PC app's device mirror.
 #include <math.h>
@@ -8,6 +8,7 @@
 #include "gfx.h"
 #include "icons.h"
 #include "jig_lane.h"
+#include "jig_menu.h"
 #include "ui.h"
 #include "ui_pages.h"
 
@@ -311,7 +312,7 @@ static void draw_jig(const ui_state_t *s) {
         snprintf(str, sizeof str, "Next menu in %ds", s->jig_next_s < 0 ? 0 : (int)s->jig_next_s);
         status = str;
     } else if (on && (s->jig_phase == JIG_CLICK_DOWN || s->jig_phase == JIG_MENU_OPEN)) status = "Right-click menu";
-    else if (on && s->jig_phase == JIG_ESC_DOWN) status = "Esc";
+    else if (on && s->jig_phase == JIG_ESC_DOWN) status = s->jig_key ? "F15" : "Esc";
     else if (on) status = "Pausing";
     text_c(LCD_W / 2, 220, status, &font_label, scol, 0);
 
@@ -324,13 +325,60 @@ static void draw_jig(const ui_state_t *s) {
         strcpy(stats, "Menu every 45-150s");
     }
     text_c(LCD_W / 2, 238, msg_or(s, stats), &font_body, C_DIM, 0);
+    icon_cog(JIG_COG_CX, JIG_COG_CY, 20.f, C_DIM);     // opens the Jiggler settings
+}
+
+
+// ---------- jiggler settings ----------
+
+// A selectable pill: accent ring and tint when selected, grey when not; faded when disabled.
+static void js_pill_f(int x, int y, int w, const char *label, int sel, int enabled, const aa_font_t *f) {
+    uint16_t ring = sel && enabled ? C_PC : C_SURF2, bg = sel && enabled ? C_PC_TINT : C_SURF2;
+    uint16_t fg = !enabled ? C_FAINT : sel ? C_PC : C_DIM;
+    pill(x, y, w, JS_CTRL_H, ring);
+    if (ring != bg) pill(x + 1, y + 1, w - 2, JS_CTRL_H - 2, bg);
+    text_c(x + w / 2, y + JS_CTRL_H / 2, label, f, fg, f == &font_caps);
+}
+
+static void js_pill(int x, int y, int w, const char *label, int sel, int enabled) {
+    js_pill_f(x, y, w, label, sel, enabled, &font_caps);
+}
+
+// "-  12 s  +" on row i; the buttons fade at the ends of the 0-60 s range.
+static void js_stepper(int i, int value, int enabled) {
+    int y = JS_ROW_Y(i) - JS_CTRL_H / 2;
+    char v[12];
+    snprintf(v, sizeof v, "%d s", value);
+    js_pill_f(JS_MINUS_X, y, JS_STEP_W, "-", 0, enabled && value > 0, &font_label);
+    js_pill_f(JS_PLUS_X, y, JS_STEP_W, "+", 0, enabled && value < JM_MAX_S, &font_label);
+    text_c((JS_MINUS_X + JS_STEP_W + JS_PLUS_X) / 2, JS_ROW_Y(i), v, &font_label, enabled ? C_TEXT : C_FAINT, 0);
+}
+
+static void draw_jigset(const ui_state_t *s) {
+    int menu = s->jig_menu_on != 0, f15 = s->jig_key != 0;
+    text_c(LCD_W / 2, TITLE_Y, "Jiggler menu", &font_title, C_TEXT, 0);
+    icon_close(JS_CLOSE_CX, JS_CLOSE_CY, 18.f, C_TEXT);
+    const char *labels[4] = {"Context menu", "Key", "Menu open", "Pause"};
+    for (int i = 0; i < 4; i++)
+        gfx_text_aa(JS_LABEL_X, gfx_text_aa_ytop(&font_label, JS_ROW_Y(i)), labels[i], &font_label,
+                    i == 2 && !menu ? C_FAINT : C_TEXT, 0);
+    int cy = JS_ROW_Y(0) - JS_CTRL_H / 2;
+    js_pill(JS_TOGGLE_X, cy, JS_TOGGLE_W, menu ? "ON" : "OFF", menu, 1);
+    cy = JS_ROW_Y(1) - JS_CTRL_H / 2;
+    js_pill(JS_SEG_ESC_X, cy, JS_SEG_W, "ESC", !f15, 1);
+    js_pill(JS_SEG_F15_X, cy, JS_SEG_W, "F15", f15, 1);
+    js_stepper(2, (int)s->jig_open_s, menu);
+    js_stepper(3, (int)s->jig_pause_s, 1);
+    const char *hint = menu ? (f15 ? "Right-click, wait, F15, pause" : "Right-click, wait, Esc, pause")
+                            : (f15 ? "F15, then pause" : "Esc, then pause");
+    text_c(LCD_W / 2, JS_HINT_Y, msg_or(s, hint), &font_body, C_DIM, 0);
 }
 
 // ---------- the page ----------
 
 static void page_dots(int screen) {
     for (int i = 0; i < SCR_COUNT; i++)
-        gfx_disc(LCD_W / 2 + (i - 1) * 14, 268, 3.f, i == screen ? COL_TEXT : RGB(60, 64, 76));
+        gfx_disc(LCD_W / 2 + (i * 2 - (SCR_COUNT - 1)) * 7, 268, 3.f, i == screen ? COL_TEXT : RGB(60, 64, 76));
 }
 
 // Screen box around the dot at box position (bx, by), wide enough for its anti-aliased edge.
@@ -346,7 +394,9 @@ void ui_draw_page(const ui_state_t *s) {
     gfx_fill(C_BG);
     if (s->screen == SCR_WATCH) draw_watch(s);
     else if (s->screen == SCR_CLIP) draw_clip(s);
+    else if (s->sub == UI_SUB_JIGSET) draw_jigset(s);
     else draw_jig(s);
     frame_usb(s);      // last: over the content (the watch face fills the screen)
-    page_dots(s->screen);
+    if (s->sub) gfx_disc(LCD_W / 2, 268, 3.f, COL_TEXT);   // a panel: one dot, like the Bluetooth page
+    else page_dots(s->screen);
 }

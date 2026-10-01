@@ -46,6 +46,7 @@ typedef struct {
     volatile uint32_t jig_started_ms;
     volatile int jig_scale_idx;     // 0..2 -> JIG_SCALES[] (BOOT button on the Jiggler page)
     jig_cfg_t jig_cfg;              // Jiggler settings page: context menu, key, open and pause times
+    volatile bool jig_settings;     // the Jiggler settings panel is open over the Jiggler page
 
     // Watch stopwatch (BOOT button on the watch page). timer_s is what the face shows.
     volatile bool timer_running;

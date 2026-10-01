@@ -22,7 +22,7 @@ void ui_state_fill(ui_state_t *s, bool with_clip) {
     uint32_t now = now_ms();
     memset(s, 0, sizeof *s);
     s->screen = app.screen;
-    s->sub = app.in_bt;
+    s->sub = app.in_bt ? UI_SUB_BT : app.jig_settings && app.screen == SCR_JIG ? UI_SUB_JIGSET : UI_SUB_NONE;
     s->time_s = app.time_s;
     s->helper = app.helper;
     s->link_ok = out_ready();
@@ -75,7 +75,7 @@ void ui_task(void *) {
         int screen = app.screen;
         bool in_bt = app.in_bt;
         uint32_t seq = app.redraw_seq, now = now_ms();
-        bool anim = !in_bt && screen == SCR_JIG && (app.jig_on || app.anim_demo);
+        bool anim = !in_bt && !app.jig_settings && screen == SCR_JIG && (app.jig_on || app.anim_demo);
         uint32_t period = app.clip_state != CLIP_IDLE ? 100 : (screen == SCR_JIG ? 1000 : 500);
         bool full = seq != drawn_seq || screen != drawn_screen || now - last_full >= period;
         bool part = anim && now - last_part >= 50;
@@ -85,7 +85,7 @@ void ui_task(void *) {
         }
         ui_state_fill(&st, !in_bt && screen == SCR_CLIP);
         st.screen = screen;
-        st.sub = in_bt;
+        st.sub = in_bt ? UI_SUB_BT : app.jig_settings && screen == SCR_JIG ? UI_SUB_JIGSET : UI_SUB_NONE;
         rect_t dot = ui_dot_rect(st.jig_x, st.jig_y);
         if (full) {
             drawn_seq = seq;

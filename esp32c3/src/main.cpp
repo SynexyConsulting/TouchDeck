@@ -53,14 +53,14 @@ void debug_report() {
     char s[400];
     snprintf(s, sizeof s,
              "LOG up=%lus frames=%lu screen=%d bt_page=%d heap=%u | ble state=%d conn=%d ready=%d host=%s | touch chip=%d ints=%u "
-             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d jmenu=%d jkey=%d jopen=%d jpause=%d",
+             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d jmenu=%d jkey=%d jopen=%d jpause=%d jset=%d",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.frames, app.screen, app.in_bt,
              (unsigned)ESP.getFreeHeap(), (int)ble_state(), ble_connected(), ble_ready(), ble_host_name(), touch_stats.chip_id,
              touch_stats.ints, touch_stats.reads, touch_stats.fails, touch_stats.recoveries,
              touch_stats.presses, touch_stats.events, touch_stats.last_x, touch_stats.last_y,
              touch_diag_lines(), (int)mode_get(), app.jig_on, app.pc_leds,
              (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s(),
-             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s);
+             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s, app.jig_settings);
     link_send_line(s);
 }
 
@@ -146,8 +146,44 @@ static void on_touch_bt(const touch_event_t &e) {
     app_redraw();
 }
 
+// Jiggler settings page: each tap changes one setting, applied from the next menu
+// event and saved. "Menu open" ignores taps while the context menu is off.
+static void on_jigset_tap(const touch_event_t &e) {
+    jig_cfg_t c = app.jig_cfg;
+    const int h = JS_CTRL_H, pad = JS_HIT_PAD;
+    int r0 = JS_ROW_Y(0) - h / 2, r1 = JS_ROW_Y(1) - h / 2, r2 = JS_ROW_Y(2) - h / 2, r3 = JS_ROW_Y(3) - h / 2;
+    if (near_box(e, JS_TOGGLE_X, r0, JS_TOGGLE_W, h, pad)) {
+        c.menu_on = !c.menu_on;
+    } else if (near_box(e, JS_SEG_ESC_X, r1, JS_SEG_F15_X + JS_SEG_W - JS_SEG_ESC_X, h, pad)) {
+        c.key_f15 = e.x >= JS_SEG_F15_X;      // the two pills sit 2 px apart: split at F15's edge
+    } else if (c.menu_on && near_box(e, JS_MINUS_X, r2, JS_STEP_W, h, pad)) {
+        if (c.open_s > 0) c.open_s--;
+    } else if (c.menu_on && near_box(e, JS_PLUS_X, r2, JS_STEP_W, h, pad)) {
+        if (c.open_s < JM_MAX_S) c.open_s++;
+    } else if (near_box(e, JS_MINUS_X, r3, JS_STEP_W, h, pad)) {
+        if (c.pause_s > 0) c.pause_s--;
+    } else if (near_box(e, JS_PLUS_X, r3, JS_STEP_W, h, pad)) {
+        if (c.pause_s < JM_MAX_S) c.pause_s++;
+    } else {
+        return;
+    }
+    jig_set_cfg(&c);
+}
+
 static void on_touch(const touch_event_t &e) {
     if (app.in_bt) { on_touch_bt(e); return; }
+    // The Jiggler settings panel: X or a right swipe closes it; taps change settings.
+    if (app.jig_settings && app.screen == SCR_JIG) {
+        if (e.type == EV_SWIPE_R ||
+            (e.type == EV_TAP && near_box(e, JS_CLOSE_CX - JS_ICON_HIT, JS_CLOSE_CY - JS_ICON_HIT,
+                                          2 * JS_ICON_HIT, 2 * JS_ICON_HIT, 0))) {
+            app.jig_settings = false;
+            app_redraw();
+        } else if (e.type == EV_TAP) {
+            on_jigset_tap(e);
+        }
+        return;
+    }
 
     switch (e.type) {
     case EV_SWIPE_L:
@@ -179,7 +215,10 @@ static void on_touch(const touch_event_t &e) {
         }
     } else if (app.screen == SCR_JIG) {
         const int pad = (int)(JIG_LANE / 2 + JIG_WALL) + JIG_ZONE_PAD;
-        if (near_box(e, SCALE_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD)) {
+        if (near_box(e, JIG_COG_CX - JS_ICON_HIT, JIG_COG_CY - JS_ICON_HIT, 2 * JS_ICON_HIT, 2 * JS_ICON_HIT, 0)) {
+            app.jig_settings = true;
+            app_redraw();
+        } else if (near_box(e, SCALE_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD)) {
             jig_cycle_scale();
         } else if (near_box(e, ONOFF_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD) ||
                    near_box(e, JIG_BOX_X, JIG_BOX_Y, JIG_BOX, JIG_BOX, pad)) {
