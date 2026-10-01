@@ -25,6 +25,15 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(ClipMessage.encode("hi\n", source: "select"), Array("CLIP 3 select\nhi\n".utf8))
     }
 
+    func testSendInfoMatchesTheWindowsLine() {
+        XCTAssertEqual(ClipMessage.sendInfo("hi", connected: false), "Connect a board to send text.")
+        XCTAssertEqual(ClipMessage.sendInfo("", connected: true), "The board types this text when you tap PASTE.")
+        XCTAssertEqual(ClipMessage.sendInfo("hello", connected: true), "5 characters")
+        XCTAssertEqual(ClipMessage.sendInfo("a😀b", connected: true), "3 characters · 1 will be typed as '?'")
+        XCTAssertEqual(ClipMessage.sendInfo(String(repeating: "x", count: 9000), connected: true),
+                       "9000 characters · only the first 8192 fit")
+    }
+
     func testClipPayloadIsCappedAt8192Bytes() {
         let framed = ClipMessage.encode(String(repeating: "x", count: 9000), source: "app")
         XCTAssertEqual(framed.count, "CLIP 8192 app\n".utf8.count + 8192)

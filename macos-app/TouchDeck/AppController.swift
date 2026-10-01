@@ -282,16 +282,7 @@ final class AppController: ObservableObject {
 
     func copyLog() { Pasteboard.write(logLines.joined(separator: "\n")) }
 
-    /// The line under the send box: length, characters typed as '?', and the board's limit.
-    func sendInfo(_ text: String) -> String {
-        guard isConnected else { return "Connect a board to send text." }
-        if text.isEmpty { return "The board types this text when you tap PASTE." }
-        let (ascii, lost) = AsciiText.transliterate(text)
-        var parts = ["\(ascii.count) characters"]
-        if lost > 0 { parts.append("\(lost) will be typed as '?'") }
-        if ascii.utf8.count > ClipMessage.maxBytes { parts.append("only the first \(ClipMessage.maxBytes) fit") }
-        return parts.joined(separator: " · ")
-    }
+    func sendInfo(_ text: String) -> String { ClipMessage.sendInfo(text, connected: isConnected) }
 
     // MARK: board state
 
