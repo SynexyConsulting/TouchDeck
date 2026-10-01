@@ -124,12 +124,13 @@ void debug_report(void) {
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
              "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jig=%d jscale=%.1f letter=%c clip=%d jnext=%d timer=%d trun=%d "
-             "| draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
+             "jmenu=%d jkey=%d jopen=%d jpause=%d | draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
              touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
              app.jig_on, (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s(), app.timer_s, app.timer_running,
+             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s,
              (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
              (unsigned long)app.perf_draw_max_us, (unsigned long)app.perf_edge_lag_us,
              (unsigned long)app.prerender_hits, (unsigned long)app.prerender_misses);
@@ -160,6 +161,16 @@ void clip_clear(void) {
     mutex_exit(&clip_mtx);
     app_message("Cleared");
     app_redraw();
+}
+
+// Jiggler settings page and JIG CFG. Applies from the next menu event; saved ~1 s
+// after the last change, so a run of -/+ taps writes flash once.
+void jig_set_cfg(const jig_cfg_t *c) {
+    jig_cfg_t n = *c;
+    jmenu_clamp(&n);
+    app.jig_cfg = n;
+    app_redraw();
+    settings_save_soon();
 }
 
 // Scale pill tap, BOOT button on the jiggler page, JIG SCALE: 1x -> 1.5x -> 2x -> 1x.

@@ -53,13 +53,14 @@ void debug_report() {
     char s[400];
     snprintf(s, sizeof s,
              "LOG up=%lus frames=%lu screen=%d bt_page=%d heap=%u | ble state=%d conn=%d ready=%d host=%s | touch chip=%d ints=%u "
-             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d",
+             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d jmenu=%d jkey=%d jopen=%d jpause=%d",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.frames, app.screen, app.in_bt,
              (unsigned)ESP.getFreeHeap(), (int)ble_state(), ble_connected(), ble_ready(), ble_host_name(), touch_stats.chip_id,
              touch_stats.ints, touch_stats.reads, touch_stats.fails, touch_stats.recoveries,
              touch_stats.presses, touch_stats.events, touch_stats.last_x, touch_stats.last_y,
              touch_diag_lines(), (int)mode_get(), app.jig_on, app.pc_leds,
-             (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s());
+             (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s(),
+             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s);
     link_send_line(s);
 }
 
@@ -99,6 +100,18 @@ void jig_cycle_scale() {
 void jig_set_scale(int idx) {
     app.jig_scale_idx = idx;
     prefs.putUChar("jscale", (uint8_t)idx);
+    app_redraw();
+}
+
+// Jiggler settings page and JIG CFG. Applies from the next menu event.
+void jig_set_cfg(const jig_cfg_t *c) {
+    jig_cfg_t n = *c;
+    jmenu_clamp(&n);
+    app.jig_cfg = n;
+    prefs.putUChar("jmenu", n.menu_on);     // Preferences skip unchanged values
+    prefs.putUChar("jkey", n.key_f15);
+    prefs.putUChar("jopen", n.open_s);
+    prefs.putUChar("jpause", n.pause_s);
     app_redraw();
 }
 

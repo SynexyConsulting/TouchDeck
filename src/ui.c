@@ -36,6 +36,10 @@ void ui_state_fill(ui_state_t *s, int with_clip) {
     s->jig_next_s = s->jig_on ? (int)((int32_t)(app.jig_next_menu_ms - now) / 1000) : 0;
     s->jig_up_s = s->jig_on ? (int32_t)((now - app.jig_started_ms) / 1000) : 0;
     s->jig_menus = app.jig_menus;
+    s->jig_menu_on = app.jig_cfg.menu_on;
+    s->jig_key = app.jig_cfg.key_f15;
+    s->jig_open_s = app.jig_cfg.open_s;
+    s->jig_pause_s = app.jig_cfg.pause_s;
     mutex_enter_blocking(&clip_mtx);
     s->clip_len = app.clip_len;
     strncpy(s->clip_src, app.clip_src, sizeof s->clip_src - 1);

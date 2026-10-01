@@ -48,4 +48,5 @@ inline void app_redraw() { app.redraw_seq++; }
 void app_message(const char *text);
 void clip_clear();         // empty the clip (ignored when empty or pasting)
 void jig_cycle_scale();    // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
+void jig_set_cfg(const jig_cfg_t *c);   // Jiggler settings: clamp, apply, redraw, save
 inline uint32_t now_ms() { return millis(); }

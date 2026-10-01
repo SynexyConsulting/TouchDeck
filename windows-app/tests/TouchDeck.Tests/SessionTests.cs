@@ -220,6 +220,16 @@ public class SessionTests
             t.Written.Where(w => w.StartsWith("JIG") || w.StartsWith("CLIP CLEAR")).ToList());
     }
 
+    [Fact]
+    public void Jiggler_settings_go_out_as_one_JIG_CFG_line()
+    {
+        var s = Make();
+        s.SetJigConfig(menuOn: false, f15: true, openS: 7, pauseS: 3);
+        s.SetJigConfig(menuOn: true, f15: false, openS: 99, pauseS: -1);   // clamped to 60 and 0
+        s.Step();
+        Assert.Equal(["JIG CFG 0 1 7 3", "JIG CFG 1 0 60 0"], t.Written.Where(w => w.StartsWith("JIG CFG")).ToList());
+    }
+
     [Theory]
     [InlineData("VERSION rp2040-169 1.5.0 Sep 27 2026")]
     [InlineData(null)]                                  // pre-VER firmware

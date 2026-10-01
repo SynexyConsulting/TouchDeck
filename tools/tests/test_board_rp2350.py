@@ -135,3 +135,24 @@ def test_clip_clear_command(board):
     assert board.field("clip") == "0"
     board.send("CLIP CLEAR"); board.pump(0.3)          # empty: a no-op
     assert board.field("clip") == "0"
+
+
+def jig_cfg(board):
+    return tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+
+
+def test_jig_cfg_round_trips_and_rejects_bad_values(board):
+    """Jiggler settings (firmware 1.8.0): set, read back in DBG and STATE, bad values ignored."""
+    start = jig_cfg(board)
+    try:
+        board.send("JIG CFG 0 1 7 3"); board.pump(0.3)
+        assert jig_cfg(board) == ("0", "1", "7", "3")
+        board.send("WATCH 1"); board.pump(0.4)
+        st = [l for l in board.take() if l.startswith("STATE ")]
+        assert st and all(f in st[-1].split() for f in ("jmenu=0", "jkey=1", "jopen=7", "jpause=3"))
+        board.send("WATCH 0")
+        for bad in ("JIG CFG 1 0 99 0", "JIG CFG 2 0 2 0", "JIG CFG 1 0 2", "JIG CFG 1 0 2 0 9", "JIG CFG x"):
+            board.send(bad); board.pump(0.2)
+        assert jig_cfg(board) == ("0", "1", "7", "3")
+    finally:
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)

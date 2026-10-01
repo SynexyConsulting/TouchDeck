@@ -53,7 +53,7 @@ public class MirrorRendererTests
     public void Renderer_loads_and_matches_the_struct_layout(UiModel model)
     {
         Assert.True(NativeUi.Available(model, out var error), error);
-        Assert.Equal(1248, UiState.Size);
+        Assert.Equal(1264, UiState.Size);
     }
 
     [Theory]
@@ -111,7 +111,8 @@ public class MirrorRendererTests
                 ClipState = rnd.Next(3), PastePos = rnd.Next(8192), JigOn = rnd.Next(2), JigDemo = rnd.Next(2),
                 JigPaused = rnd.Next(2), JigPhase = rnd.Next(6), JigLetter = rnd.Next(14), JigScale = rnd.Next(3),
                 JigX = rnd.Next(1001), JigY = rnd.Next(1001), JigNextS = rnd.Next(200), JigUpS = rnd.Next(99999),
-                JigMenus = (uint)rnd.Next(999),
+                JigMenus = (uint)rnd.Next(999), JigMenuOn = rnd.Next(2), JigKey = rnd.Next(2),
+                JigOpenS = rnd.Next(61), JigPauseS = rnd.Next(61),
             };
             var line = NativeUi.StateLine(model, s);
             var mirror = new MirrorState(model);
@@ -127,6 +128,7 @@ public class MirrorRendererTests
         s.Screen, s.Sub, s.TimeS, s.Helper, s.LinkOk, s.Muted, s.TimerS, s.BtMode, s.BtAvail, s.BtState, s.BtReady,
         s.BtSecsLeft, (int)s.BtPasskey, s.ClipLen, s.ClipState, s.PastePos, s.JigOn, s.JigDemo, s.JigPaused, s.JigPhase,
         s.JigLetter, s.JigScale, (int)s.JigX, (int)s.JigY, s.JigNextS, s.JigUpS, (int)s.JigMenus,
+        s.JigMenuOn, s.JigKey, s.JigOpenS, s.JigPauseS,
     ];
 
     [Fact]

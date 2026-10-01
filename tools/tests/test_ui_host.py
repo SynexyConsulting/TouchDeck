@@ -54,7 +54,7 @@ def test_round_layout_is_the_esp32_copy(shared):
 
 def test_struct_layout_matches_the_c_header(tdui):
     for r in tdui.values():
-        assert r.lib.tdui_state_size() == ctypes.sizeof(UiState) == 1248
+        assert r.lib.tdui_state_size() == ctypes.sizeof(UiState) == 1264
 
 
 def test_panel_sizes(tdui):

@@ -25,13 +25,15 @@ int ui_sync_state_line(const ui_state_t *s, char *out, int n) {
     return snprintf(out, n,
                     "STATE jig=%d letter=%c scale=%d phase=%d x=%d y=%d clip=%d paste=%d "
                     "page=%d sub=%d t=%d pc=%d link=%d mute=%d timer=%d cst=%d ppos=%d paused=%d demo=%d "
-                    "next=%d up=%d menus=%lu mode=%d bta=%d bts=%d btr=%d left=%d pk=%lu",
+                    "next=%d up=%d menus=%lu mode=%d bta=%d bts=%d btr=%d left=%d pk=%lu "
+                    "jmenu=%d jkey=%d jopen=%d jpause=%d",
                     (int)s->jig_on, JIG_PATHS[li].name, (int)s->jig_scale, (int)s->jig_phase, (int)s->jig_x,
                     (int)s->jig_y, (int)s->clip_len, s->clip_state == CLIP_PASTING, (int)s->screen, (int)s->sub,
                     (int)s->time_s, (int)s->helper, (int)s->link_ok, (int)s->muted, (int)s->timer_s,
                     (int)s->clip_state, (int)s->paste_pos, (int)s->jig_paused, (int)s->jig_demo, (int)s->jig_next_s,
                     (int)s->jig_up_s, (unsigned long)s->jig_menus, (int)s->bt_mode, (int)s->bt_avail,
-                    (int)s->bt_state, (int)s->bt_ready, (int)s->bt_secs_left, (unsigned long)s->bt_passkey);
+                    (int)s->bt_state, (int)s->bt_ready, (int)s->bt_secs_left, (unsigned long)s->bt_passkey,
+                    (int)s->jig_menu_on, (int)s->jig_key, (int)s->jig_open_s, (int)s->jig_pause_s);
 }
 
 int ui_sync_text_line(const char *key, const char *value, char *out, int n) {
