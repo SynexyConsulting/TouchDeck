@@ -2,7 +2,7 @@
 
 The Mac companion app for the Touch Deck boards. It does what the Windows app does (`../windows-app/`), with the same protocol, behaviour and wording. The difference: it lives in the **menu bar** (the top-right of the screen), with a monochrome icon and no Dock icon.
 
-> **Status: builds and runs (Xcode 27, macOS 27).** The unit tests pass and the app has run against an RP2350 round board: mirror, taps, sending text, smoke snapshots. Still to try by hand: Accessibility-dependent paths (COPY's selection, ESP32-C3 PC mode), firmware install, and signing. See `../docs/HANDOFF.md`.
+> **Status: builds and runs (Xcode 27, macOS 27).** The unit tests pass and the app has run against an RP2350 round board: mirror, taps, sending text, smoke snapshots. COPY's selection works once Accessibility is granted. Still to try by hand: ESP32-C3 PC mode, firmware install, and signing. See `../docs/HANDOFF.md`.
 
 ## Requirements
 

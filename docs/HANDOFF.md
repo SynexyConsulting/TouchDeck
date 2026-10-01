@@ -21,13 +21,20 @@ Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE
     - fonts, a three-state menu bar icon, notification clicks;
     - relaunch after an app update;
     - `app.macos` in the release feed (`publish_release.py --app-macos`).
-- **Mac to-dos that need the owner:**
-  - Grant Accessibility and try COPY in Safari, Chrome, VS Code, Notes and Terminal, plus ⌃⌥C.
-  - Set the signing Team (the grant then survives rebuilds).
-  - Try a firmware install with real UF2s: this Mac has no Pico toolchain or `gh`, so `build/` is empty and the app offers no install.
-  - Look at the real window: the smoke snapshot shows thin bars at pill-button ends, most likely a `cacheDisplay` artifact.
-- **Windows is behind on one point:** it hides BOOT for the ESP32-C3, but firmware 1.8.0 handles `BTN` there (round watch). The Mac shows BOOT for every board.
-- **Not ported:** the 1.6.x jiggler card's letter-lane drawing (the Mac shows text and pills only) and Windows' `--smoke-update` install test.
+- **Owner-verified on the Mac:** COPY sends the selected text once Accessibility is granted. A debug build is installed at `/Applications/Touch Deck.app`. It's ad-hoc signed, so after each rebuild, remove and re-add it under Privacy & Security > Accessibility.
+- **Mac to-dos still open:**
+  - Set the signing Team so the Accessibility grant survives rebuilds.
+  - Try a firmware install with real UF2s. This Mac has no Pico toolchain and no `gh`, so `build/` is empty and the app offers no install.
+  - Check COPY across more apps (Chrome, VS Code, Terminal), and ESP32-C3 PC mode.
+  - The smoke snapshot shows thin bars at pill-button ends, most likely a `cacheDisplay` artifact. Glance at the real window.
+- **Next on the Windows PC (the Windows app):**
+  1. **Show BOOT / Hold BOOT for the ESP32-C3.** `MainWindow.xaml.cs` `UpdateMirror` hides `BootButtons` for `Esp32Round`, but firmware 1.8.0 handles `BTN` there (round watch).
+  2. **Port the Mac's COPY improvement if it helps:** when Touch Deck's own window is in front (you clicked the mirror), read the selection from the previously active window, not Touch Deck's. Windows has the same gap (`Selection.cs` reads `AutomationElement.FocusedElement`).
+  3. **Re-check firmware updates when a board connects.** On both apps, a board plugged in after the first update check isn't offered firmware for 24 h. Consider re-checking on connect.
+  4. **Pull `hostui/build.sh`'s FP-contraction note into `build.bat`.** MSVC doesn't fuse, so the RP2350 mirror on Windows is off on about 1% of watch seconds. The clean fix is building the RP2350 firmware with `-ffp-contract=off` (a firmware change; bump `FW_VERSION`), after which every host matches.
+  5. **Ship 1.3.0:** merge `release/1.3.0`, then tag `fw-v1.8.0` and `app-v1.3.0`.
+  6. **Run the pytest suite on Windows.** The host C test helpers changed (`tools/tests/jig_host.py build_shared`). The MSVC path keeps the same `cl` commands, but `test_jig_menu` now uses `/Fe:` instead of `/link /OUT:`.
+- **Not ported to the Mac:** the 1.6.x jiggler card's letter-lane drawing (the Mac shows text and pills only), and Windows' `--smoke-update` install test.
 
 ## Branches and merge order
 
