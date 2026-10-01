@@ -41,6 +41,14 @@ public class InjectorTests
     }
 
     [Fact]
+    public void F15_is_a_real_key()
+    {
+        // The jiggler's menu event can press F15 (a key no app acts on) instead of ESC.
+        inj.Key(0, 0x6A); inj.Key(0, 0);
+        Assert.Equal([Down(0x66), Up(0x66)], sink.Events);
+    }
+
+    [Fact]
     public void Unknown_usage_is_ignored()
     {
         inj.Key(0, 0x99);

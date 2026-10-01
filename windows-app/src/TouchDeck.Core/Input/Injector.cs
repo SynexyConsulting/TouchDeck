@@ -40,6 +40,7 @@ public sealed class Injector(IInputSink sink)
         map[0x2A] = (0x0E, false);   // Backspace
         map[0x2B] = (0x0F, false);   // Tab
         map[0x2C] = (0x39, false);   // Space
+        map[0x6A] = (0x66, false);   // F15: the jiggler's harmless alternative to ESC
         (int Usage, int Scan)[] punct =
         [
             (0x2D, 0x0C), (0x2E, 0x0D), (0x2F, 0x1A), (0x30, 0x1B), (0x31, 0x2B),   // - = [ ] \
