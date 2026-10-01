@@ -12,9 +12,10 @@ None of these branches has been merged or released yet. They are **stacked**, an
 | 2 | **PR #9** `feature/device-mirror` (draft) | App shows a live device-shaped mirror (firmware 1.7.0): page code in `ui_pages.c`, `hostui/` DLLs, `STATE/TEXT/CLIPTEXT` sync, `FBCRC` |
 | 3 | `feature/rp2350-round` | Waveshare **RP2350-Touch-LCD-1.28** (`rp2350-128`), app finds new boards and installs firmware (chip + `TDBOARD:` model check), CI builds both RP firmwares |
 | 4 | `feature/jiggler-settings` | **Jiggler menu** panel (cog on the Jiggler page, X closes): context menu on/off, ESC/F15, menu open and pause 0-60 s; `JIG CFG`; settings v4; app Settings → Jiggler; F15 everywhere; firmware **1.8.0** |
-| 5 | `feature/round-watch` (newest; this file) | Silent **round watch** as page 1 on the RP2350 and ESP32-C3; ESP32 BOOT button (stopwatch, jiggler scale) |
+| 5 | `feature/round-watch` | Silent **round watch** as page 1 on the RP2350 and ESP32-C3; ESP32 BOOT button (stopwatch, jiggler scale); app Settings: Esc / F15 is an amber switch, not radios |
+| 6 | `feature/macos-app` (newest; this file) | **macOS app, first pass, never compiled**: Xcode project, menu bar app, Core ported from Windows, XCTests. See "macOS: first steps" below |
 
-After #5 is merged, ship one release: firmware `fw-v1.8.0` / app `app-v1.3.0` (or whatever's next). Bump `windows-app/Directory.Build.props` `<Version>` and confirm `FW_VERSION "1.8.0"` in both `version.h`. Then tag; the steps are in README "Releases and updates". Published so far: app **1.2.1** and firmware 1.6.0 (rp2040-169).
+After #5 is merged, ship one release (#6 doesn't change the firmware or the Windows app): firmware `fw-v1.8.0` / app `app-v1.3.0` (or whatever's next). Bump `windows-app/Directory.Build.props` `<Version>` and confirm `FW_VERSION "1.8.0"` in both `version.h`. Then tag; the steps are in README "Releases and updates". Published so far: app **1.2.1** and firmware 1.6.0 (rp2040-169).
 
 ## Hardware status (all on firmware 1.8.0 from `feature/round-watch`)
 
@@ -32,20 +33,43 @@ After #5 is merged, ship one release: firmware `fw-v1.8.0` / app `app-v1.3.0` (o
 - **"Touch Deck HID":** the owner asked for an app called this. Its meaning is unclear: renaming the app, a separate input-only app, or the name for PC mode? Ask before building anything.
 - **Code signing:** the Windows MSI is unsigned (no Authenticode). A macOS app needs an Apple Developer account ($99/yr) for signing and notarization outside the App Store.
 
-## Next: the macOS app (`macos-app/`)
+## macOS: first steps (start here on the Mac)
 
-- It must be built on macOS (Xcode toolchain). VS Code can edit Swift but can't build a Mac app on Windows. Releases could be built by GitHub Actions macOS runners, but their minutes count 10x on the Team plan.
-- **Reuse:**
-  - `hostui/build.sh` builds `libtdui_rp2040/esp32c3/rp2350.dylib`, the boards' own page code, for the device mirror. The app passes `ui_state_t` (1264 bytes; layout in `src/ui_state.h`, mirrored in `windows-app/src/TouchDeck.Core/Mirror/UiState.cs` and `tools/tests/tdui_host.py`).
-  - The serial protocol is documented at the top of `src/usb_io.c`.
-  - The update feed has an `app.macos` slot (`tools/make_updates.py`); it's signed with the pinned ECDSA P-256 key (see `windows-app/CLAUDE.md` "Updates and Settings").
-- **Parity with the Windows app:**
-  - device mirror (click = `TAP`, drag = `SWIPE`);
-  - COPY (selected text / clipboard), PASTE by the board;
-  - PC mode for the ESP32: perform `K`/`M` lines, so the app needs Accessibility permission for input injection;
-  - Settings: versions, updates, startup, Jiggler section, dry run;
-  - new-board install: macOS sees the UF2 drive as a mounted volume, and the 1200-baud reboot works the same way.
-- **Serial on macOS:** RP boards need DTR high; the ESP32-C3 needs DTR and RTS low (they're its reset lines).
+`macos-app/` was written on Windows, where Swift can't be compiled, so **it has never been built**. Expect compile errors. The plan for the first Mac session is build, test, repair, rebuild, and then try it with the boards. Read `macos-app/README.md` and `macos-app/CLAUDE.md` first.
+
+1. **Tools.**
+   - Xcode 16+ (it must open objectVersion 77 projects). Run `xcode-select -p` to check it's selected.
+   - Claude Code.
+   - `brew install xcodegen` is optional, only needed if the project file won't open.
+2. **Open and build.** Run `open macos-app/TouchDeck.xcodeproj`. If Xcode rejects the project, run `cd macos-app && xcodegen` (it reads `project.yml`), then fix `tools/make_xcodeproj.py` to match what worked. Then build:
+   `cd macos-app && xcodebuild -scheme TouchDeck -configuration Debug build 2>&1 | tail -50`
+3. **Fix compile errors, Core first.**
+   - `TouchDeckCore` has no UI and is the bulk of the code, so get it compiling before the app.
+   - Likely trouble spots:
+     - Swift 6 concurrency warnings (the project is in Swift 5 mode on purpose);
+     - `NSLock.withLock`;
+     - IOKit `IORegistryEntrySearchCFProperty` casts;
+     - `ioctl` overloads in `SerialTransport.swift`;
+     - `AppController.init` touching `self.sink` before `manager` is set;
+     - `@MainActor` hops in `AppController.hookSession`;
+     - `SettingsView` closures.
+   - Fix the code, not the tests, unless a test is plainly wrong. The tests are ports of the Windows ones.
+4. **Test.** `xcodebuild -scheme TouchDeck test`. The pre-action builds `hostui/out/libtdui_*.dylib` with the system `cc`, the first real run of `hostui/build.sh` on a Mac. `MirrorTests.testRenderersAgreeWithTheLayout` checks the 1264-byte layout against them. The manager tests take about 2 s (a 1.5 s handshake timeout).
+5. **Run** (⌘R).
+   - The menu bar icon appears, with no Dock icon.
+   - Grant Accessibility when asked. With ad-hoc signing the grant resets on each rebuild; setting the team (step 7) fixes that.
+   - Plug in each board and check:
+     - it connects (`/dev/cu.usbmodem*`);
+     - the device mirror draws and taps and swipes work;
+     - COPY sends the selection;
+     - ⌃⌥C works;
+     - the Jiggler settings work, including the Esc/F15 switch.
+   - **ESP32-C3:** opening the port must not reset it (DTR/RTS low). PC mode types through CGEvent, so try it in a scratch text editor, not in Claude Code's terminal (Esc interrupts it).
+   - **Firmware install:** a stock or bootloader RP2350 or RP2040 gets the bundled UF2 (build `build/watch.uf2` and `build-rp2350/deck128.uf2` on the Mac first, or copy them over).
+6. **Board tests from the Mac.** The pytest board tests use `/dev/cu.*` ports through `tools/touchdeck.py`. Check `find_board` and the DTR handling work on macOS, and quit the app before running them.
+7. **Signing** (the owner has an Apple Developer account): set the Team on all three targets (README "Signing"). Later: a Developer ID archive and a notarized `.pkg`, an `app.macos` entry in `tools/make_updates.py`, and maybe a macOS job in `release.yml` (macOS runner minutes count 10x on the Team plan).
+
+Not ported yet (all small): the Windows `--smoke` snapshot mode, the activity log's "copy" affordances, and the embedded Barlow/JetBrains Mono fonts (the Mac app uses system fonts for now).
 
 ## Deferred minor findings (from final reviews; none block a release)
 
