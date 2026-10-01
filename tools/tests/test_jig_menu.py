@@ -1,5 +1,5 @@
 """The jiggler's menu event (src/jig_menu.c, identical in esp32c3/src): what it sends, in order, and
-the waits between, for each setting. Compiled for the PC with MSVC and driven through ctypes."""
+the waits between, for each setting. Compiled for the PC (MSVC on Windows, cc elsewhere) and driven through ctypes."""
 import ctypes
 import filecmp
 import os
@@ -26,19 +26,12 @@ class Step(ctypes.Structure):
 
 @pytest.fixture(scope="module")
 def lib(tmp_path_factory):
-    vc = jig_host.vcvars()
-    if not vc:
-        pytest.skip("MSVC not installed")
     tmp = str(tmp_path_factory.mktemp("jm"))
     src = os.path.join(ROOT, "src")
-    dll = os.path.join(tmp, "jm.dll")
-    bat = os.path.join(tmp, "b.bat")
-    with open(bat, "w") as f:
-        f.write(f'@call "{vc}" >nul\r\ncd /d "{tmp}"\r\n'
-                f'cl /nologo /LD /O2 /I"{src}" "{os.path.join(src, "jig_menu.c")}" /link /EXPORT:jmenu_step '
-                f'/EXPORT:jmenu_clamp /EXPORT:jmenu_key /OUT:"{dll}"\r\n')
-    r = subprocess.run(["cmd", "/c", bat], capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
+    dll = jig_host.build_shared(tmp, "jm", [os.path.join(src, "jig_menu.c")], [src],
+                                msvc_exports=("jmenu_step", "jmenu_clamp", "jmenu_key"))
+    if not dll:
+        pytest.skip(jig_host.NO_COMPILER)
     l = ctypes.CDLL(dll)
     l.jmenu_step.restype = Step
     l.jmenu_step.argtypes = [ctypes.c_int, ctypes.POINTER(Cfg), ctypes.c_uint32]

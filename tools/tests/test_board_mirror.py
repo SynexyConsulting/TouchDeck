@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(RP_PORT is None, reason="RP2040 Touch Deck not c
 def renderer(tmp_path_factory):
     r = tdui_host.build(str(tmp_path_factory.mktemp("tdui")))
     if r is None:
-        pytest.skip("MSVC not installed")
+        pytest.skip(tdui_host.jig_host.NO_COMPILER)
     return r["rp2040"]
 
 

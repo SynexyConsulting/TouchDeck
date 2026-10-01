@@ -1,12 +1,11 @@
 """gfx_line must draw exactly what the original full-bounding-box version drew.
 
-Builds src/gfx.c (+ fonts) into a DLL with MSVC and renders random capsules both
+Builds src/gfx.c (+ fonts) into a shared library (MSVC on Windows, cc elsewhere) and renders random capsules both
 ways, including clipped, degenerate, near-horizontal/vertical and off-screen ones.
 """
 import ctypes
 import os
 import random
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,20 +17,12 @@ ROOT = jig_host.ROOT
 
 @pytest.fixture(scope="module")
 def gfx(tmp_path_factory):
-    vc = jig_host.vcvars()
-    if not vc:
-        pytest.skip("MSVC not installed")
     tmp = str(tmp_path_factory.mktemp("gfx"))
     src = os.path.join(ROOT, "src")
     shim = os.path.join(ROOT, "tools", "tests", "gfx_shim.c")
-    dll = os.path.join(tmp, "gfx.dll")
-    fonts = os.path.join(src, "aa_fonts.c")
-    bat = os.path.join(tmp, "build.bat")
-    with open(bat, "w") as f:
-        f.write(f'@call "{vc}" >nul\r\ncd /d "{tmp}"\r\n'
-                f'cl /nologo /LD /O2 /I"{src}" "{shim}" "{fonts}" /Fe:"{dll}"\r\n')
-    r = subprocess.run(["cmd", "/c", bat], capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
+    dll = jig_host.build_shared(tmp, "gfx", [shim, os.path.join(src, "aa_fonts.c")], [src])
+    if not dll:
+        pytest.skip(jig_host.NO_COMPILER)
     lib = ctypes.CDLL(dll)
     for fn in ("t_line", "t_ref_line"):
         getattr(lib, fn).argtypes = [ctypes.c_float] * 5 + [ctypes.c_uint16]

@@ -1,5 +1,5 @@
 """The device mirror's renderer on the PC, for tests: builds hostui/ (both boards)
-with MSVC, and turns the board's STATE/TEXT/CLIPTEXT lines into a ui_state_t
+with MSVC (Windows) or cc (macOS/Linux), and turns the board's STATE/TEXT/CLIPTEXT lines into a ui_state_t
 the same way the app does (windows-app/src/TouchDeck.Core/Mirror)."""
 import ctypes
 import os
@@ -114,13 +114,19 @@ class Renderer:
 
 
 def build(tmp):
-    """{board: Renderer} for every BOARDS entry, or None when MSVC isn't installed."""
-    if not jig_host.vcvars():
+    """{board: Renderer} for every BOARDS entry, or None when there's no C compiler.
+    Windows: hostui/build.bat (MSVC) -> tdui_<board>.dll; macOS/Linux: hostui/build.sh -> libtdui_<board>.dylib/.so."""
+    if not jig_host.compiler_available():
         return None
     out = os.path.join(tmp, "tdui")
-    r = subprocess.run(["cmd", "/c", os.path.join(ROOT, "hostui", "build.bat"), out], capture_output=True, text=True)
+    if jig_host.WINDOWS:
+        r = subprocess.run(["cmd", "/c", os.path.join(ROOT, "hostui", "build.bat"), out], capture_output=True, text=True)
+        name = "tdui_{}.dll"
+    else:
+        r = subprocess.run(["sh", os.path.join(ROOT, "hostui", "build.sh"), out], capture_output=True, text=True)
+        name = "libtdui_{}." + jig_host.lib_ext()
     assert r.returncode == 0, r.stdout + r.stderr
-    return {b: Renderer(os.path.join(out, f"tdui_{b}.dll")) for b in BOARDS}
+    return {b: Renderer(os.path.join(out, name.format(b))) for b in BOARDS}
 
 
 def to_png(frame, w, h, path):

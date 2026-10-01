@@ -26,7 +26,8 @@ Python on this PC: `py` is Python 3.14 and `python` is 3.9 (different package se
 
 **Tests:** `python -m pytest tools/tests -q`.
 - **Unit tests (always run):** the release feed builder, the font generator (every UI label fits its button or circle chord) and the jiggler letters (`test_jigpaths.py`).
-- **Host C tests:** `test_jigpaths.py` and `test_gfx_line.py` compile the firmware's own C (`jig_motion.c`, `gfx.c`) into a DLL with MSVC (VS 2022 `vcvars64.bat`, found automatically) and drive it through ctypes. They skip when MSVC is missing.
+- **Host C tests:** `test_jigpaths.py`, `test_gfx_line.py` and `test_jig_menu.py` compile the firmware's own C (`jig_motion.c`, `gfx.c`, `jig_menu.c`) into a shared library and drive it through ctypes: with MSVC on Windows (VS 2022 `vcvars64.bat`, found automatically), with `cc` (or `$CC`) on macOS/Linux (`jig_host.build_shared`). The renderers come from `hostui/build.bat` or `hostui/build.sh`. They skip when there's no compiler.
+  - **FP contraction:** clang fuses `a*b+c` into an FMA by default, which moves a few anti-aliased pixels. `build.sh` uses `-ffp-contract=off` for the RP2040/ESP32-C3 (no FPU, nothing fused, as with MSVC) and clang's default `=on` for the RP2350, whose GCC build fuses with the M33's VFMA (it matched the board on 78 of 80 watch seconds where the choice matters; MSVC's unfused build will miss those few seconds).
   - The jiggler tests check that the dot stays in its lane, letters loop or bounce, the mouse stays bounded and switches glide.
   - `test_gfx_line.py` checks `gfx_line` pixel for pixel against the original full-bounding-box algorithm.
   - `test_ui_host.py` builds the device renderers (`hostui/build.bat`) and checks every page of both boards, the panel shapes, the dot, and that `ui_sync.c`'s lines round-trip through the parser (`tdui_host.py`, the Python twin of the app's `MirrorState`).
