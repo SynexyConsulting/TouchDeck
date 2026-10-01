@@ -192,3 +192,17 @@ def test_jiggler_settings_page_taps(board):
         assert board.field("jset") == "0" and board.field("screen") == "1"
     finally:
         board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_a_settings_change_is_streamed_without_asking(board):
+    """While watching, JIG CFG alone must produce a STATE with the new values (the app's Settings
+    section follows the board): not just after a forced WATCH 1 resend."""
+    start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+    try:
+        board.send("WATCH 1"); board.pump(0.5); board.take()
+        board.send("JIG CFG 1 1 9 4"); board.pump(0.5)
+        st = [l for l in board.take() if l.startswith("STATE ")]
+        assert st and all(f in st[-1].split() for f in ("jkey=1", "jopen=9", "jpause=4")), st[-1:] or "no STATE"
+    finally:
+        board.send("WATCH 0")
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)

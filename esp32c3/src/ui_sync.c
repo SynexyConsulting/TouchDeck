@@ -9,7 +9,9 @@ int ui_sync_diff(const ui_state_t *a, const ui_state_t *b) {
     int d = 0;
     // Every number before jig_x, then the ones after the dot up to the strings.
     if (memcmp(a, b, offsetof(ui_state_t, jig_x)) ||
-        memcmp(&a->jig_next_s, &b->jig_next_s, offsetof(ui_state_t, clip_src) - offsetof(ui_state_t, jig_next_s)))
+        memcmp(&a->jig_next_s, &b->jig_next_s, offsetof(ui_state_t, clip_src) - offsetof(ui_state_t, jig_next_s)) ||
+        // and the numbers appended after the clip (the Jiggler settings, firmware 1.8.0)
+        memcmp(&a->jig_menu_on, &b->jig_menu_on, sizeof *a - offsetof(ui_state_t, jig_menu_on)))
         d |= UI_SYNC_FIELDS;
     if ((int)a->jig_x != (int)b->jig_x || (int)a->jig_y != (int)b->jig_y) d |= UI_SYNC_DOT;
     if (strncmp(a->msg, b->msg, sizeof a->msg)) d |= UI_SYNC_MSG;

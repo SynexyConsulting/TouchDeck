@@ -6,6 +6,7 @@
     <Application.Resources>
         <local:PillRadius x:Key="PillRadius" />
         <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:NotBool x:Key="NotBool" />
         <!-- Settings cog (own geometry: 8 teeth, centre hole). -->
         <Geometry x:Key="CogIcon">F0 M12.00,3.80 L14.05,1.70 L16.02,2.30 L16.56,5.18 L17.80,6.20 L20.73,6.17 L21.70,7.98 L20.04,10.40 L20.20,12.00 L22.30,14.05 L21.70,16.02 L18.82,16.56 L17.80,17.80 L17.83,20.73 L16.02,21.70 L13.60,20.04 L12.00,20.20 L9.95,22.30 L7.98,21.70 L7.44,18.82 L6.20,17.80 L3.27,17.83 L2.30,16.02 L3.96,13.60 L3.80,12.00 L1.70,9.95 L2.30,7.98 L5.18,7.44 L6.20,6.20 L6.17,3.27 L7.98,2.30 L10.40,3.96 Z M12,8.4 A3.6,3.6 0 1 0 12,15.6 A3.6,3.6 0 1 0 12,8.4 Z</Geometry>
 

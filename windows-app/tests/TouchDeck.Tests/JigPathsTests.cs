@@ -52,3 +52,29 @@ public class JigViewTests
         Assert.False(JigView.CanClear(S(clip: 58, paste: true)));
     }
 }
+
+public class JigConfigTests
+{
+    private static StateReport S(params (string Key, long Value)[] fields) =>
+        new(true, 'W', 0, 4, 500, 500, 0, false)
+        { Fields = new StateFields(fields.ToDictionary(f => f.Key, f => f.Value)) };
+
+    [Fact]
+    public void Firmware_1_8_reports_the_jiggler_settings()
+    {
+        var c = JigView.Config(S(("page", 2), ("jmenu", 0), ("jkey", 1), ("jopen", 7), ("jpause", 3)));
+        Assert.Equal(new JigConfig(MenuOn: false, F15: true, OpenS: 7, PauseS: 3), c);
+        Assert.Equal("Jiggler: menu off, F15, pause 3 s", c!.Describe());
+        Assert.Equal("Jiggler: menu on, Esc, open 2 s, pause 0 s", new JigConfig(true, false, 2, 0).Describe());
+    }
+
+    [Fact]
+    public void Older_firmware_has_no_settings() => Assert.Null(JigView.Config(S(("page", 2))));
+
+    [Fact]
+    public void The_key_phase_names_the_configured_key()
+    {
+        Assert.Equal("F15", JigView.Status(S(("jkey", 1))));
+        Assert.Equal("Esc", JigView.Status(S(("jkey", 0))));
+    }
+}

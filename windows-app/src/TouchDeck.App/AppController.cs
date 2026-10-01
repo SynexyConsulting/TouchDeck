@@ -139,6 +139,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var was = State;
         State = s;
         IsConnected = s.Status == LinkStatus.Connected;
+        if (!IsConnected) JigCfg = null;
         Port = s.Device?.Port ?? "";
         BoardName = s.Device is null ? "No board" : BoardKinds.DisplayName(s.Device.Kind, s.Firmware?.Board);
         FirmwareVersion = s.Firmware switch
@@ -279,6 +280,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         BoardClipText = JigView.ClipText(st);
         CanClearBoardClip = JigView.CanClear(st);
         MirrorAvailable = true;             // the fallback text comes from RefreshMirror (once a second)
+        JigCfg = JigView.Config(st);
     }
 
     private void RefreshMirror()
@@ -747,6 +749,40 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    // ---------- the board's Jiggler settings (firmware 1.8.0+) ----------
+
+    private JigConfig? jigCfg;
+    /// <summary>The board's Jiggler settings as it last reported them (STATE); null when not known.</summary>
+    public JigConfig? JigCfg
+    {
+        get => jigCfg;
+        private set
+        {
+            if (Equals(jigCfg, value)) return;
+            jigCfg = value;
+            foreach (var n in new[] { nameof(JigCfg), nameof(HasJigConfig), nameof(JigNote), nameof(JigMenuOn), nameof(JigF15),
+                                      nameof(JigOpenText), nameof(JigPauseText) })
+                Raise(n);
+        }
+    }
+    public bool HasJigConfig => JigCfg is not null;
+    public string JigNote => JigCfg is not null ? "Saved on the board. Also on the board: the cog on its Jiggler page."
+        : IsConnected ? "Update the board's firmware to 1.8.0 or later to change these here."
+        : "Connect a board to change its jiggler settings.";
+    public bool JigMenuOn => JigCfg?.MenuOn ?? true;
+    public bool JigF15 => JigCfg?.F15 ?? false;
+    public string JigOpenText => $"{JigCfg?.OpenS ?? 2} s";
+    public string JigPauseText => $"{JigCfg?.PauseS ?? 0} s";
+
+    /// <summary>Sends new settings to the board; the dialog shows them once the board reports them back.</summary>
+    public void SetJigConfig(JigConfig c)
+    {
+        if (manager.Session is not { } s || JigCfg is null) return;
+        var n = c with { OpenS = Math.Clamp(c.OpenS, 0, JigConfig.MaxSeconds), PauseS = Math.Clamp(c.PauseS, 0, JigConfig.MaxSeconds) };
+        s.SetJigConfig(n.MenuOn, n.F15, n.OpenS, n.PauseS);
+        AddLog(n.Describe());
+    }
 
     private bool disposed;
 
