@@ -22,6 +22,9 @@ enum {
 #define UI_SYNC_CLIP_LINE (10 + 4 * UI_CLIP_VIEW)   // room for the longest CLIPTEXT line
 
 int ui_sync_diff(const ui_state_t *prev, const ui_state_t *cur);
+// After a STATE line went out: copy the numbers it carried into prev, the same
+// set ui_sync_diff compares (strings go with TEXT, the clip with CLIPTEXT).
+void ui_sync_commit_fields(ui_state_t *prev, const ui_state_t *cur);
 // "STATE jig=.. letter=.. ..." into out (n bytes); returns the length.
 int ui_sync_state_line(const ui_state_t *s, char *out, int n);
 // "TEXT <key> <value>": control characters in value become '?'.

@@ -68,6 +68,33 @@
                     </TextBlock>
                 </DockPanel>
 
+                <!-- Jiggler: the board's "Jiggler menu" panel, edited from here (firmware 1.8.0+) -->
+                <TextBlock Text="Jiggler" Style="{StaticResource CardTitle}" Margin="0,14,0,4" />
+                <TextBlock Text="{Binding JigNote}" Foreground="{StaticResource Faint}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <StackPanel IsEnabled="{Binding HasJigConfig}">
+                    <CheckBox x:Name="JigMenuBox" Content="Right-click context menu" IsChecked="{Binding JigMenuOn, Mode=OneWay}"
+                              Click="OnJigMenu" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                        <TextBlock Text="Key" Width="150" VerticalAlignment="Center" />
+                        <RadioButton x:Name="JigEsc" Content="Esc" GroupName="JigKey" Click="OnJigKey"
+                                     IsChecked="{Binding JigF15, Mode=OneWay, Converter={StaticResource NotBool}}" />
+                        <RadioButton x:Name="JigF15" Content="F15" GroupName="JigKey" Click="OnJigKey" Margin="16,0,0,0"
+                                     IsChecked="{Binding JigF15, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4" IsEnabled="{Binding JigMenuOn}">
+                        <TextBlock Text="Menu open" Width="150" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource SmallButton}" Content="-" Tag="open-1" Click="OnJigStep" MinWidth="34" />
+                        <TextBlock Text="{Binding JigOpenText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource SmallButton}" Content="+" Tag="open+1" Click="OnJigStep" MinWidth="34" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <TextBlock Text="Pause before next letter" Width="150" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource SmallButton}" Content="-" Tag="pause-1" Click="OnJigStep" MinWidth="34" />
+                        <TextBlock Text="{Binding JigPauseText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource SmallButton}" Content="+" Tag="pause+1" Click="OnJigStep" MinWidth="34" />
+                    </StackPanel>
+                </StackPanel>
+
                 <!-- Advanced -->
                 <TextBlock Text="Advanced" Style="{StaticResource CardTitle}" Margin="0,14,0,4" />
                 <CheckBox Content="Dry run (log keys, don't type)" IsChecked="{Binding DryRun}" />

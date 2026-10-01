@@ -12,6 +12,9 @@
 //               JIG ON|OFF, JIG SCALE n   jiggler on/off, scale index 0-2 (saved)
 //               CLIP CLEAR             empty the clip (ignored when empty or pasting)
 //               JIG MENU               start the right-click/Esc sequence now (tests)
+//               JIG CFG m k o p        Jiggler settings: context menu 0|1, key 0=ESC 1=F15,
+//                                      menu open 0-60 s, pause before the next letter 0-60 s
+//                                      (saved; STATE reports them as jmenu= jkey= jopen= jpause=)
 //               FBCRC x y w h          reply LOG fbcrc <hex>: CRC-32 of that framebuffer region
 //                                      (tests: the app's mirror draws the same pixels)
 // board -> PC:  COPY                   user tapped COPY
@@ -116,7 +119,7 @@ void link_state_poll() {
     if ((d & UI_SYNC_FIELDS) || ((d & UI_SYNC_DOT) && now - sync_state_ms >= 50)) {
         ui_sync_state_line(&sync_cur, sync_line, sizeof sync_line);
         if (link_send_line(sync_line)) {
-            memcpy(&sync_last, &sync_cur, offsetof(ui_state_t, clip_src));   // the numbers; strings go with TEXT
+            ui_sync_commit_fields(&sync_last, &sync_cur);   // the numbers; strings go with TEXT
             sync_state_ms = now;
         } else ok = false;
     }
@@ -213,6 +216,14 @@ static void handle_line(char *s) {
     } else if (!strncmp(s, "JIG SCALE ", 10)) {
         int n = s[10] - '0';
         if (n >= 0 && n < JIG_SCALE_COUNT && !s[11]) jig_set_scale(n);
+    } else if (!strncmp(s, "JIG CFG ", 8)) {      // Jiggler settings: menu key open pause
+        int mo, k, o, p;
+        char extra;
+        if (sscanf(s + 8, "%d %d %d %d %c", &mo, &k, &o, &p, &extra) == 4 && (mo == 0 || mo == 1) &&
+            (k == 0 || k == 1) && o >= 0 && o <= JM_MAX_S && p >= 0 && p <= JM_MAX_S) {
+            jig_cfg_t c = {(uint8_t)mo, (uint8_t)k, (uint8_t)o, (uint8_t)p};
+            jig_set_cfg(&c);
+        }
     } else if (!strcmp(s, "CLIP CLEAR")) {
         clip_clear();
     } else if (!strcmp(s, "VER")) {

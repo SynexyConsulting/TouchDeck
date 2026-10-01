@@ -195,3 +195,84 @@ def test_jig_off_mid_menu_releases_the_button(board):
     after = board.take()
     down = max(i for i, l in enumerate(after) if l.startswith("M 02"))
     assert any(l.startswith("M 00") for l in after[down + 1:]), "right button left held"
+
+
+def jig_cfg(board):
+    return tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+
+
+def test_jig_cfg_round_trips_and_rejects_bad_values(board):
+    """Jiggler settings (firmware 1.8.0): set, read back in DBG and STATE, bad values ignored."""
+    start = jig_cfg(board)
+    try:
+        board.send("JIG CFG 0 1 7 3"); board.pump(0.3)
+        assert jig_cfg(board) == ("0", "1", "7", "3")
+        board.send("WATCH 1"); board.pump(0.4)
+        st = [l for l in board.take() if l.startswith("STATE ")]
+        assert st and all(f in st[-1].split() for f in ("jmenu=0", "jkey=1", "jopen=7", "jpause=3"))
+        board.send("WATCH 0")
+        for bad in ("JIG CFG 1 0 99 0", "JIG CFG 2 0 2 0", "JIG CFG 1 0 2", "JIG CFG 1 0 2 0 9", "JIG CFG x"):
+            board.send(bad); board.pump(0.2)
+        assert jig_cfg(board) == ("0", "1", "7", "3")
+    finally:
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_jiggler_settings_page_taps(board):
+    """Each control on the Jiggler settings page (firmware 1.8.0) changes its setting; Menu open
+    ignores taps while the context menu is off."""
+    start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+    try:
+        board.send("JIG CFG 1 0 2 0"); board.pump(0.3)
+        board.goto(1)
+        assert board.field("screen") == "1" and board.field("jset") == "0"
+        board.send("TAP 52 172"); board.pump(0.25)            # the cog opens the panel
+        assert board.field("jset") == "1"
+        def tap(xy):
+            board.send("TAP %d %d" % xy); board.pump(0.25)
+        def cfg():
+            return tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+        tap((195, 140)); tap((195, 140))
+        assert cfg() == ("1", "0", "4", "0")
+        tap((139, 140))
+        assert cfg() == ("1", "0", "3", "0")
+        tap((195, 172))
+        assert cfg() == ("1", "0", "3", "1")
+        tap((188, 108)); assert cfg()[1] == "1"
+        tap((146, 108)); assert cfg()[1] == "0"
+        tap((184, 76)); assert cfg()[0] == "0"
+        tap((195, 140))                                   # dimmed: no change
+        assert cfg() == ("0", "0", "3", "1")
+        tap((139, 172)); tap((139, 172))             # stops at 0
+        assert cfg()[3] == "0"
+        board.send("TAP 50 48"); board.pump(0.25)        # X closes it
+        assert board.field("jset") == "0" and board.field("screen") == "1"
+        board.send("TAP 52 172"); board.pump(0.25)
+        board.send("SWIPE R"); board.pump(0.25)                        # so does a right swipe
+        assert board.field("jset") == "0" and board.field("screen") == "1"
+    finally:
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_a_settings_change_is_streamed_without_asking(board):
+    """While watching, JIG CFG alone must produce a STATE with the new values (the app's Settings
+    section follows the board): not just after a forced WATCH 1 resend."""
+    start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
+    try:
+        board.send("WATCH 1"); board.pump(0.5); board.take()
+        board.send("JIG CFG 1 1 9 4"); board.pump(0.5)
+        st = [l for l in board.take() if l.startswith("STATE ")]
+        assert st and all(f in st[-1].split() for f in ("jkey=1", "jopen=9", "jpause=4")), st[-1:] or "no STATE"
+    finally:
+        board.send("WATCH 0")
+        board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
+
+
+def test_an_idle_board_is_quiet_while_watched(board):
+    """With the app watching (WATCH 1), a board that isn't changing sends STATE once, not on every poll."""
+    board.send("JIG OFF"); board.goto(0); board.pump(0.5)
+    board.send("WATCH 1"); board.pump(0.6); board.take()
+    board.pump(1.0)
+    n = len([l for l in board.take() if l.startswith("STATE ")])
+    board.send("WATCH 0"); board.pump(0.2)
+    assert n <= 2, f"{n} STATE lines in 1 s from an idle board"

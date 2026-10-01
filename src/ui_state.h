@@ -51,6 +51,10 @@ typedef struct {
     char bt_host[32];       // ESP32-C3: bonded PC's name
     char down_reason[32];   // ESP32-C3: why output isn't ready
     char clip[UI_CLIP_VIEW];   // the clip's first bytes (clip_len may be longer)
+    int32_t jig_menu_on;    // Jiggler settings page (firmware 1.8.0): context menu on
+    int32_t jig_key;        // 0 = ESC, 1 = F15
+    int32_t jig_open_s;     // seconds the context menu stays open
+    int32_t jig_pause_s;    // seconds to wait before the next letter
 } ui_state_t;
 
 #ifdef __cplusplus

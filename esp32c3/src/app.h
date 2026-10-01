@@ -3,6 +3,7 @@
 #pragma once
 #include <Arduino.h>
 #include "freertos/semphr.h"
+#include "jig_menu.h"
 #include "ui_pages.h"      // SCR_*, and via ui_state.h CLIP_*, JIG_* phases, JIG_SCALES
 
 #define CLIP_MAX 8192
@@ -33,6 +34,8 @@ struct app_t {
     volatile int jig_letter;        // index into JIG_PATHS (jig_paths.h)
     volatile float jig_x, jig_y;    // dot position in letter-box units (0..1000)
     volatile int jig_scale_idx;     // 0..2 -> JIG_SCALES[] (scale pill), Preferences "jscale"
+    jig_cfg_t jig_cfg;              // Jiggler settings page; Preferences jmenu, jkey, jopen, jpause
+    volatile bool jig_settings;     // the Jiggler settings panel is open over the Jiggler page
     volatile bool anim_demo;        // ANIM 1: animate the jiggler page without sending HID
     volatile uint32_t jig_next_menu_ms;
     volatile uint32_t jig_menus;
@@ -46,4 +49,5 @@ inline void app_redraw() { app.redraw_seq++; }
 void app_message(const char *text);
 void clip_clear();         // empty the clip (ignored when empty or pasting)
 void jig_cycle_scale();    // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
+void jig_set_cfg(const jig_cfg_t *c);   // Jiggler settings: clamp, apply, redraw, save
 inline uint32_t now_ms() { return millis(); }

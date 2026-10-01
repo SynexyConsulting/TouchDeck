@@ -36,6 +36,30 @@ void ui_state_fill(ui_state_t *s, bool with_clip);
 #define PILL_PAD    6
 #define JIG_ZONE_PAD 10         // letter box + this = the ON/OFF tap zone
 
+// Jiggler settings page: four rows (context menu, key, menu open, pause), a label on
+// the left and its control on the right; a hint line below. Shared by drawing and
+// touch handling (main.c / main.cpp), same names on every board.
+#define JS_ROW_Y(i)  (JS_ROW0_Y + (i) * JS_ROW_DY)   // row centre
+#define JS_ROW0_Y    76           // rows stay inside the circle's chord (x 30..208)
+#define JS_ROW_DY    32
+#define JS_LABEL_X   30
+#define JS_CTRL_H    22
+#define JS_TOGGLE_X  160
+#define JS_TOGGLE_W  48
+#define JS_SEG_W     40
+#define JS_SEG_ESC_X 126
+#define JS_SEG_F15_X 168
+#define JS_STEP_W    26
+#define JS_MINUS_X   126
+#define JS_PLUS_X    182
+#define JS_HINT_Y    202
+#define JS_HIT_PAD   6
+#define JS_CLOSE_CX  50           // the X that closes the panel, left of the title
+#define JS_CLOSE_CY  48
+#define JIG_COG_CX   52           // the cog on the Jiggler page (lower left) that opens it,
+#define JIG_COG_CY   172          // clear of the circle's edge and the scale pill
+#define JS_ICON_HIT  20           // half-size of the cog's and the X's tap squares
+
 // Settings: output toggle segments and the Bluetooth row
 #define SEG_Y     77
 #define SEG_H     34

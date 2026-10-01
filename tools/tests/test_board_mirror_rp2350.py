@@ -78,3 +78,21 @@ def test_jiggler_page_is_pixel_identical_for_each_scale(mirror):
     finally:
         while mirror.st.jig_scale != start:
             mirror.b.send("BTN"); mirror.pump(0.3)
+
+
+def test_jiggler_settings_page_is_pixel_identical(mirror):
+    """The Jiggler settings page (firmware 1.8.0), with the menu on and off (dimmed row)."""
+    start = None
+    try:
+        settle(mirror, 1, 1.0)
+        mirror.b.send("TAP 52 172"); mirror.pump(0.6)      # open the panel
+        assert mirror.st.sub == 2
+        start = (mirror.st.jig_menu_on, mirror.st.jig_key, mirror.st.jig_open_s, mirror.st.jig_pause_s)
+        for cfg in ("1 0 2 0", "0 1 17 9"):
+            mirror.b.send("JIG CFG " + cfg)
+            mirror.pump(0.8)
+            assert board_crc(mirror) == mirror.r.crc(mirror.r.render(mirror.st)), cfg
+    finally:
+        if start:
+            mirror.b.send("JIG CFG %d %d %d %d" % start); mirror.pump(0.3)
+        mirror.b.send("SWIPE R"); mirror.pump(0.3)                      # close it

@@ -53,6 +53,7 @@ set(TD_COMMON
     src/settings.c
     src/icons.c
     src/aa_fonts.c
+    src/jig_menu.c
 )
 
 if(TD_TARGET STREQUAL "deck128")
@@ -65,7 +66,7 @@ else()
     add_executable(watch
         src/main.c src/lcd.c src/gfx.c src/buzzer.c src/button.c src/touch.c src/ui.c src/ui_pages.c
         src/ui_sync.c src/usb_io.c src/jig_motion.c src/jig_paths.c src/jig_lane.c src/usb_descriptors.c
-        src/typer.c src/jiggler.c src/settings.c src/icons.c src/aa_fonts.c)
+        src/typer.c src/jiggler.c src/settings.c src/icons.c src/aa_fonts.c src/jig_menu.c)
 endif()
 
 # Keep clk_peri (SPI, I2C) on the overclocked system PLL; the SDK default

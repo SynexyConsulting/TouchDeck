@@ -54,6 +54,10 @@ void icon_cog(float cx, float cy, float s, uint16_t c) {
     gfx_disc(cx, cy, 7.5f * k, c);
     gfx_disc(cx, cy, 3.f * k, RGB(7, 9, 13));
 }
+void icon_close(float cx, float cy, float s, uint16_t c) {
+    begin(cx, cy, s, c);
+    seg(6, 6, 18, 18); seg(6, 18, 18, 6);
+}
 void icon_trash(float cx, float cy, float s, uint16_t c) {
     begin(cx, cy, s, c);
     seg(3, 6, 21, 6);                                  // lid

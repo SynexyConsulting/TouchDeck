@@ -124,12 +124,13 @@ void debug_report(void) {
     snprintf(s, sizeof s,
              "LOG up=%lus loops=%lu frames=%lu screen=%d muted=%d | touch chip=%d ints=%u reads=%u "
              "fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d | jig=%d jscale=%.1f letter=%c clip=%d jnext=%d timer=%d trun=%d "
-             "| draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
+             "jmenu=%d jkey=%d jopen=%d jpause=%d jset=%d | draw=%lu push=%lu drawmax=%lu lag=%lu hits=%lu miss=%lu",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.loops, (unsigned long)app.frames,
              app.screen, app.muted, touch_stats.chip_id, touch_stats.ints, touch_stats.reads,
              touch_stats.fails, touch_stats.recoveries, touch_stats.presses, touch_stats.events,
              touch_stats.last_x, touch_stats.last_y, touch_diag_lines(),
              app.jig_on, (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s(), app.timer_s, app.timer_running,
+             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s, app.jig_settings,
              (unsigned long)app.perf_draw_us, (unsigned long)app.perf_push_us,
              (unsigned long)app.perf_draw_max_us, (unsigned long)app.perf_edge_lag_us,
              (unsigned long)app.prerender_hits, (unsigned long)app.prerender_misses);
@@ -149,6 +150,17 @@ static bool near_box(const touch_event_t *e, int x, int y, int w, int h, int pad
     return in_rect(e, x - pad, y - pad, w + 2 * pad, h + 2 * pad);
 }
 
+// The 1.69's touch panel squeezes its top band: a finger on something drawn at y 42
+// reports y ~2 (measured on the board), while 40 px lower it is only a few px off.
+// So a target near the top also takes taps above it, up to the edge (nothing else
+// up there is touchable).
+#define TOP_BAND 64
+static bool near_box_top(const touch_event_t *e, int x, int y, int w, int h, int pad) {
+    int y0 = y - pad;
+    if (y0 < TOP_BAND) return in_rect(e, x - pad, 0, w + 2 * pad, y + h + pad);
+    return near_box(e, x, y, w, h, pad);
+}
+
 // Trash can / CLIP CLEAR: only with text on board and no paste typing it.
 void clip_clear(void) {
     if (app.clip_len == 0 || app.clip_state == CLIP_PASTING) return;
@@ -162,6 +174,16 @@ void clip_clear(void) {
     app_redraw();
 }
 
+// Jiggler settings page and JIG CFG. Applies from the next menu event; saved ~1 s
+// after the last change, so a run of -/+ taps writes flash once.
+void jig_set_cfg(const jig_cfg_t *c) {
+    jig_cfg_t n = *c;
+    jmenu_clamp(&n);
+    app.jig_cfg = n;
+    app_redraw();
+    settings_save_soon();
+}
+
 // Scale pill tap, BOOT button on the jiggler page, JIG SCALE: 1x -> 1.5x -> 2x -> 1x.
 void jig_cycle_scale(void) {
     app.jig_scale_idx = (app.jig_scale_idx + 1) % JIG_SCALE_COUNT;
@@ -169,7 +191,49 @@ void jig_cycle_scale(void) {
     settings_save();
 }
 
+// Jiggler settings page: each tap changes one setting, applied from the next menu
+// event and saved. "Menu open" ignores taps while the context menu is off.
+static void on_jigset_tap(const touch_event_t *e) {
+    jig_cfg_t c = app.jig_cfg;
+    const int h = JS_CTRL_H, pad = JS_HIT_PAD;
+    int r0 = JS_ROW_Y(0) - h / 2, r1 = JS_ROW_Y(1) - h / 2, r2 = JS_ROW_Y(2) - h / 2, r3 = JS_ROW_Y(3) - h / 2;
+    if (near_box(e, JS_TOGGLE_X, r0, JS_TOGGLE_W, h, pad)) {
+        c.menu_on = !c.menu_on;
+    } else if (near_box(e, JS_SEG_ESC_X, r1, JS_SEG_F15_X + JS_SEG_W - JS_SEG_ESC_X, h, pad)) {
+        c.key_f15 = e->x >= JS_SEG_F15_X;      // the two pills sit 2 px apart: split at F15's edge
+    } else if (c.menu_on && near_box(e, JS_MINUS_X, r2, JS_STEP_W, h, pad)) {
+        if (c.open_s > 0) c.open_s--;
+    } else if (c.menu_on && near_box(e, JS_PLUS_X, r2, JS_STEP_W, h, pad)) {
+        if (c.open_s < JM_MAX_S) c.open_s++;
+    } else if (near_box(e, JS_MINUS_X, r3, JS_STEP_W, h, pad)) {
+        if (c.pause_s > 0) c.pause_s--;
+    } else if (near_box(e, JS_PLUS_X, r3, JS_STEP_W, h, pad)) {
+        if (c.pause_s < JM_MAX_S) c.pause_s++;
+    } else {
+        return;
+    }
+    feedback();
+    jig_set_cfg(&c);
+}
+
+static void set_jig_settings(bool open) {
+    app.jig_settings = open;
+    app_redraw();
+}
+
 static void on_touch(touch_event_t e) {
+    // The Jiggler settings panel: X or a right swipe closes it; taps change settings.
+    if (app.jig_settings && app.screen == SCR_JIG) {
+        if (e.type == EV_SWIPE_R ||
+            (e.type == EV_TAP && near_box_top(&e, JS_CLOSE_CX - JS_ICON_HIT, JS_CLOSE_CY - JS_ICON_HIT,
+                                          2 * JS_ICON_HIT, 2 * JS_ICON_HIT, 0))) {
+            feedback();
+            set_jig_settings(false);
+        } else if (e.type == EV_TAP) {
+            on_jigset_tap(&e);
+        }
+        return;
+    }
     switch (e.type) {
     case EV_SWIPE_L:
         if (app.screen < UI_PAGE_COUNT - 1) { app.screen++; app_redraw(); feedback(); }
@@ -191,7 +255,7 @@ static void on_touch(touch_event_t e) {
             settings_save();
         }
     } else if (app.screen == SCR_CLIP) {
-        if (near_box(&e, TRASH_CX - TRASH_HIT, TRASH_CY - TRASH_HIT, 2 * TRASH_HIT, 2 * TRASH_HIT, 0)) {
+        if (near_box_top(&e, TRASH_CX - TRASH_HIT, TRASH_CY - TRASH_HIT, 2 * TRASH_HIT, 2 * TRASH_HIT, 0)) {
             if (app.clip_len && app.clip_state != CLIP_PASTING) { feedback(); clip_clear(); }
         } else if (in_rect(&e, BTN_COPY_X, BTN_Y, BTN_W, BTN_H)) {
             feedback();
@@ -209,10 +273,13 @@ static void on_touch(touch_event_t e) {
         }
     } else if (app.screen == SCR_JIG) {
         const int pad = (int)(JIG_LANE / 2 + JIG_WALL) + JIG_ZONE_PAD;
-        if (near_box(&e, SCALE_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD)) {
+        if (near_box(&e, JIG_COG_CX - JS_ICON_HIT, JIG_COG_CY - JS_ICON_HIT, 2 * JS_ICON_HIT, 2 * JS_ICON_HIT, 0)) {
+            feedback();
+            set_jig_settings(true);
+        } else if (near_box_top(&e, SCALE_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD)) {
             feedback();
             jig_cycle_scale();
-        } else if (near_box(&e, ONOFF_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD) ||
+        } else if (near_box_top(&e, ONOFF_PILL_X, PILL_Y, PILL_W, PILL_H, PILL_PAD) ||
                    near_box(&e, JIG_BOX_X, JIG_BOX_Y, JIG_BOX, JIG_BOX, pad)) {
             feedback();
             jiggler_toggle();
@@ -284,6 +351,7 @@ int main(void) {
         if (mounted != app.usb_mounted) { app.usb_mounted = mounted; app_redraw(); }   // chip dot
         usb_io_poll();
         usb_state_poll();
+        settings_poll();          // a debounced settings write, when due
         timer_update();
 
         if ((int32_t)(now_ms() - next_touch) >= 0) {

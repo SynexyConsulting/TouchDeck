@@ -8,6 +8,9 @@ extern "C" {
 #endif
 
 enum { SCR_CLIP, SCR_JIG, SCR_SETTINGS, SCR_COUNT };
+// ui_state_t.sub: a panel open over a page. UI_SUB_BT = Settings > Bluetooth,
+// UI_SUB_JIGSET = the Jiggler settings, opened by the cog on the Jiggler page.
+enum { UI_SUB_NONE, UI_SUB_BT, UI_SUB_JIGSET };
 
 // Pages a swipe can reach. A USB-only round board (RP2350, UI_USB_ONLY) has no
 // Bluetooth settings: just Clipboard and Jiggler.

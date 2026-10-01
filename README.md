@@ -30,7 +30,7 @@ It shows up on the PC as a USB composite device (`CAFE:4011`): a keyboard, a mou
 - **Watch.** A rounded-square analog face that ticks every second on the speaker. The tick is driven by a hardware timer, so it's exactly on the second. There's a mute toggle in the corner; it silences only the tick, and touch clicks always sound. The **BOOT button** starts and pauses a stopwatch; a long press resets it.
 - **Clipboard.** COPY asks the PC for the selected text; PASTE types it as US-layout keystrokes, adjusting for Caps Lock.
 - **Clipboard trash.** A bin next to the title clears the board's clip. It only works when there's text and no paste is typing.
-- **Jiggler.** The dot drives along an outlined letter lane (O W M N Z X C V H J L B G D) and the mouse follows it in proportion, drifting within the lane like a car in its lane. O, B and D loop; the other letters bounce back at their ends. Every so often it stops, right-clicks, presses Esc, then glides on to a new random letter. The mouse always stays in the area where it started. The scale pill (top-left) and BOOT change the size (1x, 1.5x, 2x). The ON/OFF pill (top-right) and a tap on the letter turn it on and off.
+- **Jiggler.** The dot drives along an outlined letter lane (O W M N Z X C V H J L B G D) and the mouse follows it in proportion, drifting within the lane like a car in its lane. O, B and D loop; the other letters bounce back at their ends. Every 45-150 s it runs its **menu event**: it stops, right-clicks and holds the context menu open, presses Esc (or F15, a key no app acts on), pauses, then glides on to a new random letter. The cog at the Jiggler page's lower left opens the **Jiggler menu** panel. There you set context menu on/off, Esc or F15, how long the menu stays open (default 2 s) and the pause before the next letter (default 0 s), each 0-60 s. Close it with the X. The settings are saved on the board, and the app's Settings dialog edits them too. The mouse always stays in the area where it started. The scale pill (top-left) and BOOT change the size (1x, 1.5x, 2x). The ON/OFF pill (top-right) and a tap on the letter turn it on and off.
 
 Mute, jiggler on/off and size are saved to flash, and they survive power-off and firmware updates. The core runs at 200 MHz. Only the parts of the screen that change are redrawn, and each watch second is drawn in advance so it appears about 8 ms after the tick.
 
@@ -41,7 +41,7 @@ The ESP32-C3 has no USB keyboard/mouse hardware, so it has two **output modes**:
 - **BT:** a Bluetooth LE keyboard and mouse, paired explicitly with an on-screen 6-digit passkey.
 - **PC:** the board sends its key and mouse reports over USB serial, and the PC app performs them.
 
-It has Clipboard, Jiggler and Settings pages with the same trash can and letter lanes. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
+It has Clipboard, Jiggler and Settings pages with the same trash can, letter lanes and Jiggler menu panel. **F15 over Bluetooth:** firmware 1.8.0 widened the board's keyboard description so it can send F15. If F15 doesn't arrive after updating, Windows is using the copy it saved when you paired, so remove the board in Windows Bluetooth settings and pair it again. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
 
 ### RP2350-Touch-LCD-1.28 (240x240 round, touch)
 

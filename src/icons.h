@@ -14,6 +14,7 @@ void icon_lock(float cx, float cy, float size, uint16_t col);
 void icon_chevron_left(float cx, float cy, float size, uint16_t col);
 void icon_chevron_right(float cx, float cy, float size, uint16_t col);
 void icon_cog(float cx, float cy, float size, uint16_t col);   // hole is background-black
+void icon_close(float cx, float cy, float size, uint16_t col);  // an X
 void icon_trash(float cx, float cy, float size, uint16_t col);
 #ifdef __cplusplus
 }

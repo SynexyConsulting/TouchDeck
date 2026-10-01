@@ -195,6 +195,17 @@ public sealed class DeviceSession(
         if (index is >= 0 and <= 2) requests.Enqueue(() => transport.WriteLine($"JIG SCALE {index}"));
     }
 
+    /// <summary>
+    /// The board's Jiggler settings (firmware 1.8.0+, saved on the board): context menu on/off,
+    /// F15 instead of ESC, seconds the menu stays open and seconds to pause before the next letter
+    /// (each clamped to 0-60). The board reports them back in STATE.
+    /// </summary>
+    public void SetJigConfig(bool menuOn, bool f15, int openS, int pauseS)
+    {
+        int open = Math.Clamp(openS, 0, 60), pause = Math.Clamp(pauseS, 0, 60);
+        requests.Enqueue(() => transport.WriteLine($"JIG CFG {(menuOn ? 1 : 0)} {(f15 ? 1 : 0)} {open} {pause}"));
+    }
+
     /// <summary>Empty the board's clip (the trash can); the board ignores it while pasting.</summary>
     public void ClearClip() => requests.Enqueue(() => transport.WriteLine("CLIP CLEAR"));
 

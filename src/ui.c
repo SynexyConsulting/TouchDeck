@@ -18,6 +18,7 @@ void ui_state_fill(ui_state_t *s, int with_clip) {
     uint32_t now = now_ms();
     memset(s, 0, sizeof *s);
     s->screen = app.screen;
+    s->sub = app.jig_settings && app.screen == SCR_JIG ? UI_SUB_JIGSET : UI_SUB_NONE;
     s->time_s = app.time_s;
     s->helper = app.helper;
     s->link_ok = app.usb_mounted;
@@ -36,6 +37,10 @@ void ui_state_fill(ui_state_t *s, int with_clip) {
     s->jig_next_s = s->jig_on ? (int)((int32_t)(app.jig_next_menu_ms - now) / 1000) : 0;
     s->jig_up_s = s->jig_on ? (int32_t)((now - app.jig_started_ms) / 1000) : 0;
     s->jig_menus = app.jig_menus;
+    s->jig_menu_on = app.jig_cfg.menu_on;
+    s->jig_key = app.jig_cfg.key_f15;
+    s->jig_open_s = app.jig_cfg.open_s;
+    s->jig_pause_s = app.jig_cfg.pause_s;
     mutex_enter_blocking(&clip_mtx);
     s->clip_len = app.clip_len;
     strncpy(s->clip_src, app.clip_src, sizeof s->clip_src - 1);
@@ -114,7 +119,7 @@ void ui_core1_main(void) {
         int screen = app.screen;
         bool on_watch = screen == SCR_WATCH;
         uint32_t seq = app.redraw_seq, wtick = app.watch_tick, edge = app.second_edge;
-        bool anim_jig = screen == SCR_JIG && (app.jig_on || app.anim_demo);
+        bool anim_jig = screen == SCR_JIG && !app.jig_settings && (app.jig_on || app.anim_demo);
         bool anim_clip = screen == SCR_CLIP && app.clip_state == CLIP_PASTING;
         bool msg = msg_showing();
         bool full = seq != drawn_seq || screen != drawn_screen || msg != msg_shown;

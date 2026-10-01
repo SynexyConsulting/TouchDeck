@@ -69,6 +69,20 @@ LABELS = [
     ("font_caps", "OFF", 44 - 12, 1),                          # jiggler ON/OFF pill (round is narrowest)
     ("font_caps", "2.0X", 44 - 10, 1),                         # scale pill beside/above the letter
     ("font_body", "Cleared", 150, 0),                          # clipboard status line
+    # Jiggler menu panel (round is tightest: rows from x 30, controls from x 126)
+    ("font_title", "Jiggler menu", 112, 0),                    # title between the X (x <= 59) and x 176
+    ("font_label", "Context menu", 124, 0),                    # label x 30 .. toggle x 160
+    ("font_label", "Menu open", 92, 0),                        # label x 30 .. stepper x 126
+    ("font_label", "Pause", 92, 0),
+    ("font_caps", "ESC", 40 - 8, 1),                           # key segments, 40 wide
+    ("font_caps", "F15", 40 - 8, 1),
+    ("font_caps", "OFF", 48 - 12, 1),                          # context menu toggle, 48 wide
+    ("font_label", "60 s", 30, 0),                             # stepper value between - and +
+    ("font_label", "-", 26 - 8, 0),                            # stepper buttons, 26 wide
+    ("font_label", "+", 26 - 8, 0),
+    ("font_body", "Right-click, wait, Esc", 170, 0),           # round hint, y 202
+    ("font_body", "Right-click, wait, F15", 170, 0),
+    ("font_body", "Right-click, wait, Esc, pause", 196, 0),    # rect hint, y 240
 ]
 
 @pytest.mark.parametrize("font,text,avail,spacing", LABELS)

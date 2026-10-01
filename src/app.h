@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "pico/mutex.h"
+#include "jig_menu.h"
 #include "ui_pages.h"      // SCR_*, and via ui_state.h CLIP_*, JIG_* phases, JIG_SCALES
 
 #define CLIP_MAX 8192
@@ -44,6 +45,8 @@ typedef struct {
     volatile uint32_t jig_menus;
     volatile uint32_t jig_started_ms;
     volatile int jig_scale_idx;     // 0..2 -> JIG_SCALES[] (BOOT button on the Jiggler page)
+    jig_cfg_t jig_cfg;              // Jiggler settings page: context menu, key, open and pause times
+    volatile bool jig_settings;     // the Jiggler settings panel is open over the Jiggler page
 
     // Watch stopwatch (BOOT button on the watch page). timer_s is what the face shows.
     volatile bool timer_running;
@@ -57,4 +60,5 @@ static inline void app_redraw(void) { app.redraw_seq++; }
 void app_message(const char *text);
 void clip_clear(void);          // empty the clip (ignored when empty or pasting)
 void jig_cycle_scale(void);     // jiggler scale 1x -> 1.5x -> 2x -> 1x, saved
+void jig_set_cfg(const jig_cfg_t *c);   // Jiggler settings: clamp, apply, redraw, save soon
 uint32_t now_ms(void);

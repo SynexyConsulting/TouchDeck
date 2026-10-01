@@ -61,6 +61,25 @@ public partial class SettingsWindow : Window
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
+    // Jiggler settings: send the change; the controls follow what the board reports back.
+    private void OnJigMenu(object sender, RoutedEventArgs e)
+    {
+        if (app.JigCfg is { } c) app.SetJigConfig(c with { MenuOn = JigMenuBox.IsChecked == true });
+    }
+
+    private void OnJigKey(object sender, RoutedEventArgs e)
+    {
+        if (app.JigCfg is { } c) app.SetJigConfig(c with { F15 = sender == JigF15 });
+    }
+
+    private void OnJigStep(object sender, RoutedEventArgs e)
+    {
+        if (app.JigCfg is not { } c || sender is not FrameworkElement { Tag: string tag }) return;
+        int delta = tag.EndsWith("-1", StringComparison.Ordinal) ? -1 : 1;
+        app.SetJigConfig(tag.StartsWith("open", StringComparison.Ordinal) ? c with { OpenS = c.OpenS + delta }
+                                                                          : c with { PauseS = c.PauseS + delta });
+    }
+
     /// <summary>Renders just the settings card to a PNG (smoke tests).</summary>
     public static void SaveCardSnapshot(SettingsWindow w, string path)
     {

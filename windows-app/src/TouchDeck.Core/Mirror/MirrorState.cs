@@ -38,6 +38,10 @@ public sealed class MirrorState(UiModel model)
         ("next", (ref UiState s, long v) => s.JigNextS = (int)v),
         ("up", (ref UiState s, long v) => s.JigUpS = (int)v),
         ("menus", (ref UiState s, long v) => s.JigMenus = (uint)v),
+        ("jmenu", (ref UiState s, long v) => s.JigMenuOn = (int)v),
+        ("jkey", (ref UiState s, long v) => s.JigKey = (int)v),
+        ("jopen", (ref UiState s, long v) => s.JigOpenS = (int)v),
+        ("jpause", (ref UiState s, long v) => s.JigPauseS = (int)v),
     ];
 
     private delegate void Setter(ref UiState s, long value);

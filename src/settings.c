@@ -19,7 +19,8 @@
 #define SETTINGS_OFFSET (PICO_FLASH_SIZE_BYTES - 2 * FLASH_SECTOR_SIZE)
 #endif
 #define PAGES (FLASH_SECTOR_SIZE / FLASH_PAGE_SIZE)
-#define MAGIC    0x334B4454u   // "TDK3"
+#define MAGIC    0x344B4454u   // "TDK4": + the Jiggler settings page (menu, key, open, pause)
+#define MAGIC_V3 0x334B4454u   // "TDK3": {magic, muted, jig_on, jig_scale, check}, still readable
 #define MAGIC_V2 0x324B4454u   // "TDK2": {magic, muted, jig_on, check}, still readable
 #define MAGIC_V1 0x314B4454u   // "TDK1": {magic, muted, check}, still readable
 
@@ -28,10 +29,16 @@ typedef struct {
     uint32_t muted;
     uint32_t jig_on;
     uint32_t jig_scale;      // index into JIG_SCALES
+    uint32_t menu_on;        // jig_cfg_t, see jig_menu.h
+    uint32_t key_f15;
+    uint32_t open_s;
+    uint32_t pause_s;
     uint32_t check;          // guards against a page half-written at power loss
 } record_t;
 
 static int next_page;        // first erased page, PAGES if the sector is full
+static bool save_due;        // settings_save_soon(): a write is owed at save_at
+static uint32_t save_at;
 static record_t current;
 
 static const record_t *page_at(int i) {
@@ -39,11 +46,17 @@ static const record_t *page_at(int i) {
 }
 
 static uint32_t check_of(const record_t *r) {
-    return r->magic ^ r->muted ^ (r->jig_on << 1) ^ (r->jig_scale << 2) ^ 0xA5A5A5A5u;
+    return r->magic ^ r->muted ^ (r->jig_on << 1) ^ (r->jig_scale << 2) ^ (r->menu_on << 4) ^
+           (r->key_f15 << 5) ^ (r->open_s << 8) ^ (r->pause_s << 16) ^ 0xA5A5A5A5u;
+}
+
+static record_t defaults(void) {
+    jig_cfg_t d = jmenu_defaults();
+    return (record_t){MAGIC, 0, 0, 0, d.menu_on, d.key_f15, d.open_s, d.pause_s, 0};
 }
 
 void settings_load(void) {
-    current = (record_t){MAGIC, 0, 0, 0, 0};
+    current = defaults();
     next_page = PAGES;
     for (int i = 0; i < PAGES; i++) {
         const record_t *r = page_at(i);
@@ -53,6 +66,14 @@ void settings_load(void) {
         }
         if (r->magic == MAGIC && r->check == check_of(r)) {
             current = *r;
+        } else if (r->magic == MAGIC_V3) {
+            const uint32_t *w = (const uint32_t *)r;   // v3 layout: check was word 4
+            if (w[4] == (MAGIC_V3 ^ w[1] ^ (w[2] << 1) ^ (w[3] << 2) ^ 0xA5A5A5A5u)) {
+                current = defaults();                  // jiggler settings: defaults
+                current.muted = w[1];
+                current.jig_on = w[2];
+                current.jig_scale = w[3];
+            }
         } else if (r->magic == MAGIC_V2) {
             const uint32_t *w = (const uint32_t *)r;   // v2 layout: check was word 3
             if (w[3] == (MAGIC_V2 ^ w[1] ^ (w[2] << 1) ^ 0xA5A5A5A5u)) {
@@ -70,6 +91,10 @@ void settings_load(void) {
     }
     app.muted = current.muted != 0;
     app.jig_scale_idx = current.jig_scale < JIG_SCALE_COUNT ? (int)current.jig_scale : 0;
+    app.jig_cfg = (jig_cfg_t){(uint8_t)current.menu_on, (uint8_t)current.key_f15,
+                              (uint8_t)(current.open_s > 255 ? 255 : current.open_s),
+                              (uint8_t)(current.pause_s > 255 ? 255 : current.pause_s)};
+    jmenu_clamp(&app.jig_cfg);
     app.jig_on = false;   // the caller starts the jiggler via jiggler_set()
 }
 
@@ -89,10 +114,11 @@ static void do_write(void *p) {
 }
 
 void settings_save(void) {
-    record_t r = {MAGIC, app.muted ? 1u : 0u, app.jig_on ? 1u : 0u, (uint32_t)app.jig_scale_idx, 0};
+    save_due = false;
+    record_t r = {MAGIC, app.muted ? 1u : 0u, app.jig_on ? 1u : 0u, (uint32_t)app.jig_scale_idx,
+                  app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s, 0};
     r.check = check_of(&r);
-    if (current.magic == MAGIC && r.muted == current.muted && r.jig_on == current.jig_on &&
-        r.jig_scale == current.jig_scale)
+    if (current.magic == MAGIC && memcmp(&r, &current, sizeof r) == 0)
         return;
 
     static uint8_t page[FLASH_PAGE_SIZE];
@@ -103,4 +129,15 @@ void settings_save(void) {
     if (flash_safe_execute(do_write, &op, 100) != PICO_OK) return;
     current = r;
     next_page = op.page + 1;
+}
+
+// A run of taps (e.g. -/+ on the Jiggler settings page) writes flash once, ~1 s
+// after the last one. settings_poll() runs from core0's loop.
+void settings_save_soon(void) {
+    save_due = true;
+    save_at = now_ms() + 1000;
+}
+
+void settings_poll(void) {
+    if (save_due && (int32_t)(now_ms() - save_at) >= 0) settings_save();
 }

@@ -23,6 +23,7 @@ public unsafe struct UiState
     public fixed byte BtHost[32];
     public fixed byte DownReason[32];
     public fixed byte Clip[ClipView];
+    public int JigMenuOn, JigKey, JigOpenS, JigPauseS;   // Jiggler settings page (firmware 1.8.0)
 
     public static int Size => sizeof(UiState);
 

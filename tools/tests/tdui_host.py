@@ -24,7 +24,8 @@ class UiState(ctypes.Structure):
         ("jig_x", ctypes.c_float), ("jig_y", ctypes.c_float), ("jig_next_s", ctypes.c_int32),
         ("jig_up_s", ctypes.c_int32), ("jig_menus", ctypes.c_uint32), ("clip_src", ctypes.c_char * 12),
         ("msg", ctypes.c_char * 40), ("bt_host", ctypes.c_char * 32), ("down_reason", ctypes.c_char * 32),
-        ("clip", ctypes.c_char * CLIP_VIEW)]
+        ("clip", ctypes.c_char * CLIP_VIEW)] + [
+        (n, ctypes.c_int32) for n in ("jig_menu_on", "jig_key", "jig_open_s", "jig_pause_s")]
 
 
 # STATE key -> ui_state_t field (the app's MirrorState uses the same table).
@@ -34,6 +35,7 @@ STATE_FIELDS = {
     "left": "bt_secs_left", "pk": "bt_passkey", "clip": "clip_len", "cst": "clip_state", "ppos": "paste_pos",
     "jig": "jig_on", "demo": "jig_demo", "paused": "jig_paused", "phase": "jig_phase", "scale": "jig_scale",
     "x": "jig_x", "y": "jig_y", "next": "jig_next_s", "up": "jig_up_s", "menus": "jig_menus",
+    "jmenu": "jig_menu_on", "jkey": "jig_key", "jopen": "jig_open_s", "jpause": "jig_pause_s",
 }
 TEXT_FIELDS = {"msg": ("msg", 40), "src": ("clip_src", 12), "host": ("bt_host", 32), "down": ("down_reason", 32)}
 

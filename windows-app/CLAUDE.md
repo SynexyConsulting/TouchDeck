@@ -38,6 +38,10 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
     - `--smoke DIR` also writes `mirror.png` (1:1).
     - `--smoke-steps` drives the board (pages, `ANIM`, a clip) and saves `mirror-*.png`; `../tools/mirror_check.py DIR` compares them with the board's framebuffer.
   - Hardware tests share the xUnit collection `Board`, so they take the port one at a time.
+- **Jiggler settings (firmware 1.8.0+):**
+  - STATE carries `jmenu= jkey= jopen= jpause=`, giving `JigView.Config` → `JigConfig` (null on older firmware).
+  - The Settings dialog's Jiggler section shows them and sends `DeviceSession.SetJigConfig` (`JIG CFG`). The controls follow what the board reports; there is no local state.
+  - `Injector` maps F15 (usage 0x6A) to scancode 0x66 for the ESP32-C3's PC mode.
 - **Board mirror (firmware 1.6.0+):**
   - The handshake ends with `WATCH 1`, and the board then streams `STATE` lines, parsed as `BoardLine` → `StateReport`.
   - `DeviceSession.MirrorSupported` is false if no `STATE` arrives within 1.5 s; the app then shows the "update the firmware" fallback text.

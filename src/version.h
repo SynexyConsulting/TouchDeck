@@ -8,4 +8,4 @@
 #else
 #define FW_BOARD   "rp2040-169"   // Waveshare RP2040-Touch-LCD-1.69
 #endif
-#define FW_VERSION "1.7.0"
+#define FW_VERSION "1.8.0"

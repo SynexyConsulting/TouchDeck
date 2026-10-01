@@ -5,6 +5,7 @@
 #include <math.h>
 #include "esp_random.h"
 #include "app.h"
+#include "jig_menu.h"
 #include "jig_motion.h"
 #include "output.h"
 #include "jiggler.h"
@@ -89,12 +90,8 @@ void jiggler_menu_now() {
     if (app.jig_on && app.jig_phase == JIG_MOVING) app.jig_next_menu_ms = now_ms();
 }
 
-bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING; }
-
-static void set_phase(int phase, uint32_t wait_lo, uint32_t wait_hi) {
-    app.jig_phase = phase;
-    next_ms = now_ms() + rand_between(wait_lo, wait_hi);
-}
+// Off, moving, or in the post-key pause (holds nothing): a paste may start typing.
+bool jiggler_idle() { return !app.jig_on || app.jig_phase == JIG_MOVING || app.jig_phase == JIG_RESUME; }
 
 // Demo (ANIM 1, perf tests): walk the letter on screen without sending HID.
 static void demo_step() {
@@ -133,32 +130,33 @@ void jiggler_step() {
     if (app.jig_paused) return;
     if (!out_ready() || (int32_t)(now_ms() - next_ms) < 0) return;
 
-    switch (app.jig_phase) {
-    case JIG_MOVING:
+    if (app.jig_phase == JIG_MOVING) {
         next_ms = now_ms() + STEP_MS;
-        if ((int32_t)(now_ms() - app.jig_next_menu_ms) >= 0) set_phase(JIG_STOP, 400, 900);
-        else move_step();
-        break;
-    case JIG_STOP:            // pointer has settled: open the context menu
-        if (out_mouse(0x02, 0, 0)) set_phase(JIG_CLICK_DOWN, 60, 120);   // right button
-        break;
-    case JIG_CLICK_DOWN:
-        if (out_mouse(0, 0, 0)) set_phase(JIG_MENU_OPEN, 800, 2000);
-        break;
-    case JIG_MENU_OPEN:       // menu has been visible a moment: close it
-        if (out_key(0, 0x29 /* ESC */)) set_phase(JIG_ESC_DOWN, 50, 90);
-        break;
-    case JIG_ESC_DOWN:
-        if (out_key(0, 0)) set_phase(JIG_RESUME, 300, 700);
-        break;
-    case JIG_RESUME:
+        if ((int32_t)(now_ms() - app.jig_next_menu_ms) >= 0) {
+            app.jig_phase = JIG_STOP;                     // let the pointer settle first
+            next_ms = now_ms() + rand_between(400, 900);
+        } else {
+            move_step();
+        }
+        return;
+    }
+
+    // The menu event: the shared engine decides what to send; advance only once it went out.
+    jm_step_t st = jmenu_step(app.jig_phase, &app.jig_cfg, esp_random());
+    switch (st.action) {
+    case JM_RIGHT_DOWN: if (!out_mouse(0x02, 0, 0)) return; break;   // right button
+    case JM_RIGHT_UP:   if (!out_mouse(0, 0, 0)) return; break;
+    case JM_KEY_DOWN:   if (!out_key(0, jmenu_key(&app.jig_cfg))) return; break;
+    case JM_KEY_UP:     if (!out_key(0, 0)) return; break;
+    case JM_SWITCH:
         app.jig_menus++;
         schedule_menu();
         jm_switch(&m, jm_pick(m.letter, esp_random()));   // a new letter after every menu
         publish();
         app_redraw();                                     // draw the new letter
-        app.jig_phase = JIG_MOVING;
-        next_ms = now_ms();
         break;
+    default: break;
     }
+    app.jig_phase = st.next_phase;
+    next_ms = now_ms() + st.wait_ms;
 }

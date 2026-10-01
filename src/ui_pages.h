@@ -11,6 +11,9 @@ extern "C" {
 #endif
 
 enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_COUNT };
+// ui_state_t.sub: a panel open over a page. UI_SUB_JIGSET = the Jiggler settings,
+// opened by the cog on the Jiggler page (same ids on every board).
+enum { UI_SUB_NONE, UI_SUB_BT, UI_SUB_JIGSET };
 
 typedef struct { int x, y, w, h; } rect_t;
 
