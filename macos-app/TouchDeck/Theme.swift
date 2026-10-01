@@ -89,17 +89,27 @@ struct ChoiceSwitch: View {
     }
 }
 
-/// Pill buttons; `primary` is the amber one.
+/// Pill buttons; `primary` is the amber one. Disabled ones are dimmed, as on Windows.
 struct PillButtonStyle: ButtonStyle {
     var primary = false
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Theme.head(13))
-            .padding(.horizontal, 14).padding(.vertical, 6)
-            .foregroundStyle(primary ? Theme.bg : Theme.text)
-            .background(Capsule().fill(primary ? Theme.accent : Theme.surf2))
-            .overlay(Capsule().strokeBorder(primary ? Color.clear : Theme.faint, lineWidth: 1))
-            .opacity(configuration.isPressed ? 0.75 : 1)
+        PillButton(configuration: configuration, primary: primary)
+    }
+
+    private struct PillButton: View {
+        let configuration: ButtonStyleConfiguration
+        let primary: Bool
+        @Environment(\.isEnabled) private var enabled
+
+        var body: some View {
+            configuration.label
+                .font(Theme.head(13))
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .foregroundStyle(primary ? Theme.bg : Theme.text)
+                .background(Capsule().fill(primary ? Theme.accent : Theme.surf2))
+                .overlay(Capsule().strokeBorder(primary ? Color.clear : Theme.faint, lineWidth: 1))
+                .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.75 : 1)
+        }
     }
 }
 

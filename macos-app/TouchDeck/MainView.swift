@@ -34,7 +34,7 @@ struct MainView: View {
             }
         }
         .padding(18)
-        .frame(minWidth: 840, minHeight: 620, alignment: .topLeading)
+        .frame(minWidth: 840, minHeight: 780, alignment: .topLeading)
         .background(Theme.bg)
         .foregroundStyle(Theme.text)
         .navigationTitle("Touch Deck \(AppController.appVersion)")
