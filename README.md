@@ -47,6 +47,7 @@ It has Clipboard, Jiggler and Settings pages with the same trash can and letter 
 
 Install `TouchDeck-<version>.msi`. It installs just for you, needs no admin rights, and doesn't need .NET installed. The app:
 
+- shows the **device itself**: a live copy of the board's screen in a board-shaped frame (firmware 1.7.0 and later). Click it to tap, drag sideways to swipe. It is drawn by the firmware's own page code, compiled for the PC, so it matches the board pixel for pixel;
 - finds the board and shows its **firmware version**;
 - handles COPY by reading the selected text (or, if nothing is selected, the clipboard);
 - performs keys and mouse input in PC mode;
@@ -54,7 +55,7 @@ Install `TouchDeck-<version>.msi`. It installs just for you, needs no admin righ
 - sends the current selection to the board with **Ctrl+Alt+C** from any app;
 - keeps a list of recent clips in memory only;
 - gives you remote page and button controls, live board diagnostics, and dry-run mode;
-- shows a live **jiggler card**: the board's current letter, the moving dot, and ON/OFF and size buttons, plus the board's clip length with a Clear button (firmware 1.6.0 and later);
+- with firmware 1.6.x, shows a live **jiggler card** instead of the device (letter, moving dot, ON/OFF and size), plus the board's clip length with a Clear button;
 - lives in the tray.
 
 See [`windows-app/README.md`](windows-app/README.md) for details and build steps.
@@ -86,6 +87,8 @@ python -m platformio run -t upload --upload-port COM7     # flash (no BOOT butto
 cd windows-app
 .\build.ps1          # bundle firmware from ../build, test, publish, MSI -> out\TouchDeck-<ver>.msi
 ```
+
+The app build also compiles the device renderers (`hostui/build.bat`, needs Visual Studio's C++ tools): the firmware's page code as `tdui_rp2040.dll` and `tdui_esp32c3.dll`. `hostui/build.sh` builds the same libraries for macOS or Linux.
 
 Only one program can hold the board's serial port at a time. Quit the app (tray → Quit) before using `flash.py` or the board tests.
 
@@ -122,15 +125,18 @@ git tag fw-v1.7.0  && git push origin fw-v1.7.0      # firmware only
   - the release feed builder (`make_updates.py`);
   - the font generator, including a check that every UI label fits its button;
   - the jiggler letters: every lane fits both screens, the dot stays inside its lane, letters loop or bounce correctly, and the mouse stays bounded. This drives the shared C engine, built on the PC with MSVC;
-  - `gfx_line`, checked pixel for pixel against the reference algorithm, also built with MSVC.
+  - `gfx_line`, checked pixel for pixel against the reference algorithm, also built with MSVC;
+  - the device renderers (`hostui/`): every page of both boards, the sync lines round-tripping through the parser, and (`test_board_mirror.py`, with the RP2040 connected) the host render of what the board streams equals the board's own framebuffer (`FBCRC`).
 
   The MSVC-based tests skip without Visual Studio. The `test_board_*` files drive a connected board and skip when it's absent.
-- `dotnet test windows-app/TouchDeck.sln` covers the app: protocol, injection, session, device manager, settings and firmware update, plus hardware smoke tests.
+- `dotnet test windows-app/TouchDeck.sln` covers the app: protocol, injection, session, device manager, settings, firmware update and the device mirror, plus hardware tests (one checks the mirror against the board's framebuffer).
+- `TouchDeck.exe --smoke DIR --smoke-steps` then `python tools/mirror_check.py DIR` drives the board through the app and compares the app's picture with the board.
+- `python tools/perf_rp2040.py [--watch]` reports the RP2040's frame times (full redraws and animation).
 - `windows-app/tools/install-smoke.ps1` is a real install, run and uninstall check of the MSI.
 
 ## Firmware versions
 
-`src/version.h` and `esp32c3/src/version.h` define the board ID and version (1.6.0), and the `VER` command reports them. Bump `FW_VERSION` whenever the firmware changes. The Windows app compares the board's version with the one it bundles and offers the update.
+`src/version.h` and `esp32c3/src/version.h` define the board ID and version (1.7.0), and the `VER` command reports them. Bump `FW_VERSION` whenever the firmware changes. The Windows app compares the board's version with the one it bundles and offers the update.
 
 ## Credits
 

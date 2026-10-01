@@ -77,7 +77,7 @@ public partial class App : Application
         if (!e.Args.Contains("--minimized")) ShowWindow();
 
         int smoke = Array.IndexOf(e.Args, "--smoke");
-        if (smoke >= 0 && smoke + 1 < e.Args.Length) _ = RunSmokeAsync(e.Args[smoke + 1]);
+        if (smoke >= 0 && smoke + 1 < e.Args.Length) _ = RunSmokeAsync(e.Args[smoke + 1], e.Args.Contains("--smoke-steps"));
 #if UPDATE_TEST_HOOKS
         int smokeUpdate = Array.IndexOf(e.Args, "--smoke-update");
         if (smokeUpdate >= 0 && smokeUpdate + 1 < e.Args.Length) _ = RunSmokeUpdateAsync(e.Args[smokeUpdate + 1]);
@@ -111,16 +111,19 @@ public partial class App : Application
 #endif
 
     /// <summary>
-    /// --smoke DIR: wait for a board (up to 10 s), then write DIR\smoke.png (the window) and
+    /// --smoke DIR: wait for a board (up to 10 s), then write DIR\smoke.png (the window),
+    /// DIR\mirror.png (the device view at 1:1, firmware 1.7.0+) and
     /// DIR\smoke.txt (what the app detected), and quit. Used by build.ps1 and the installer check.
     /// </summary>
-    private async Task RunSmokeAsync(string dir)
+    private async Task RunSmokeAsync(string dir, bool steps)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (!controller!.IsConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
         await Task.Delay(2500);                     // one heartbeat: the first diagnostics arrive
         Directory.CreateDirectory(dir);
+        if (steps) await RunSmokeStepsAsync(dir);
         window!.SaveSnapshot(Path.Combine(dir, "smoke.png"));
+        bool mirrorSaved = window.SaveMirror(Path.Combine(dir, "mirror.png"));
         var settingsWin = new SettingsWindow(controller, window);   // the dialog too, for the design check
         settingsWin.Show();
         await Task.Delay(400);
@@ -134,6 +137,8 @@ public partial class App : Application
             $"port={controller.Port}",
             $"firmware={controller.State.Firmware?.Version}",
             $"mirror={controller.MirrorAvailable}",
+            $"fullmirror={controller.FullMirror}",
+            $"mirrorpng={mirrorSaved}",
             $"jig={controller.JigOn}",
             $"letter={controller.JigLetter}",
             $"boardclip={controller.BoardClipText}",
@@ -141,6 +146,36 @@ public partial class App : Application
             $"exe={Environment.ProcessPath}",
         ]);
         Quit();
+    }
+
+    /// <summary>
+    /// --smoke-steps (with --smoke): drive the board through the app and save the device view
+    /// after each step: mirror-jig.png, mirror-anim1/2.png (ANIM 1: the dot moves, no HID) and
+    /// mirror-clip.png (a clip sent from the app). It ends on the clipboard page, so
+    /// tools/mirror_check.py can compare mirror-clip.png with the board's framebuffer.
+    /// </summary>
+    private async Task RunSmokeStepsAsync(string dir)
+    {
+        var c = controller!;
+        int clipPage = c.MirrorKind == Core.Devices.BoardKind.Esp32C3 ? 0 : 1;
+        async Task Go(int page)
+        {
+            for (int i = 0; i < 3; i++) c.Swipe(left: false);
+            for (int i = 0; i < page; i++) c.Swipe(left: true);
+            await Task.Delay(1500);
+        }
+        await Go(clipPage + 1);
+        window!.SaveMirror(Path.Combine(dir, "mirror-jig.png"));
+        c.Animate(true);
+        await Task.Delay(800);
+        window.SaveMirror(Path.Combine(dir, "mirror-anim1.png"));
+        await Task.Delay(400);
+        window.SaveMirror(Path.Combine(dir, "mirror-anim2.png"));
+        c.Animate(false);
+        await Go(clipPage);
+        c.SendText("Smoke test: sent from the app,\nshown by the board and its mirror.");
+        await Task.Delay(3300);                     // the board's "Copied" message lasts 2.5 s
+        window.SaveMirror(Path.Combine(dir, "mirror-clip.png"));
     }
 
     private void ShowWindow() => window?.ShowFromTray();

@@ -138,6 +138,7 @@ void clip_clear(void) {
     mutex_enter_blocking(&clip_mtx);
     app.clip_len = 0;
     app.clip[0] = 0;
+    app.clip_seq++;
     strcpy(app.clip_src, "-");
     mutex_exit(&clip_mtx);
     app_message("Cleared");

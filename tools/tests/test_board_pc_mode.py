@@ -35,7 +35,7 @@ class Board:
 
     def dbg(self):
         self.take(); self.send("DBG"); self.pump(0.4)
-        return next(l for l in self.take() if "up=" in l)
+        return next(l for l in self.take() if l.startswith("LOG up="))
 
     def field(self, name):
         d = self.dbg()

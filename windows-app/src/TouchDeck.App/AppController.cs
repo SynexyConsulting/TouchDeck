@@ -10,6 +10,7 @@ using TouchDeck.Core.Devices;
 using TouchDeck.Core.Firmware;
 using TouchDeck.Core.Input;
 using TouchDeck.Core.Jiggler;
+using TouchDeck.Core.Mirror;
 using TouchDeck.Core.Protocol;
 using TouchDeck.Core.Selection;
 using TouchDeck.Core.Session;
@@ -145,6 +146,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             _ => (Health.Idle, "Looking for a Touch Deck..."),
         };
         if (!DiagnosticsEnabled || !IsConnected) DiagnosticItems.Clear();
+        if (!IsConnected) ResetMirror();         // the board's screen goes with it, at once
         RefreshUpdateOffer();
 
         if (s.Status == was.Status && s.Device == was.Device) return;
@@ -170,7 +172,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         s.DiagnosticsEnabled = settings.Diagnostics;
         s.Log += text => Post(() => AddLog($"board: {text}"));
         s.Diagnostics += d => Post(() => ShowDiagnostics(d));
-        s.StateReceived += st => Post(() => ApplyBoardState(st));
+        var mirror = new MirrorState(s.Kind);
+        Post(() => StartMirror(mirror));
+        s.StateReceived += st => Post(() => { ApplyBoardState(st); ApplyMirror(mirror, st); });
+        s.TextReceived += t => Post(() => ApplyMirror(mirror, t));
+        s.ClipTextReceived += c => Post(() => ApplyMirror(mirror, c));
         s.ClipSent += (text, src, lost) => Post(() =>
         {
             History.Add(text);
@@ -261,8 +267,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         JigStatus = JigView.Status(st);
         BoardClipText = JigView.ClipText(st);
         CanClearBoardClip = JigView.CanClear(st);
-        MirrorAvailable = true;
-        MirrorFallbackText = "";
+        MirrorAvailable = true;             // the fallback text comes from RefreshMirror (once a second)
     }
 
     private void RefreshMirror()
@@ -272,7 +277,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             if (!IsConnected)
             {
-                // A new board must not inherit the last one's jiggler state.
+                // A new board must not inherit the last one's jiggler state or screen.
+                ResetMirror();
                 MirrorAvailable = false;
                 MirrorFallbackText = "Connect a board to see and control its jiggler.";
                 JigOn = false;
@@ -284,8 +290,85 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             return;
         }
         MirrorAvailable = supported.Value;
-        MirrorFallbackText = supported.Value ? "" : "This board's firmware is older than 1.6.0. Use Install firmware above to see and control its jiggler here.";
+        MirrorFallbackText = FullMirror ? ""
+            : !supported.Value ? "This board's firmware is older than 1.6.0. Use Install firmware below to see and control its jiggler here."
+            : RendererError is not null ? "The device view couldn't load, so only the jiggler is shown."
+            : State.Firmware?.SemVer is { } v && v < new Version(1, 7, 0)
+                ? "Install firmware 1.7.0 or later (below) to see and use the whole device here."
+                : "";
     }
+
+    // ---------- device mirror (firmware 1.7.0+) ----------
+
+    private MirrorState? mirror;
+    private bool mirrorFramePending;
+
+    /// <summary>The board streams its whole UI and the renderer loaded: the device view is live.</summary>
+    public bool FullMirror { get => fullMirror; private set => Set(ref fullMirror, value); }
+    /// <summary>Which device the mirror draws (its shape and renderer).</summary>
+    public BoardKind MirrorKind { get => mirrorKind; private set => Set(ref mirrorKind, value); }
+    /// <summary>The latest device frame: RGB565, <see cref="NativeUi.Size"/> of <see cref="MirrorKind"/>.</summary>
+    public ushort[]? MirrorFrame { get; private set; }
+    /// <summary>Raised on the UI thread when <see cref="MirrorFrame"/> has a new frame.</summary>
+    public event Action? MirrorFrameChanged;
+    /// <summary>Set when the renderer failed to load (the app falls back to the jiggler card).</summary>
+    public string? RendererError { get; private set; }
+
+    private bool fullMirror;
+    private BoardKind mirrorKind = BoardKind.Rp2040;
+
+    private void StartMirror(MirrorState m)
+    {
+        mirror = m;
+        MirrorKind = m.Kind;
+        FullMirror = false;
+        MirrorFrame = null;
+        MirrorFrameChanged?.Invoke();
+        if (!NativeUi.Available(m.Kind, out var error))
+        {
+            RendererError = error;
+            AddLog($"Device view unavailable: {error}");
+        }
+        else RendererError = null;
+    }
+
+    private void ApplyMirror(MirrorState m, BoardMessage message)
+    {
+        if (m != mirror || !m.Apply(message) || !m.Complete || RendererError is not null) return;
+        if (!FullMirror)
+        {
+            FullMirror = true;
+            RefreshMirror();
+        }
+        // Lines arrive in bursts (TEXT, CLIPTEXT, STATE): draw once when the burst is applied.
+        if (mirrorFramePending) return;
+        mirrorFramePending = true;
+        ui.BeginInvoke(DispatcherPriority.Render, () =>
+        {
+            mirrorFramePending = false;
+            if (disposed || mirror is null || !FullMirror) return;
+            var (w, h) = NativeUi.Size(mirror.Kind);
+            var frame = MirrorFrame is { } f && f.Length == w * h ? f : new ushort[w * h];   // reused: 134 KB per frame would churn the LOH
+            NativeUi.Render(mirror.Kind, mirror.State, frame);
+            MirrorFrame = frame;
+            MirrorFrameChanged?.Invoke();
+        });
+    }
+
+    private void ResetMirror()
+    {
+        if (mirror is null && !FullMirror) return;
+        mirror = null;
+        FullMirror = false;
+        MirrorFrame = null;
+        MirrorFrameChanged?.Invoke();
+    }
+
+    /// <summary>A click on the device view: the board's own hit testing decides what it hits.</summary>
+    public void Tap(int x, int y) => manager.Session?.Tap(x, y);
+
+    /// <summary>ANIM 1|0 (smoke steps): animate the jiggler page without HID.</summary>
+    public void Animate(bool on) => manager.Session?.Animate(on);
 
     public void ToggleJiggler() => manager.Session?.SetJiggler(!JigOn);
     public void CycleScale() => manager.Session?.SetScale((jigScale + 1) % 3);

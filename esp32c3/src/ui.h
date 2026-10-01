@@ -1,7 +1,14 @@
 #pragma once
 
+#include "ui_state.h"
+
 // Render task: draws the active screen into fb and pushes it to the panel.
 void ui_task(void *);
+#ifdef __cplusplus
+// Samples the live state for drawing or for the mirror sync; with_clip = false
+// leaves the clip text out.
+void ui_state_fill(ui_state_t *s, bool with_clip);
+#endif
 
 // Hit areas shared by drawing and touch handling. The panel is a 240 px
 // circle, so everything sits inside radius ~115 around (120,120).

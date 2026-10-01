@@ -27,6 +27,8 @@ add_executable(watch
     src/button.c
     src/touch.c
     src/ui.c
+    src/ui_pages.c
+    src/ui_sync.c
     src/usb_io.c
     src/jig_motion.c
     src/jig_paths.c

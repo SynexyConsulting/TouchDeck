@@ -82,6 +82,7 @@ void clip_clear() {
     xSemaphoreTake(clip_mtx, portMAX_DELAY);
     app.clip_len = 0;
     app.clip[0] = 0;
+    app.clip_seq++;
     strcpy(app.clip_src, "-");
     xSemaphoreGive(clip_mtx);
     app_message("Cleared");

@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:TouchDeck.App"
-        Title="Touch Deck" Width="1000" Height="900" MinWidth="820" MinHeight="600"
+        Title="Touch Deck" Width="1000" Height="880" MinWidth="840" MinHeight="620"
         Background="{StaticResource Bg}" Foreground="{StaticResource Text}"
         FontFamily="{StaticResource UiFont}" FontSize="14"
         Icon="pack://application:,,,/Assets/app.ico"
@@ -11,10 +11,9 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360" />
+            <ColumnDefinition Width="400" />
             <ColumnDefinition Width="16" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
@@ -35,18 +34,44 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- Left column -->
+        <!-- Left: the device (live mirror) and its details -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,2,0">
-                <!-- Device -->
+                <Border x:Name="DeviceCard" Style="{StaticResource Card}" Padding="16,18">
+                    <StackPanel>
+                        <!-- Firmware 1.7.0+: the board's own screen, drawn by its own code -->
+                        <local:DeviceMirror x:Name="Mirror" />
+                        <TextBlock x:Name="MirrorHint" Text="Click to tap · drag sideways to swipe" Foreground="{StaticResource Faint}"
+                                   FontSize="12" HorizontalAlignment="Center" Margin="0,10,0,0" />
+
+                        <!-- Firmware 1.6.x: the jiggler card, as before -->
+                        <StackPanel x:Name="LegacyJiggler" IsEnabled="{Binding IsConnected}">
+                            <DockPanel x:Name="JigBody">
+                                <Button x:Name="ScalePill" DockPanel.Dock="Left" Style="{StaticResource SmallButton}" Margin="0"
+                                        Content="{Binding JigScaleText}" Click="OnScale" ToolTip="Jiggler size: 1x, 1.5x, 2x" />
+                                <Button x:Name="JigPill" DockPanel.Dock="Right" Style="{StaticResource SmallButton}" Click="OnJigToggle"
+                                        ToolTip="Turn the jiggler on or off" />
+                                <TextBlock Text="Jiggler" Style="{StaticResource CardTitle}" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                            </DockPanel>
+                            <local:JiggleLane x:Name="JigLaneView" Height="120" Margin="0,6,0,0" Cursor="Hand"
+                                              Letter="{Binding JigLetter}" DotX="{Binding JigX}" DotY="{Binding JigY}"
+                                              Active="{Binding JigOn}" MouseLeftButtonUp="OnLaneClick"
+                                              ToolTip="Tap the letter to turn the jiggler on or off" />
+                            <TextBlock x:Name="JigStatusText" Text="{Binding JigStatus}" Foreground="{StaticResource Dim}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                        </StackPanel>
+                        <TextBlock x:Name="MirrorFallback" Text="{Binding MirrorFallbackText}" Foreground="{StaticResource Accent}"
+                                   TextWrapping="Wrap" Margin="0,10,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Device details -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Text="Device" Style="{StaticResource CardTitle}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Ellipse x:Name="StatusDot" Width="12" Height="12" Margin="0,0,10,0" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding BoardName}" FontFamily="{StaticResource HeadFont}" FontSize="19" />
                         </StackPanel>
-                        <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,8" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -82,58 +107,34 @@
                         </WrapPanel>
                     </StackPanel>
                 </Border>
-
-                <!-- Jiggler (live mirror of the board, firmware 1.6.0+) -->
-                <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
-                    <StackPanel>
-                        <DockPanel x:Name="JigBody">
-                            <Button x:Name="ScalePill" DockPanel.Dock="Left" Style="{StaticResource SmallButton}" Margin="0"
-                                    Content="{Binding JigScaleText}" Click="OnScale" ToolTip="Jiggler size: 1x, 1.5x, 2x" />
-                            <Button x:Name="JigPill" DockPanel.Dock="Right" Style="{StaticResource SmallButton}" Click="OnJigToggle"
-                                    ToolTip="Turn the jiggler on or off" />
-                            <TextBlock Text="Jiggler" Style="{StaticResource CardTitle}" HorizontalAlignment="Center" Margin="0,4,0,0" />
-                        </DockPanel>
-                        <local:JiggleLane x:Name="JigLaneView" Height="120" Margin="0,6,0,0" Cursor="Hand"
-                                          Letter="{Binding JigLetter}" DotX="{Binding JigX}" DotY="{Binding JigY}"
-                                          Active="{Binding JigOn}" MouseLeftButtonUp="OnLaneClick"
-                                          ToolTip="Tap the letter to turn the jiggler on or off" />
-                        <TextBlock x:Name="JigStatusText" Text="{Binding JigStatus}" Foreground="{StaticResource Dim}" HorizontalAlignment="Center" Margin="0,6,0,0" />
-                        <TextBlock x:Name="MirrorFallback" Text="{Binding MirrorFallbackText}" Foreground="{StaticResource Accent}"
-                                   TextWrapping="Wrap" Margin="0,6,0,0" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Remote -->
-                <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
-                    <StackPanel>
-                        <TextBlock Text="Remote" Style="{StaticResource CardTitle}" />
-                        <WrapPanel>
-                            <Button Content="&#x25C0;  Page" Click="OnSwipeRight" Margin="0,0,6,6" Padding="11,6" ToolTip="Previous page" />
-                            <Button Content="Page  &#x25B6;" Click="OnSwipeLeft" Margin="0,0,6,6" Padding="11,6" ToolTip="Next page" />
-                            <Button Content="Button" Click="OnButton" Margin="0,0,6,6" Padding="11,6"
-                                    ToolTip="Press BOOT: start/pause the stopwatch, or change the jiggler size" />
-                            <Button Content="Long press" Click="OnLongButton" Margin="0,0,6,6" Padding="11,6" ToolTip="Hold BOOT: reset the stopwatch" />
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
-
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Right column -->
+        <!-- Right: the remote pane and the activity log -->
         <Grid Grid.Row="1" Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" MinHeight="110" />
+                <RowDefinition Height="*" MinHeight="96" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="1.3*" MinHeight="120" />
+                <RowDefinition Height="1.6*" MinHeight="140" />
             </Grid.RowDefinitions>
 
-            <!-- Send text -->
-            <Border Style="{StaticResource Card}">
+            <!-- Remote -->
+            <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
                 <StackPanel>
-                    <TextBlock Text="Send to board" Style="{StaticResource CardTitle}" />
-                    <TextBox x:Name="SendBox" Height="74" AcceptsReturn="True" TextWrapping="Wrap"
+                    <TextBlock Text="Remote" Style="{StaticResource CardTitle}" />
+                    <WrapPanel>
+                        <Button Content="&#x25C0;  Page" Click="OnSwipeRight" Margin="0,0,6,6" Padding="11,6" ToolTip="Previous page (swipe right)" />
+                        <Button Content="Page  &#x25B6;" Click="OnSwipeLeft" Margin="0,0,6,6" Padding="11,6" ToolTip="Next page (swipe left)" />
+                        <StackPanel x:Name="BootButtons" Orientation="Horizontal">
+                            <Button Content="BOOT" Click="OnButton" Margin="0,0,6,6" Padding="11,6"
+                                    ToolTip="Press BOOT: start/pause the stopwatch, or change the jiggler size" />
+                            <Button Content="Hold BOOT" Click="OnLongButton" Margin="0,0,6,6" Padding="11,6" ToolTip="Hold BOOT: reset the stopwatch" />
+                        </StackPanel>
+                    </WrapPanel>
+
+                    <TextBlock Text="Send to board" Style="{StaticResource CardTitle}" Margin="0,10,0,8" />
+                    <TextBox x:Name="SendBox" Height="64" AcceptsReturn="True" TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto" TextChanged="OnSendTextChanged" />
                     <DockPanel Margin="0,10,0,0">
                         <Button x:Name="SendButton" DockPanel.Dock="Right" Content="Send" Tag="Primary" Click="OnSend" Margin="0" />
@@ -155,7 +156,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- History -->
+            <!-- Recent clips -->
             <Border Grid.Row="1" Style="{StaticResource Card}">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top">
@@ -185,7 +186,7 @@
                 </DockPanel>
             </Border>
 
-            <!-- Diagnostics -->
+            <!-- Diagnostics (Settings > Advanced) -->
             <Border x:Name="DiagCard" Grid.Row="2" Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="Board diagnostics" Style="{StaticResource CardTitle}" />
@@ -209,7 +210,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- Log -->
+            <!-- Activity log -->
             <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top">
@@ -222,6 +223,5 @@
                 </DockPanel>
             </Border>
         </Grid>
-
     </Grid>
 </Window>

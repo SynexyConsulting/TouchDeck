@@ -4,4 +4,4 @@
 #pragma once
 
 #define FW_BOARD   "rp2040-169"
-#define FW_VERSION "1.6.0"
+#define FW_VERSION "1.7.0"
