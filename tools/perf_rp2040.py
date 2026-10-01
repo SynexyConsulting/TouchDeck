@@ -20,7 +20,7 @@ from touchdeck import find_board
 
 # Page order per board: the round RP2350 has no watch.
 PAGES = {"rp2040-169": [(0, "watch"), (1, "clipboard"), (2, "jiggler")],
-         "rp2350-128": [(0, "clipboard"), (1, "jiggler")]}
+         "rp2350-128": [(0, "watch"), (1, "clipboard"), (2, "jiggler")]}
 REDRAWS = 20
 
 

@@ -26,8 +26,8 @@ public static class UiModels
 
     public static bool IsRound(this UiModel m) => m != UiModel.Rp2040Rect;
 
-    /// <summary>Index of the Clipboard page (the RP2040 1.69 starts on its watch).</summary>
-    public static int ClipPage(this UiModel m) => m == UiModel.Rp2040Rect ? 1 : 0;
+    /// <summary>Index of the Clipboard page: every board starts on its watch (round boards since 1.8.0).</summary>
+    public static int ClipPage(this UiModel m) => 1;
 
-    public static int PageCount(this UiModel m) => m == UiModel.Rp2350Round ? 2 : 3;
+    public static int PageCount(this UiModel m) => m == UiModel.Esp32Round ? 4 : 3;   // ESP32-C3 adds Settings
 }

@@ -83,9 +83,9 @@ public class MirrorRendererTests
         Assert.Equal((240, 240), NativeUi.Size(UiModel.Rp2350Round));
         Assert.True(UiModel.Rp2350Round.IsRound() && UiModel.Esp32Round.IsRound() && !UiModel.Rp2040Rect.IsRound());
         Assert.Equal(1, UiModel.Rp2040Rect.ClipPage());
-        Assert.Equal(0, UiModel.Rp2350Round.ClipPage());
-        Assert.Equal(2, UiModel.Rp2350Round.PageCount());
-        Assert.Equal(3, UiModel.Esp32Round.PageCount());
+        Assert.Equal(1, UiModel.Rp2350Round.ClipPage());
+        Assert.Equal(3, UiModel.Rp2350Round.PageCount());
+        Assert.Equal(4, UiModel.Esp32Round.PageCount());
     }
 
     [Fact]

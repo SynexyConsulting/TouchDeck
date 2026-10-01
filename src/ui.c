@@ -57,12 +57,9 @@ static ui_state_t st;   // what this frame draws
 // when core0 bumps redraw_seq): the jiggler's dot (a small box around its old
 // and new positions) plus its status lines, or the clipboard's progress line.
 #ifdef TD_ROUND
-// Round board (RP2350): the ESP32-C3's round pages. No watch page, so the watch
-// paths below are dead code; the whole clipboard page repaints while pasting
-// (as on the ESP32-C3), and the jiggler status sits lower in the circle.
-#define SCR_WATCH (-1)
-static rect_t ui_hands_rect(int t) { (void)t; rect_t r = {0, 0, 0, 0}; return r; }
-static rect_t ui_stopwatch_rect(void) { rect_t r = {0, 0, 0, 0}; return r; }
+// Round board (RP2350): the ESP32-C3's round pages, with the round watch (its hands
+// and stopwatch boxes come from round/ui_pages.c). The whole clipboard page repaints
+// while pasting (as on the ESP32-C3), and the jiggler status sits lower in the circle.
 static const rect_t JIG_STATUS = {0, 180, LCD_W, 34};
 static const rect_t CLIP_ANIM = {0, 0, LCD_W, LCD_H};
 #else

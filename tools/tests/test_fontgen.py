@@ -83,6 +83,7 @@ LABELS = [
     ("font_body", "Right-click, wait, Esc", 170, 0),           # round hint, y 202
     ("font_body", "Right-click, wait, F15", 170, 0),
     ("font_body", "Right-click, wait, Esc, pause", 196, 0),    # rect hint, y 240
+    ("font_caps", "TIME FROM PC", 150, 1),                     # round watch before the app sends TIME, y 82
 ]
 
 @pytest.mark.parametrize("font,text,avail,spacing", LABELS)

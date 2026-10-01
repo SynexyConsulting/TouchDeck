@@ -35,3 +35,7 @@ TDUI_API void tdui_render(const ui_state_t *s, uint16_t *out) {
 
 TDUI_API int tdui_state_line(const ui_state_t *s, char *out, int n) { return ui_sync_state_line(s, out, n); }
 TDUI_API int tdui_clip_line(const char *clip, int len, char *out, int n) { return ui_sync_clip_line(clip, len, out, n); }
+
+static void put_rect(rect_t r, int *xywh) { xywh[0] = r.x; xywh[1] = r.y; xywh[2] = r.w; xywh[3] = r.h; }
+TDUI_API void tdui_hands_rect(int t, int *xywh) { put_rect(ui_hands_rect(t), xywh); }
+TDUI_API void tdui_stopwatch_rect(int *xywh) { put_rect(ui_stopwatch_rect(), xywh); }

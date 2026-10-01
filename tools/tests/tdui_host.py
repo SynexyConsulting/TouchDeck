@@ -62,6 +62,15 @@ class Renderer:
         self.lib.tdui_clip_line.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
         self.w, self.h = self.lib.tdui_width(), self.lib.tdui_height()
 
+    def lib_rect(self, which, t=0):
+        """The firmware's watch partial-redraw box (x, y, w, h): "hands" at time t or "stopwatch"."""
+        out = (ctypes.c_int * 4)()
+        if which == "hands":
+            self.lib.tdui_hands_rect(t, out)
+        else:
+            self.lib.tdui_stopwatch_rect(out)
+        return tuple(out)
+
     def render(self, st):
         buf = (ctypes.c_uint16 * (self.w * self.h))()
         self.lib.tdui_render(ctypes.byref(st), buf)
