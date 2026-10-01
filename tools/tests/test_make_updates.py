@@ -65,6 +65,22 @@ def test_app_release_replaces_only_the_app(tmp_path):
     assert feed["app"]["macos"] == {"version": "0.1.0"}
 
 
+def test_mac_release_replaces_only_the_mac_app(tmp_path):
+    """The Mac app (app.macos) has its own version line; a Mac release leaves Windows alone."""
+    prev = {"schema": 1, "app": {"windows": {"version": "1.3.0"}}, "firmware": []}
+    mac = mu.entry(blob(tmp_path, "TouchDeck-0.2.0.pkg", b"m"), "0.2.0", "app-v1.4.0")
+    feed = mu.merge(prev, app_windows=None, firmware=[], published="p", app_macos=mac)
+    assert feed["app"]["windows"] == {"version": "1.3.0"}
+    assert feed["app"]["macos"]["url"] == BASE + "app-v1.4.0/TouchDeck-0.2.0.pkg"
+
+
+def test_mac_app_never_goes_backwards(tmp_path):
+    prev = {"schema": 1, "app": {"macos": {"version": "0.3.0"}}, "firmware": []}
+    mac = mu.entry(blob(tmp_path, "m.pkg", b"m"), "0.2.0", "app-v1.4.0")
+    with pytest.raises(ValueError, match="macos"):
+        mu.merge(prev, app_windows=None, firmware=[], published="p", app_macos=mac)
+
+
 def test_never_goes_backwards(tmp_path):
     prev = {"schema": 1, "app": {"windows": {"version": "1.3.0"}}, "firmware": []}
     app = mu.entry(blob(tmp_path, "a.msi", b"a"), "1.2.0", "app-v1.2.0")

@@ -2,8 +2,9 @@
 
 Run with the Python that has Pillow:  python macos-app/tools/make_icons.py
 - AppIcon: the Windows app icon (windows-app/tools/make_icons.py draw()) at the Mac sizes.
-- MenuBarIcon / MenuBarIconBad: template images (black + alpha only; macOS tints them for
-  the light or dark menu bar). The same "T" lane with its dot, drawn as a solid shape.
+- MenuBarIcon / MenuBarIconIdle / MenuBarIconBad: template images (black + alpha only; macOS
+  tints them for the light or dark menu bar). The same "T" lane with its dot, drawn as a solid
+  shape; the three states of the Windows tray icon (connected, looking, port busy / no answer).
 """
 import json
 import os
@@ -20,9 +21,10 @@ INK = (0, 0, 0, 255)
 CLEAR = (0, 0, 0, 0)
 
 
-def template(px, bad=False):
+def template(px, bad=False, idle=False):
     """The menu bar glyph at px x px (18 pt at 1x and 2x): rounded-square outline, solid T,
-    the jiggler dot punched out of the bar's right end. Bad: no dot, and a strike line."""
+    the jiggler dot punched out of the bar's right end. Bad: no dot, and a strike line.
+    Idle (no board yet): no dot, at half strength (template alpha draws it dimmer)."""
     s = 8
     n = px * s
     im = Image.new("RGBA", (n, n), CLEAR)
@@ -43,9 +45,11 @@ def template(px, bad=False):
     if bad:
         d.line([(n * 0.12, n * 0.12), (n * 0.88, n * 0.88)], fill=CLEAR, width=int(stroke * 2.2))
         d.line([(n * 0.12, n * 0.12), (n * 0.88, n * 0.88)], fill=INK, width=int(stroke))
-    else:
+    elif not idle:
         dr = bar * 0.28
         d.ellipse([right - dr, top - dr, right + dr, top + dr], fill=CLEAR)
+    if idle:
+        im.putalpha(im.getchannel("A").point(lambda a: a * 55 // 100))
     return im.resize((px, px), Image.LANCZOS)
 
 
@@ -89,6 +93,7 @@ if __name__ == "__main__":
     with open(os.path.join(ASSETS, "Contents.json"), "w", newline="\n") as f:
         json.dump({"info": {"author": "xcode", "version": 1}}, f, indent=2)
     imageset("MenuBarIcon", [(1, template(18)), (2, template(36))])
+    imageset("MenuBarIconIdle", [(1, template(18, idle=True)), (2, template(36, idle=True))])
     imageset("MenuBarIconBad", [(1, template(18, bad=True)), (2, template(36, bad=True))])
     app_icon()
     colors = os.path.join(ASSETS, "AccentColor.colorset")

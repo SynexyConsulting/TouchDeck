@@ -196,8 +196,17 @@ public final class UpdateService {
         return dest
     }
 
-    /// Opens the verified package in Installer; the app quits so Installer can replace it.
-    public static func launchInstaller(_ pkg: URL) {
-        NSWorkspace.shared.open(pkg)
+    /// Opens the verified package in Installer; the app quits so Installer can replace it. A detached
+    /// shell waits for Installer to close and opens Touch Deck again (the Windows app restarts
+    /// after msiexec the same way); a cancelled install just reopens the old version.
+    public static func launchInstaller(_ pkg: URL, relaunch bundleID: String? = Bundle.main.bundleIdentifier) {
+        guard let bundleID else { NSWorkspace.shared.open(pkg); return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", relaunchScript, "touchdeck-update", pkg.path, bundleID]
+        do { try p.run() } catch { NSWorkspace.shared.open(pkg) }
     }
+
+    /// $1 the package, $2 the bundle id. `open -W` returns once Installer quits.
+    static let relaunchScript = #"/usr/bin/open -W "$1" && sleep 1; /usr/bin/open -b "$2""#
 }

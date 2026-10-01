@@ -45,16 +45,19 @@ def entry(path, version, tag):
     return {"version": version, "url": BASE + tag + "/" + os.path.basename(path), "sha256": h.hexdigest(), "size": size}
 
 
-def merge(previous, app_windows, firmware, published):
-    """previous: the last feed (or None). app_windows: new Windows app entry or None.
-    firmware: new entries, each with a "board". Returns the complete new feed."""
+def merge(previous, app_windows, firmware, published, app_macos=None):
+    """previous: the last feed (or None). app_windows / app_macos: new app entry per OS, or None
+    (the two apps have their own version numbers). firmware: new entries, each with a "board".
+    Returns the complete new feed."""
     prev = previous or {}
     apps = dict(prev.get("app") or {})
-    if app_windows:
-        old = apps.get("windows")
-        if old and version_tuple(app_windows["version"]) < version_tuple(old["version"]):
-            raise ValueError(f"app {app_windows['version']} is older than the published {old['version']}")
-        apps["windows"] = app_windows
+    for os_name, new in (("windows", app_windows), ("macos", app_macos)):
+        if not new:
+            continue
+        old = apps.get(os_name)
+        if old and version_tuple(new["version"]) < version_tuple(old["version"]):
+            raise ValueError(f"{os_name} app {new['version']} is older than the published {old['version']}")
+        apps[os_name] = new
     boards = {f["board"]: f for f in (prev.get("firmware") or [])}
     for f in firmware:
         if not BOARD.match(f["board"]):

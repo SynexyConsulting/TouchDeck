@@ -2,6 +2,7 @@
 
     TOUCHDECK_UPDATES_TOKEN=... python tools/publish_release.py --tag app-v1.2.0 \\
         --app-windows windows-app/out/TouchDeck-1.2.0.msi --app-version 1.2.0 \\
+        [--app-macos TouchDeck-0.2.0.pkg --app-macos-version 0.2.0] \\
         --firmware rp2040-169=1.6.0=windows-app/firmware/rp2040-169.uf2 \\
         --key-file ~/.touchdeck/feed-signing-key.pem [--dry-run]
 
@@ -137,6 +138,8 @@ def main():
     ap.add_argument("--notes", default="")
     ap.add_argument("--app-windows", metavar="MSI")
     ap.add_argument("--app-version")
+    ap.add_argument("--app-macos", metavar="PKG", help="signed, notarized macOS installer package")
+    ap.add_argument("--app-macos-version", help="the Mac app's own version (CFBundleShortVersionString)")
     ap.add_argument("--firmware", action="append", default=[], metavar="BOARD=VERSION=PATH")
     ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "touchdeck-release"))
     ap.add_argument("--key-file", help="PEM signing key (else TOUCHDECK_FEED_KEY)")
@@ -158,6 +161,15 @@ def main():
         shutil.copyfile(a.app_windows, dst)
         app = mu.entry(dst, a.app_version, tag)
         files.append(dst)
+    app_mac = None
+    if a.app_macos:
+        if not a.app_macos_version:
+            sys.exit("--app-macos-version is required with --app-macos")
+        name = f"TouchDeck-{a.app_macos_version}.pkg"
+        dst = os.path.join(a.out, name)
+        shutil.copyfile(a.app_macos, dst)
+        app_mac = mu.entry(dst, a.app_macos_version, tag)
+        files.append(dst)
     firmware = []
     for spec in a.firmware:
         board, version, path = spec.split("=", 2)
@@ -171,7 +183,7 @@ def main():
         sys.exit("Nothing to publish.")
 
     published = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    feed = mu.merge(previous_feed(), app_windows=app, firmware=firmware, published=published)
+    feed = mu.merge(previous_feed(), app_windows=app, firmware=firmware, published=published, app_macos=app_mac)
     feed_path = os.path.join(a.out, "updates.json")
     feed_bytes = mu.dumps(feed).encode("utf-8")
     with open(feed_path, "wb") as f:

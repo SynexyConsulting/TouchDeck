@@ -43,7 +43,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         // A template image: macOS draws it black or white to suit the menu bar.
-        Image(health == .bad ? "MenuBarIconBad" : "MenuBarIcon")
+        Image(health == .bad ? "MenuBarIconBad" : health == .ok ? "MenuBarIcon" : "MenuBarIconIdle")
             .onAppear {
                 AppDelegate.openMain = {
                     openWindow(id: "main")

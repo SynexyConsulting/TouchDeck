@@ -7,20 +7,21 @@ import TouchDeckCore
 /// DIR/smoke.txt (what the app detected), and quit. `--smoke-steps` also drives the board and saves
 /// the device view after each step: mirror-jig.png, mirror-anim1/2.png (ANIM 1: the dot moves, no
 /// HID) and mirror-clip.png (a clip sent from the app), ending on the clipboard page.
+/// `--smoke-check-updates` also checks the official feed and adds the outcome to smoke.txt.
 @MainActor
 enum Smoke {
     static func runIfRequested(_ app: AppController) {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--smoke"), i + 1 < args.count else { return }
         let dir = URL(fileURLWithPath: args[i + 1])
-        let steps = args.contains("--smoke-steps")
+        let steps = args.contains("--smoke-steps"), updates = args.contains("--smoke-check-updates")
         Task { @MainActor in
-            await run(app, dir: dir, steps: steps)
+            await run(app, dir: dir, steps: steps, updates: updates)
             NSApp.terminate(nil)
         }
     }
 
-    private static func run(_ app: AppController, dir: URL, steps: Bool) async {
+    private static func run(_ app: AppController, dir: URL, steps: Bool, updates: Bool) async {
         AppDelegate.showMainWindow()
         let deadline = Date().addingTimeInterval(10)
         while !app.isConnected && Date() < deadline { try? await Task.sleep(for: .milliseconds(200)) }
@@ -33,6 +34,14 @@ enum Smoke {
             .environment(\.colorScheme, .dark))
         settings.scale = 2
         if let img = settings.cgImage { writePNG(img, dir.appendingPathComponent("settings.png")) }
+        var updateLines: [String] = []
+        if updates {
+            let o = await app.checkForUpdates(manual: true)
+            updateLines = ["update_error=\(o.error ?? "")", "update_nothing=\(o.nothingPublished)",
+                           "offer_app=\(o.choice?.app.map { "\($0.version)" } ?? "")",
+                           "offer_fw=\(o.choice?.firmware.map { "\($0.board) \($0.version)" } ?? "")",
+                           "app_text=\(app.appUpdateText)", "fw_text=\(app.firmwareUpdateText)"]
+        }
         let lines = [
             "app=\(AppController.appVersion)",
             "status=\(app.state.status)",
@@ -51,7 +60,7 @@ enum Smoke {
             "offer=\(app.updateText)",
             "accessibility=\(app.accessibilityTrusted)",
             "exe=\(Bundle.main.executablePath ?? "")",
-        ]
+        ] + updateLines
         try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("smoke.txt"), atomically: true, encoding: .utf8)
     }
 
