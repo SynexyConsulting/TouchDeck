@@ -71,7 +71,7 @@ It lives in the public repo `SynexyConsulting/TouchDeckUpdates`. The app reads i
   - tag `fw-v*`: builds and publishes the firmware only;
   - `workflow_dispatch` for a dry run that uploads artefacts only.
 - **Jobs:**
-  - `firmware` on `ubuntu-latest`: Pico SDK 2.1.1, `gcc-arm-none-eabi`, cmake/ninja → `watch.uf2`; PlatformIO → ESP32 `firmware.bin`, kept as an artefact but not published until it has been run on hardware.
+  - `firmware` on `ubuntu-24.04`: Pico SDK 2.1.1, Arm GNU Toolchain 14.2.Rel1 (pinned by SHA-256; Ubuntu's GCC 13 drew the UI 10-30% slower), cmake/ninja → `watch.uf2`; PlatformIO → ESP32 `firmware.bin`, kept as an artefact but not published until it has been run on hardware.
   - `app` on `windows-latest`, needs `firmware`: puts the UF2 into `windows-app/firmware`, runs `dotnet test` and the host C tests (MSVC is on the runner; the board tests skip), `build.ps1` → MSI.
   - `publish`: `tools/publish_release.py` creates the release in the public repo, uploads the files, builds `updates.json` by merging the previous latest feed (`tools/make_updates.py`), and uploads it.
 - **Version check:** the tag must equal `FW_VERSION` (`fw-v`) or `<Version>` (`app-v`), or the job fails.
