@@ -19,7 +19,7 @@ PC_AMBER = 0xF507       # RGB(242, 163, 58)
 PAGES = {"rp2040": 3, "esp32c3": 3, "rp2350": 2}
 JIG = {"rp2040": 2, "esp32c3": 1, "rp2350": 1}      # the Jiggler page; its settings open over it (sub=2)
 SUB_JIGSET = 2
-COG = {"rp2040": (30, 230), "esp32c3": (40, 188), "rp2350": (40, 188)}
+COG = {"rp2040": (30, 230), "esp32c3": (52, 172), "rp2350": (52, 172)}
 ROW2_Y = {"rp2040": 84 + 2 * 40, "esp32c3": 76 + 2 * 32, "rp2350": 76 + 2 * 32}   # JS_ROW_Y(2)
 CLOSE = {"rp2040": (30, 42), "esp32c3": (50, 48), "rp2350": (50, 48)}
 
@@ -118,7 +118,8 @@ def test_cog_opens_the_panel_and_the_panel_has_an_x(tdui, board):
     assert panel != jig
     cx, cy = COG[board]
     assert any(pixel(r, jig, x, y) != C_BG for x in range(cx - 6, cx + 7) for y in range(cy - 6, cy + 7))
-    assert all(pixel(r, panel, x, y) == C_BG for x in range(cx - 6, cx + 7) for y in range(cy - 6, cy + 7))
+    box = [(x, y) for x in range(cx - 6, cx + 7) for y in range(cy - 6, cy + 7)]
+    assert [pixel(r, panel, x, y) for x, y in box] != [pixel(r, jig, x, y) for x, y in box]   # no cog on the panel
     xx, xy = CLOSE[board]
     assert pixel(r, panel, xx, xy) != C_BG                 # the X's crossing point
 

@@ -56,8 +56,8 @@ void ui_state_fill(ui_state_t *s, bool with_clip);
 #define JS_HIT_PAD   6
 #define JS_CLOSE_CX  50           // the X that closes the panel, left of the title
 #define JS_CLOSE_CY  48
-#define JIG_COG_CX   40           // the cog on the Jiggler page (lower left) that opens it
-#define JIG_COG_CY   188
+#define JIG_COG_CX   52           // the cog on the Jiggler page (lower left) that opens it,
+#define JIG_COG_CY   172          // clear of the circle's edge and the scale pill
 #define JS_ICON_HIT  20           // half-size of the cog's and the X's tap squares
 
 // Settings: output toggle segments and the Bluetooth row

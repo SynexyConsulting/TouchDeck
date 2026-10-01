@@ -85,7 +85,7 @@ def test_jiggler_settings_page_is_pixel_identical(mirror):
     start = None
     try:
         settle(mirror, 1, 1.0)
-        mirror.b.send("TAP 40 188"); mirror.pump(0.6)      # open the panel
+        mirror.b.send("TAP 52 172"); mirror.pump(0.6)      # open the panel
         assert mirror.st.sub == 2
         start = (mirror.st.jig_menu_on, mirror.st.jig_key, mirror.st.jig_open_s, mirror.st.jig_pause_s)
         for cfg in ("1 0 2 0", "0 1 17 9"):

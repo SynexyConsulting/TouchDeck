@@ -226,7 +226,7 @@ def test_jiggler_settings_page_taps(board):
         board.send("JIG CFG 1 0 2 0"); board.pump(0.3)
         board.goto(1)
         assert board.field("screen") == "1" and board.field("jset") == "0"
-        board.send("TAP 40 188"); board.pump(0.25)            # the cog opens the panel
+        board.send("TAP 52 172"); board.pump(0.25)            # the cog opens the panel
         assert board.field("jset") == "1"
         def tap(xy):
             board.send("TAP %d %d" % xy); board.pump(0.25)
@@ -247,7 +247,7 @@ def test_jiggler_settings_page_taps(board):
         assert cfg()[3] == "0"
         board.send("TAP 50 48"); board.pump(0.25)        # X closes it
         assert board.field("jset") == "0" and board.field("screen") == "1"
-        board.send("TAP 40 188"); board.pump(0.25)
+        board.send("TAP 52 172"); board.pump(0.25)
         board.send("SWIPE R"); board.pump(0.25)                        # so does a right swipe
         assert board.field("jset") == "0" and board.field("screen") == "1"
     finally:
