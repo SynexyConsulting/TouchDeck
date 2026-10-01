@@ -46,29 +46,59 @@ public class MirrorProtocolTests
 
 public class MirrorRendererTests
 {
-    public static TheoryData<BoardKind> Boards => [BoardKind.Rp2040, BoardKind.Esp32C3];
+    public static TheoryData<UiModel> Models => [UiModel.Rp2040Rect, UiModel.Esp32Round, UiModel.Rp2350Round];
 
     [Theory]
-    [MemberData(nameof(Boards))]
-    public void Renderer_loads_and_matches_the_struct_layout(BoardKind kind)
+    [MemberData(nameof(Models))]
+    public void Renderer_loads_and_matches_the_struct_layout(UiModel model)
     {
-        Assert.True(NativeUi.Available(kind, out var error), error);
+        Assert.True(NativeUi.Available(model, out var error), error);
         Assert.Equal(1248, UiState.Size);
     }
 
     [Theory]
-    [MemberData(nameof(Boards))]
-    public void Each_page_renders_differently(BoardKind kind)
+    [MemberData(nameof(Models))]
+    public void Each_page_renders_differently(UiModel model)
     {
-        var frames = Enumerable.Range(0, 3).Select(p => NativeUi.Render(kind, new UiState { Screen = p, LinkOk = 1 })).ToList();
-        var (w, h) = NativeUi.Size(kind);
+        int pages = model.PageCount();
+        var frames = Enumerable.Range(0, pages).Select(p => NativeUi.Render(model, new UiState { Screen = p, LinkOk = 1 })).ToList();
+        var (w, h) = NativeUi.Size(model);
         Assert.All(frames, f => Assert.Equal(w * h, f.Length));
-        Assert.Equal(3, frames.Select(f => string.Join(",", f)).Distinct().Count());
+        Assert.Equal(pages, frames.Select(f => string.Join(",", f)).Distinct().Count());
     }
 
     [Theory]
-    [MemberData(nameof(Boards))]
-    public void State_line_round_trips_through_the_parser(BoardKind kind)
+    [InlineData(BoardKind.Rp2040, "rp2040-169", UiModel.Rp2040Rect)]
+    [InlineData(BoardKind.Rp2040, "?", UiModel.Rp2040Rect)]            // pre-VER firmware: all RP2040 1.69
+    [InlineData(BoardKind.Rp2040, null, UiModel.Rp2040Rect)]
+    [InlineData(BoardKind.Rp2040, "rp2350-128", UiModel.Rp2350Round)]  // same USB ID, told apart by VER
+    [InlineData(BoardKind.Esp32C3, "esp32c3-128", UiModel.Esp32Round)]
+    public void The_model_comes_from_the_board_VER_reports(BoardKind kind, string? board, UiModel expected) =>
+        Assert.Equal(expected, UiModels.For(kind, board));
+
+    [Fact]
+    public void Round_boards_are_240_square_and_start_on_the_clipboard()
+    {
+        Assert.Equal((240, 280), NativeUi.Size(UiModel.Rp2040Rect));
+        Assert.Equal((240, 240), NativeUi.Size(UiModel.Rp2350Round));
+        Assert.True(UiModel.Rp2350Round.IsRound() && UiModel.Esp32Round.IsRound() && !UiModel.Rp2040Rect.IsRound());
+        Assert.Equal(1, UiModel.Rp2040Rect.ClipPage());
+        Assert.Equal(0, UiModel.Rp2350Round.ClipPage());
+        Assert.Equal(2, UiModel.Rp2350Round.PageCount());
+        Assert.Equal(3, UiModel.Esp32Round.PageCount());
+    }
+
+    [Fact]
+    public void The_round_rp2350_page_is_not_the_esp32_page()
+    {
+        // Same round layout, but a USB chip and two page dots instead of PC and three.
+        var s = new UiState { Screen = 0, LinkOk = 1 };
+        Assert.NotEqual(NativeUi.Render(UiModel.Esp32Round, s), NativeUi.Render(UiModel.Rp2350Round, s));
+    }
+
+    [Theory]
+    [MemberData(nameof(Models))]
+    public void State_line_round_trips_through_the_parser(UiModel model)
     {
         var rnd = new Random(5);
         for (int i = 0; i < 40; i++)
@@ -83,8 +113,8 @@ public class MirrorRendererTests
                 JigX = rnd.Next(1001), JigY = rnd.Next(1001), JigNextS = rnd.Next(200), JigUpS = rnd.Next(99999),
                 JigMenus = (uint)rnd.Next(999),
             };
-            var line = NativeUi.StateLine(kind, s);
-            var mirror = new MirrorState(kind);
+            var line = NativeUi.StateLine(model, s);
+            var mirror = new MirrorState(model);
             Assert.True(mirror.Apply(BoardLine.Parse(line)));
             Assert.True(mirror.Complete);
             var back = mirror.State;
@@ -102,15 +132,15 @@ public class MirrorRendererTests
     [Fact]
     public void Text_and_clip_lines_change_the_render()
     {
-        var m = new MirrorState(BoardKind.Rp2040);
+        var m = new MirrorState(UiModel.Rp2040Rect);
         m.Apply(BoardLine.Parse("STATE jig=0 letter=O scale=0 phase=0 x=0 y=0 clip=5 paste=0 page=1 link=1"));
-        var before = NativeUi.Render(m.Kind, m.State);
+        var before = NativeUi.Render(m.Model, m.State);
         Assert.True(m.Apply(BoardLine.Parse("CLIPTEXT hello")));
-        var withText = NativeUi.Render(m.Kind, m.State);
+        var withText = NativeUi.Render(m.Model, m.State);
         Assert.NotEqual(before, withText);
         Assert.True(m.Apply(BoardLine.Parse("TEXT msg Copied 5 chars")));
         Assert.Equal("Copied 5 chars", m.Message);
-        Assert.NotEqual(withText, NativeUi.Render(m.Kind, m.State));
+        Assert.NotEqual(withText, NativeUi.Render(m.Model, m.State));
         Assert.False(m.Apply(BoardLine.Parse("TEXT nope x")));
         Assert.False(m.Apply(new Pong()));
     }
@@ -118,9 +148,10 @@ public class MirrorRendererTests
     [Fact]
     public void Letter_names_map_to_the_renderers_order()
     {
-        Assert.Equal(0, NativeUi.LetterIndex(BoardKind.Rp2040, 'O'));
-        Assert.True(NativeUi.LetterIndex(BoardKind.Esp32C3, 'W') > 0);
-        Assert.Equal(-1, NativeUi.LetterIndex(BoardKind.Rp2040, '?'));
+        Assert.Equal(0, NativeUi.LetterIndex(UiModel.Rp2040Rect, 'O'));
+        Assert.True(NativeUi.LetterIndex(UiModel.Esp32Round, 'W') > 0);
+        Assert.True(NativeUi.LetterIndex(UiModel.Rp2350Round, 'W') > 0);
+        Assert.Equal(-1, NativeUi.LetterIndex(UiModel.Rp2040Rect, '?'));
     }
 }
 
@@ -180,4 +211,15 @@ public class MirrorSessionTests
         Assert.Equal([new TextField("msg", "Copied 5 chars ")], texts);
         Assert.Equal("hi\n", Encoding.ASCII.GetString(clips.Single().Bytes));
     }
+}
+
+public class BoardNameTests
+{
+    [Theory]
+    [InlineData(BoardKind.Rp2040, null, "RP2040 Touch Deck")]
+    [InlineData(BoardKind.Rp2040, "rp2040-169", "RP2040 Touch Deck")]
+    [InlineData(BoardKind.Rp2040, "rp2350-128", "RP2350 Touch Deck (round)")]   // same USB ID: named by VER
+    [InlineData(BoardKind.Esp32C3, "esp32c3-128", "ESP32-C3 Touch Deck")]
+    public void Boards_are_named_by_the_model_they_report(BoardKind kind, string? board, string name) =>
+        Assert.Equal(name, BoardKinds.DisplayName(kind, board));
 }

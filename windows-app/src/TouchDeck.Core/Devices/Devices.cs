@@ -33,6 +33,10 @@ public static class BoardKinds
         BoardKind.Esp32C3 => "ESP32-C3 Touch Deck",
         _ => kind.ToString(),
     };
+
+    /// <summary>The name for a connected board, using the model VER reported: both RP boards are CAFE:4011.</summary>
+    public static string DisplayName(BoardKind kind, string? board) =>
+        board == "rp2350-128" ? "RP2350 Touch Deck (round)" : DisplayName(kind);
 }
 
 public readonly record struct UsbId(int Vid, int Pid)

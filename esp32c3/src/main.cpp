@@ -138,7 +138,7 @@ static void on_touch(const touch_event_t &e) {
 
     switch (e.type) {
     case EV_SWIPE_L:
-        if (app.screen < SCR_COUNT - 1) { app.screen++; app_redraw(); }
+        if (app.screen < UI_PAGE_COUNT - 1) { app.screen++; app_redraw(); }
         return;
     case EV_SWIPE_R:
         if (app.screen > 0) { app.screen--; app_redraw(); }

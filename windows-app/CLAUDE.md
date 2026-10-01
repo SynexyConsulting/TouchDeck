@@ -23,7 +23,7 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
   - `Input/`: USB HID usage → scancode `Injector`, `SendInputSink`, and the dry-run `SwitchableSink`.
   - `Selection/`: UIA TextPattern with a 1.5 s time box, then the Win32 clipboard.
   - `App/`: settings, RAM-only clip history, HKCU Run autostart.
-  - `Firmware/`: manifest, UF2 validation, update flow.
+  - `Firmware/`: manifest, UF2 validation (`Uf2.Inspect`: chip from family IDs, board from the `TDBOARD:` marker, payload reassembled by address), update flow, and new-board onboarding (`Onboarding.cs`).
 - **`DeviceSession`** is single-threaded. `Run()` owns the transport on a worker thread; other threads only queue requests (`SendText`, `Swipe`, `PressButton`, `RequestBootloader`). `Run`'s `finally` always calls `Injector.ReleaseAll()`, so keep it that way. Lines read while waiting for a handshake reply are held and processed later, never dropped.
 - **Device mirror (firmware 1.7.0+):** the main window's left column is the board itself.
   - `Core/Mirror`:
@@ -51,6 +51,18 @@ src\TouchDeck.App\bin\Debug\net8.0-windows\TouchDeck.exe --smoke <dir>   # snaps
   - The dispatcher backstop keeps the app running only once the main window exists. An exception during startup is not swallowed, because a windowless app would look alive and do nothing.
   - WPF event handlers must match the event's own args type, for example `MouseButtonEventArgs` for `MouseLeftButtonUp`. A mismatch fails in XAML at startup, not at compile time.
 - **Firmware update:** it counts as done only when a *new* session reports its version. The old session may not have noticed the reboot yet.
+- **Board models:** both RP boards are USB `CAFE:4011` (`BoardKind.Rp2040`), so anything model-specific uses the board `VER` reports.
+  - `UiModel` (`Rp2040Rect`, `Esp32Round`, `Rp2350Round`, via `UiModels.For(kind, board)`) picks the renderer DLL, size, round shape and clipboard page.
+  - `BoardKinds.DisplayName(kind, board)` names the round board.
+  - `BoardModels` lists what the app can flash: `rp2040-169`, `rp2350-128`.
+- **New boards:**
+  - `NewBoards.Scan()` (every 2 s while nothing is connected) finds Raspberry Pi USB IDs: stock SDK program `000A`/`0009`, bootloader `0003`/`000F`.
+  - The device card then offers **Install Touch Deck** with the chip's model. A model picker appears only if a chip has more than one.
+  - `FirmwareUpdater.InstallAsync(uf2, model, steps)` checks chip and model before touching the board. A pre-marker image counts only as `rp2040-169`.
+  - It reboots a stock program at 1200 baud, uses that chip's drive, and requires the board to come back as that model.
+  - Updates of either RP board go through it too.
+  - `build.ps1` bundles `../build-rp2350/deck128.uf2` as `rp2350-128` when it's built.
+- **Activity log:** scroll it via the dispatcher, never inside `LogLines.CollectionChanged`. The ListBox hasn't seen the new line yet, and WPF throws "ItemsControl is inconsistent". The crash backstop must never throw.
 - **Installer:** installs to `LocalAppDataFolder\Programs\Touch Deck`. `ProgramFiles6432Folder` does not redirect for `perUser`. The payload is harvested with `<Files>`, and the main exe is a named `File` so custom actions can reference it.
   - `--quit`, run from the new package on `WIX_UPGRADE_DETECTED`, closes a running copy before InstallValidate.
   - `--cleanup` runs on a real uninstall and also removes the Run entry.

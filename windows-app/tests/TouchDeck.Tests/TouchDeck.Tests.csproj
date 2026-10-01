@@ -14,6 +14,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Files captured from real boards (e.g. an RP2350 bootloader's INFO_UF2.TXT). -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\TouchDeck.Core\TouchDeck.Core.csproj" />
   </ItemGroup>
 </Project>

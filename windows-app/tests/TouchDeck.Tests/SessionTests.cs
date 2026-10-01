@@ -21,7 +21,8 @@ internal sealed class FakeTransport : ISerialTransport
         if (FailReads) throw new IOException("device unplugged");
         return Incoming.Count > 0 ? Incoming.Dequeue() : null;
     }
-    public void Dispose() { }
+    public bool Disposed { get; private set; }
+    public void Dispose() => Disposed = true;
 }
 
 internal sealed class FakeClock : IClock

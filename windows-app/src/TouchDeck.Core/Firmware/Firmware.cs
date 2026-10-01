@@ -29,40 +29,104 @@ public sealed record BundledFirmware(
     }
 }
 
+public enum Uf2Chip { Unknown, Rp2040, Rp2350 }
+
+/// <summary>What a firmware file is for: its chip (UF2 family IDs) and board (the TDBOARD marker, or null).</summary>
+public sealed record Uf2Info(bool Valid, Uf2Chip Chip, string? Board);
+
 public static class Uf2
 {
     private const uint Magic0 = 0x0A324655, Magic1 = 0x9E5D5157, MagicEnd = 0x0AB16F30;
     private const uint FlagFamilyId = 0x00002000;
     public const uint Rp2040Family = 0xE48BFF56;
+    public const uint Rp2350ArmSFamily = 0xE48BFF59;
+    /// <summary>SDK 2.x adds one block of this family to RP2350 images (a bootrom erratum workaround).</summary>
+    public const uint Rp2350AbsoluteFamily = 0xE48BFF57;
+    private static readonly byte[] Marker = "TDBOARD:"u8.ToArray();
 
     /// <summary>
-    /// True if every 512-byte block is a UF2 block for the RP2040. Checked before copying:
-    /// the bootloader silently ignores anything else and the board would just sit there.
+    /// Checks every 512-byte block and names the chip and board. Checked before copying: a bootloader
+    /// silently ignores blocks for another chip, and another board's firmware would show nothing useful.
+    /// Valid only if every block is well formed and all blocks are for one chip: RP2040, or RP2350
+    /// (ARM-S, plus the absolute block). The board comes from the firmware's "TDBOARD:&lt;model&gt;;"
+    /// marker, found in the payload reassembled by address, so a marker split across blocks counts.
     /// </summary>
-    public static bool IsRp2040Image(ReadOnlySpan<byte> image)
+    public static Uf2Info Inspect(ReadOnlySpan<byte> image)
     {
-        if (image.Length == 0 || image.Length % 512 != 0) return false;
+        var invalid = new Uf2Info(false, Uf2Chip.Unknown, null);
+        if (image.Length == 0 || image.Length % 512 != 0) return invalid;
+        int rp2040 = 0, rp2350 = 0, absolute = 0;
+        var payload = new SortedDictionary<uint, byte[]>();
         for (int off = 0; off < image.Length; off += 512)
         {
             var b = image.Slice(off, 512);
-            if (U32(b, 0) != Magic0 || U32(b, 4) != Magic1 || U32(b, 508) != MagicEnd) return false;
-            if ((U32(b, 8) & FlagFamilyId) == 0 || U32(b, 28) != Rp2040Family) return false;
+            if (U32(b, 0) != Magic0 || U32(b, 4) != Magic1 || U32(b, 508) != MagicEnd) return invalid;
+            if ((U32(b, 8) & FlagFamilyId) == 0) return invalid;
+            uint family = U32(b, 28), addr = U32(b, 12), size = U32(b, 16);
+            if (family == Rp2040Family) rp2040++;
+            else if (family == Rp2350ArmSFamily) rp2350++;
+            else if (family == Rp2350AbsoluteFamily) absolute++;
+            else return invalid;
+            if (size > 476) return invalid;
+            payload[addr] = b.Slice(32, (int)size).ToArray();
         }
-        return true;
+        if ((rp2040 > 0) == (rp2350 > 0)) return invalid;               // one chip, and some program
+        if (rp2040 > 0 && absolute > 0) return invalid;                 // no RP2350 blocks in an RP2040 image
+        return new Uf2Info(true, rp2040 > 0 ? Uf2Chip.Rp2040 : Uf2Chip.Rp2350, FindBoard(payload));
+    }
+
+    /// <summary>True if the image is a valid RP2040 image (any board).</summary>
+    public static bool IsRp2040Image(ReadOnlySpan<byte> image) => Inspect(image) is { Valid: true, Chip: Uf2Chip.Rp2040 };
+
+    // Joins address-contiguous blocks and looks for TDBOARD:<model>; in each run.
+    private static string? FindBoard(SortedDictionary<uint, byte[]> blocks)
+    {
+        var run = new List<byte>();
+        uint next = 0;
+        foreach (var (addr, data) in blocks)
+        {
+            if (run.Count > 0 && addr != next)
+            {
+                if (MarkerIn(run) is { } found) return found;
+                run.Clear();
+            }
+            run.AddRange(data);
+            next = addr + (uint)data.Length;
+        }
+        return MarkerIn(run);
+    }
+
+    private static string? MarkerIn(List<byte> run)
+    {
+        var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(run);
+        int at = span.IndexOf(Marker);
+        if (at < 0) return null;
+        var rest = span[(at + Marker.Length)..];
+        int end = rest.IndexOf((byte)';');
+        if (end <= 0 || end > 32) return null;
+        var name = System.Text.Encoding.ASCII.GetString(rest[..end]);
+        return name.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? name : null;
     }
 
     private static uint U32(ReadOnlySpan<byte> b, int at) => BitConverter.ToUInt32(b.Slice(at, 4));
 
-    /// <summary>The RP2040 bootloader's drive: a root holding INFO_UF2.TXT that names RPI-RP2.</summary>
-    public static string? FindBootDrive(IEnumerable<string> roots)
+    /// <summary>Board-ID in each chip's bootloader drive INFO_UF2.TXT.</summary>
+    private static string BootId(Uf2Chip chip) => chip == Uf2Chip.Rp2350 ? "RP2350" : "RPI-RP2";
+
+    /// <summary>An RP bootloader's drive: a root whose INFO_UF2.TXT names Board-ID RPI-RP2 (RP2040)
+    /// or RP2350; with <paramref name="chip"/>, only that chip's.</summary>
+    public static string? FindBootDrive(IEnumerable<string> roots, Uf2Chip chip = Uf2Chip.Unknown)
     {
+        string[] ids = chip == Uf2Chip.Unknown ? [BootId(Uf2Chip.Rp2040), BootId(Uf2Chip.Rp2350)] : [BootId(chip)];
         foreach (var root in roots)
         {
             try
             {
                 var info = Path.Combine(root, "INFO_UF2.TXT");
-                if (File.Exists(info) && File.ReadAllText(info).Contains("RPI-RP2", StringComparison.Ordinal))
-                    return root;
+                if (!File.Exists(info)) continue;
+                var id = File.ReadAllLines(info).Where(l => l.StartsWith("Board-ID:", StringComparison.Ordinal))
+                    .Select(l => l["Board-ID:".Length..].Trim()).FirstOrDefault();
+                if (id is not null && ids.Contains(id)) return root;
             }
             catch (IOException) { }                    // drive vanished mid-check
             catch (UnauthorizedAccessException) { }
@@ -82,6 +146,9 @@ public sealed class UpdateSteps
     public required Action<string, string> CopyImage { get; init; }
     /// <summary>The firmware running after the copy, or null while the board hasn't come back.</summary>
     public required Func<FirmwareInfo?> ReadRunningFirmware { get; init; }
+    /// <summary>The chip of any RP bootloader drive present (either chip), or null: used to explain a
+    /// board that rebooted into the other chip's bootloader.</summary>
+    public Func<Uf2Chip?>? BootloaderChip { get; init; }
     public TimeSpan PollEvery { get; init; } = TimeSpan.FromMilliseconds(250);
     public TimeSpan BootloaderTimeout { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan RebootTimeout { get; init; } = TimeSpan.FromSeconds(20);
@@ -91,14 +158,30 @@ public sealed record UpdateResult(bool Ok, string Message, FirmwareInfo? Running
 
 public static class FirmwareUpdater
 {
-    /// <summary>BOOT (unless already in the bootloader), copy the UF2, wait for the board to answer VER.</summary>
-    public static async Task<UpdateResult> UpdateRp2040Async(
-        string uf2Path, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default)
+    /// <summary>The RP2040 1.69 update (the app's original flow): <see cref="InstallAsync"/> for rp2040-169.</summary>
+    public static Task<UpdateResult> UpdateRp2040Async(
+        string uf2Path, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default) =>
+        InstallAsync(uf2Path, BoardModels.Find("rp2040-169")!, steps, progress, ct);
+
+    /// <summary>
+    /// Installs firmware for <paramref name="model"/>: checks the file is for that chip and board
+    /// (before touching the board), gets it into its bootloader unless already there, copies the UF2,
+    /// and waits for a Touch Deck of that model to answer VER.
+    /// </summary>
+    public static async Task<UpdateResult> InstallAsync(
+        string uf2Path, BoardModel model, UpdateSteps steps, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         byte[] image;
+        var name = Path.GetFileName(uf2Path);
         try { image = await File.ReadAllBytesAsync(uf2Path, ct); }
-        catch (IOException e) { return new(false, $"Can't read {Path.GetFileName(uf2Path)}: {e.Message}"); }
-        if (!Uf2.IsRp2040Image(image)) return new(false, $"{Path.GetFileName(uf2Path)} is not an RP2040 UF2 image.");
+        catch (IOException e) { return new(false, $"Can't read {name}: {e.Message}"); }
+        var info = Uf2.Inspect(image);
+        string chipName = model.Chip == Uf2Chip.Rp2350 ? "RP2350" : "RP2040";
+        if (!info.Valid || info.Chip != model.Chip) return new(false, $"{name} is not {chipName} firmware.");
+        // Firmware from before the model marker was always the RP2040 1.69's.
+        bool legacy = info.Board is null && model.Board == "rp2040-169";
+        if (info.Board != model.Board && !legacy)
+            return new(false, $"{name} is firmware for {info.Board ?? "an unknown board"}, not {model.Board}.");
 
         var drive = steps.FindBootDrive();
         if (drive is null)
@@ -106,18 +189,35 @@ public static class FirmwareUpdater
             progress?.Report("Rebooting the board into its bootloader...");
             steps.EnterBootloader();
             drive = await PollAsync(steps.FindBootDrive, steps.BootloaderTimeout, steps.PollEvery, ct);
+            if (drive is null && steps.BootloaderChip?.Invoke() is { } seen && seen != model.Chip)
+            {
+                var seenName = seen == Uf2Chip.Rp2350 ? "RP2350" : "RP2040";
+                return new(false, $"This is an {seenName} board, not the {model.Name}; it is waiting in its bootloader. " +
+                                  "Touch Deck will offer the right firmware for it.");
+            }
             if (drive is null)
-                return new(false, "The bootloader drive (RPI-RP2) did not appear. Hold BOOT while plugging the board in, then try again.");
+            {
+                var driveName = model.Chip == Uf2Chip.Rp2350 ? "RP2350" : "RPI-RP2";
+                return new(false, $"The bootloader drive ({driveName}) did not appear. Hold BOOT while plugging the board in, then try again.");
+            }
         }
 
         progress?.Report($"Copying firmware to {drive}...");
         steps.CopyImage(uf2Path, drive);
 
         progress?.Report("Waiting for the board to restart...");
-        var running = await PollAsync(steps.ReadRunningFirmware, steps.RebootTimeout, steps.PollEvery, ct);
-        return running is null
+        // Another RP board (also CAFE:4011) may answer first: keep waiting for this model.
+        FirmwareInfo? other = null;
+        var running = await PollAsync(() =>
+        {
+            var r = steps.ReadRunningFirmware();
+            if (r is not null && r.Board != model.Board) { other = r; return null; }
+            return r;
+        }, steps.RebootTimeout, steps.PollEvery, ct);
+        if (running is not null) return new(true, $"Installed: {running.Board} {running.Version}", running);
+        return other is null
             ? new(false, "Firmware copied, but the board did not come back as a Touch Deck.")
-            : new(true, $"Updated: {running.Board} {running.Version}", running);
+            : new(false, $"Firmware copied, but only {other.Board} answered, not {model.Board}.", other);
     }
 
     private static async Task<T?> PollAsync<T>(Func<T?> probe, TimeSpan timeout, TimeSpan every, CancellationToken ct) where T : class

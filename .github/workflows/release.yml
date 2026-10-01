@@ -61,6 +61,14 @@ jobs:
           ninja -C build
           mkdir -p dist && cp build/watch.uf2 dist/rp2040-169.uf2
 
+      - name: Build RP2350 round firmware (RP2350-Touch-LCD-1.28)
+        env:
+          PICO_SDK_PATH: ${{ runner.temp }}/pico-sdk
+        run: |
+          cmake -S . -B build-rp2350 -G Ninja -DCMAKE_BUILD_TYPE=Release -DTD_BOARD=rp2350_128
+          ninja -C build-rp2350
+          cp build-rp2350/deck128.uf2 dist/rp2350-128.uf2
+
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -119,8 +127,11 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item dist/rp2040-169.uf2 windows-app/firmware/rp2040-169.uf2 -Force
+          Copy-Item dist/rp2350-128.uf2 windows-app/firmware/rp2350-128.uf2 -Force
           $v = (Select-String -Path src/version.h -Pattern '#define FW_VERSION\s+"([^"]+)"').Matches[0].Groups[1].Value
-          Set-Content -Path windows-app/firmware/manifest.json -Encoding ascii -Value "[`n  { `"board`": `"rp2040-169`", `"version`": `"$v`", `"file`": `"rp2040-169.uf2`" }`n]"
+          Set-Content -Path windows-app/firmware/manifest.json -Encoding ascii -Value ("[`n" +
+            "  { `"board`": `"rp2040-169`", `"version`": `"$v`", `"file`": `"rp2040-169.uf2`" },`n" +
+            "  { `"board`": `"rp2350-128`", `"version`": `"$v`", `"file`": `"rp2350-128.uf2`" }`n]")
           cd windows-app
           ./build.ps1
 
@@ -152,7 +163,8 @@ jobs:
           # Strict tag format before the name is used anywhere (git allows ; $ ( in tag names).
           [[ "$GITHUB_REF_NAME" =~ ^(app|fw)-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag"; exit 1; }
           fw=$(sed -n 's/^#define FW_VERSION *"\([0-9.]*\)".*/\1/p' src/version.h)
-          args=(--tag "$GITHUB_REF_NAME" --firmware "rp2040-169=$fw=artifacts/firmware/rp2040-169.uf2")
+          args=(--tag "$GITHUB_REF_NAME" --firmware "rp2040-169=$fw=artifacts/firmware/rp2040-169.uf2"
+                --firmware "rp2350-128=$fw=artifacts/firmware/rp2350-128.uf2")
           if [[ "$GITHUB_REF_NAME" == app-v* ]]; then
             ver="${GITHUB_REF_NAME#app-v}"
             args+=(--app-windows "artifacts/msi/TouchDeck-$ver.msi" --app-version "$ver" --title "Touch Deck $ver")

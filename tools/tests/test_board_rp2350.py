@@ -1,0 +1,137 @@
+"""Drives the round RP2350 1.28" Touch Deck (USB CAFE:4011, VER rp2350-128) over
+its serial port. Pages: 0 Clipboard, 1 Jiggler (no watch, no buzzer). Tap
+coordinates come from src/round/ui.h (the ESP32-C3's round layout)."""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
+import serial
+from touchdeck import find_board
+from test_board_pc_mode import Board
+
+PORT = find_board("rp2350-128")
+pytestmark = pytest.mark.skipif(PORT is None, reason="RP2350 round Touch Deck not connected")
+
+CLIP, JIG = 0, 1
+TRASH = (178, 42)          # TRASH_CX, TRASH_CY
+SCALE_PILL = (32, 120)     # SCALE_PILL_X 10 + 44/2, PILL_Y 111 + 18/2
+LETTER = (120, 115)        # JIG_BOX_X 82 + 76/2, JIG_BOX_Y 77 + 76/2
+
+
+@pytest.fixture
+def board():
+    try:
+        b = Board(PORT)
+    except serial.SerialException as e:
+        pytest.skip(f"{PORT} is busy (quit the Touch Deck app): {e}")
+    try:
+        yield b
+    finally:
+        b.s.close()
+
+
+def put_clip(board, text):
+    board.send(f"CLIP {len(text)} test"); board.s.write(text.encode()); board.pump(0.3)
+
+
+def state_lines(board, secs):
+    board.take(); board.pump(secs)
+    return [l for l in board.take() if l.startswith("STATE ")]
+
+
+def fields(line):
+    return dict(kv.split("=", 1) for kv in line.split()[1:])
+
+
+def test_ver_reports_the_round_board(board):
+    board.take(); board.send("VER"); board.pump(0.4)
+    replies = [l for l in board.take() if l.startswith("VERSION ")]
+    assert replies and replies[-1].split()[1] == "rp2350-128"
+
+
+def test_two_pages_and_swipes_stop_at_the_ends(board):
+    board.goto(CLIP)
+    assert board.field("screen") == "0"
+    board.send("SWIPE R"); board.pump(0.2)
+    assert board.field("screen") == "0"
+    board.send("SWIPE L"); board.pump(0.2)
+    assert board.field("screen") == "1"
+    board.send("SWIPE L"); board.pump(0.2)             # no third page
+    assert board.field("screen") == "1"
+
+
+def test_touch_chip_answers(board):
+    assert board.field("fails") == "0"
+    assert int(board.field("chip")) in (0xB4, 0xB5, 0xB6)   # CST816S / T / D
+
+
+def test_trash_tap_clears_the_clip(board):
+    board.goto(CLIP)
+    put_clip(board, "hello")
+    assert board.field("clip") == "5"
+    board.send("TAP 120 100"); board.pump(0.2)         # the text box: nothing happens
+    assert board.field("clip") == "5"
+    board.send("TAP %d %d" % TRASH); board.pump(0.3)
+    assert board.field("clip") == "0"
+
+
+def test_scale_pill_and_boot_button_cycle_the_scale(board):
+    board.goto(JIG)
+    order = ["1.0", "1.5", "2.0"]
+    before = board.field("jscale")
+    board.send("TAP %d %d" % SCALE_PILL); board.pump(0.3)
+    after = board.field("jscale")
+    assert after == order[(order.index(before) + 1) % 3]
+    board.send("BTN"); board.pump(0.2)
+    assert board.field("jscale") == order[(order.index(after) + 1) % 3]
+    board.send("BTN"); board.pump(0.2)                  # back where it started
+    assert board.field("jscale") == before
+
+
+def test_button_is_ignored_on_clipboard_page(board):
+    board.goto(CLIP)
+    before = board.field("jscale")
+    board.send("BTN"); board.pump(0.2)
+    assert board.field("jscale") == before
+
+
+def test_letter_tap_toggles_the_jiggler(board):
+    """Moves the real mouse for ~0.3 s (the RP2350 is a USB mouse)."""
+    board.goto(JIG)
+    was = board.field("jig")
+    board.send("TAP %d %d" % LETTER); board.pump(0.3)
+    assert board.field("jig") != was
+    board.send("TAP %d %d" % LETTER); board.pump(0.3)
+    assert board.field("jig") == was
+
+
+def test_watch_streams_state_with_the_page(board):
+    board.goto(JIG)
+    board.send("WATCH 1")
+    lines = state_lines(board, 0.5)
+    assert lines, "no STATE after WATCH 1"
+    f = fields(lines[-1])
+    assert set(f) >= {"jig", "letter", "scale", "phase", "x", "y", "clip", "paste", "page"}
+    assert f["page"] == "1"
+    board.send("WATCH 0"); board.pump(0.2)
+    assert not state_lines(board, 0.6), "STATE kept coming after WATCH 0"
+
+
+def test_anim_demo_moves_the_dot(board):
+    board.send("WATCH 1"); board.send("ANIM 1")
+    try:
+        pts = {(fields(l)["x"], fields(l)["y"]) for l in state_lines(board, 1.2)}
+        assert len(pts) >= 5, "dot position did not stream"
+    finally:
+        board.send("ANIM 0"); board.send("WATCH 0"); board.pump(0.2)
+
+
+def test_clip_clear_command(board):
+    put_clip(board, "hello")
+    assert board.field("clip") == "5"
+    board.send("CLIP CLEAR"); board.pump(0.3)
+    assert board.field("clip") == "0"
+    board.send("CLIP CLEAR"); board.pump(0.3)          # empty: a no-op
+    assert board.field("clip") == "0"

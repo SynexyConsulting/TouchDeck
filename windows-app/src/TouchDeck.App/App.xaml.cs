@@ -50,8 +50,10 @@ public partial class App : Application
         {
             LogError(ex.Exception);
             if (window is null) return;
-            controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}");
             ex.Handled = true;
+            // The backstop must not throw: if showing the error in the activity log fails too, the file has it.
+            try { controller?.AddLog($"Unexpected error: {ex.Exception.GetType().Name}: {ex.Exception.Message}"); }
+            catch (Exception again) { LogError(again); }
         };
 
         Core.Updates.UpdateSource? feed = null;
@@ -143,6 +145,8 @@ public partial class App : Application
             $"letter={controller.JigLetter}",
             $"boardclip={controller.BoardClipText}",
             $"bundled={controller.BundledSummary}",
+            $"newboard={controller.NewBoard?.Describe()}",
+            $"offer={controller.UpdateText}",
             $"exe={Environment.ProcessPath}",
         ]);
         Quit();
@@ -157,7 +161,7 @@ public partial class App : Application
     private async Task RunSmokeStepsAsync(string dir)
     {
         var c = controller!;
-        int clipPage = c.MirrorKind == Core.Devices.BoardKind.Esp32C3 ? 0 : 1;
+        int clipPage = Core.Mirror.UiModels.ClipPage(c.MirrorModel);
         async Task Go(int page)
         {
             for (int i = 0; i < 3; i++) c.Swipe(left: false);

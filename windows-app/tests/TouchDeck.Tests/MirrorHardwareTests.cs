@@ -23,7 +23,7 @@ public class MirrorHardwareTests
         Skip.If(m.State.Status == LinkStatus.PortBusy, "port busy (Touch Deck app running?)");
         Skip.If(m.State.Firmware?.SemVer is not { } v || v < new Version(1, 7, 0), "firmware older than 1.7.0");
         var s = m.Session!;
-        var kind = m.State.Device!.Kind;
+        var kind = UiModels.For(m.State.Device!.Kind, m.State.Firmware?.Board);
         var mirror = new MirrorState(kind);
         var gate = new object();
         string? crc = null;
@@ -42,7 +42,7 @@ public class MirrorHardwareTests
         s.Log += text => { if (text.StartsWith("fbcrc ", StringComparison.Ordinal)) crc = text[6..]; };
         s.SendRaw("WATCH 1");                                  // everything again, now that we listen
 
-        int clipPage = kind == BoardKind.Esp32C3 ? 0 : 1, jigPage = clipPage + 1;
+        int clipPage = kind.ClipPage(), jigPage = clipPage + 1;
         void GoTo(int page)
         {
             for (int i = 0; i < 3; i++) s.Swipe(left: false);

@@ -10,7 +10,7 @@ import zlib
 import jig_host
 
 ROOT = jig_host.ROOT
-BOARDS = {"rp2040": "rp2040-169", "esp32c3": "esp32c3-128"}
+BOARDS = {"rp2040": "rp2040-169", "esp32c3": "esp32c3-128", "rp2350": "rp2350-128"}
 CLIP_VIEW = 1024
 
 
@@ -103,7 +103,7 @@ class Renderer:
 
 
 def build(tmp):
-    """{"rp2040": Renderer, "esp32c3": Renderer}, or None when MSVC isn't installed."""
+    """{board: Renderer} for every BOARDS entry, or None when MSVC isn't installed."""
     if not jig_host.vcvars():
         return None
     out = os.path.join(tmp, "tdui")

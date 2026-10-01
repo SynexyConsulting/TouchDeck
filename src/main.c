@@ -13,7 +13,6 @@
 #include "app.h"
 #include "board.h"
 #include "button.h"
-#include "buzzer.h"
 #include "jig_paths.h"
 #include "jiggler.h"
 #include "lcd.h"
@@ -22,6 +21,24 @@
 #include "typer.h"
 #include "ui.h"
 #include "usb_io.h"
+
+#ifdef TD_ROUND
+// Round board (RP2350-Touch-LCD-1.28): Clipboard and Jiggler only. No watch page,
+// buzzer or power latch, so the watch/buzzer paths below compile to nothing.
+#define SCR_WATCH  (-1)
+#define MUTE_HIT_X LCD_W
+#define MUTE_HIT_Y 0
+static inline void buzzer_init(void) {}
+static inline void buzzer_tick(void) {}
+static inline void buzzer_tone(uint32_t f, uint32_t ms, uint32_t duty) { (void)f; (void)ms; (void)duty; }
+#define START_SCREEN SCR_CLIP
+#else
+#include "buzzer.h"
+#define START_SCREEN SCR_WATCH
+#endif
+#ifndef UI_PAGE_COUNT
+#define UI_PAGE_COUNT SCR_COUNT
+#endif
 
 #define TOUCH_POLL_MS 2
 #define BUTTON_POLL_MS 20
@@ -155,7 +172,7 @@ void jig_cycle_scale(void) {
 static void on_touch(touch_event_t e) {
     switch (e.type) {
     case EV_SWIPE_L:
-        if (app.screen < SCR_COUNT - 1) { app.screen++; app_redraw(); feedback(); }
+        if (app.screen < UI_PAGE_COUNT - 1) { app.screen++; app_redraw(); feedback(); }
         return;
     case EV_SWIPE_R:
         if (app.screen > 0) { app.screen--; app_redraw(); feedback(); }
@@ -231,9 +248,11 @@ void inject_tap(int x, int y) {
 
 int main(void) {
     // Hold the power latch first so the board stays on when running from battery.
+#ifdef SYS_EN_PIN
     gpio_init(SYS_EN_PIN);
     gpio_set_dir(SYS_EN_PIN, GPIO_OUT);
     gpio_put(SYS_EN_PIN, 1);
+#endif
 
     // 200 MHz instead of 125: drawing is pure software maths (no FPU), so it
     // scales with the clock. 1.15 V is the usual core voltage for this speed.
@@ -244,7 +263,7 @@ int main(void) {
 
     mutex_init(&clip_mtx);
     strcpy(app.clip_src, "-");
-    app.screen = SCR_WATCH;
+    app.screen = START_SCREEN;
     settings_load();
     clock_set(compile_seconds());
 

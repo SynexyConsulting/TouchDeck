@@ -23,13 +23,13 @@ public class ManagerTests
         return m;
     }
 
-    private FakeTransport Board(DeviceCandidate d, bool answers = true)
+    private FakeTransport Board(DeviceCandidate d, bool answers = true, string board = "rp2040-169")
     {
         var t = new FakeTransport();
         if (answers)
         {
             t.Incoming.Enqueue("PONG");
-            t.Incoming.Enqueue("VERSION rp2040-169 1.5.0 Sep 27 2026");
+            t.Incoming.Enqueue($"VERSION {board} 1.5.0 Sep 27 2026");
         }
         ports[d.Port] = t;
         present.Add(d);
@@ -68,6 +68,23 @@ public class ManagerTests
         m.PreferredPort = "COM7";
         m.Tick();
         Assert.Equal(Esp, m.State.Device);
+        m.Dispose();
+    }
+
+    [Fact]
+    public void While_installing_only_the_board_being_flashed_is_connected()
+    {
+        // Both RP boards are CAFE:4011. After the flashed RP2350 reboots, the manager must not settle
+        // on the 1.69 that happens to come first, or the install never sees its board come back.
+        var round = new DeviceCandidate("COM11", BoardKind.Rp2040, new UsbId(0xCAFE, 0x4011));
+        var other = Board(Rp);                                   // COM6, rp2040-169, first in scan order
+        Board(round, board: "rp2350-128");
+        var m = Make();
+        m.RequiredBoard = "rp2350-128";
+        m.Tick();
+        Assert.Equal(round, m.State.Device);
+        Assert.Equal("rp2350-128", m.State.Firmware!.Board);
+        Assert.True(other.Disposed);                             // the 1.69 was let go, not held
         m.Dispose();
     }
 

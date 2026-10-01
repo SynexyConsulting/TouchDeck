@@ -44,6 +44,19 @@ def test_firmware_release_keeps_the_app_and_other_boards(tmp_path):
     assert boards == {"rp2040-169": "1.7.0", "esp32c3-128": "1.6.0"}
 
 
+def test_a_release_carries_both_rp_boards(tmp_path):
+    """The round RP2350 (rp2350-128) is published beside the RP2040 1.69; the ESP32 entry stays."""
+    prev = {"schema": 1, "published": "x", "app": {},
+            "firmware": [{"board": "rp2040-169", "version": "1.6.0", "url": BASE + "f", "sha256": "0" * 64, "size": 1},
+                         {"board": "esp32c3-128", "version": "1.6.0", "url": BASE + "e", "sha256": "0" * 64, "size": 1}]}
+    rect = dict(mu.entry(blob(tmp_path, "rp.uf2", b"r"), "1.7.0", "app-v1.3.0"), board="rp2040-169")
+    rnd = dict(mu.entry(blob(tmp_path, "rnd.uf2", b"n"), "1.7.0", "app-v1.3.0"), board="rp2350-128")
+    feed = mu.merge(prev, app_windows=None, firmware=[rect, rnd], published="p")
+    boards = {f["board"]: f["version"] for f in feed["firmware"]}
+    assert boards == {"rp2040-169": "1.7.0", "rp2350-128": "1.7.0", "esp32c3-128": "1.6.0"}
+    assert [f["board"] for f in feed["firmware"]] == sorted(boards)          # stable order
+
+
 def test_app_release_replaces_only_the_app(tmp_path):
     prev = {"schema": 1, "app": {"windows": {"version": "1.2.0"}, "macos": {"version": "0.1.0"}}, "firmware": []}
     app = mu.entry(blob(tmp_path, "a.msi", b"a"), "1.3.0", "app-v1.3.0")
