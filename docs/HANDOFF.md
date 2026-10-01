@@ -2,6 +2,33 @@
 
 Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE.md` and `docs/superpowers/` (specs and plans). It records what a fresh session can't see: what's merged, what's pending, and decisions made in conversation.
 
+## Update from the Mac session (2026-10-01, later)
+
+- **PRs #8 to #13 are all merged into `main`.** The merge-order table below is history. Nothing is released yet: `release/1.3.0` holds the version bump (app 1.3.0, firmware 1.8.0) and still needs a PR, merge and the `fw-v1.8.0` / `app-v1.3.0` tags.
+- **Branch `fix/macos-first-build`:**
+  - **The macOS app builds and runs.** After `xcodebuild -runFirstLaunch` it built on Xcode 27 with no compile errors. Every XCTest passes, and it ran against the RP2350 round board on `/dev/cu.usbmodem*`.
+  - **Bugs fixed:**
+    - the update feed check refused every feed (`is Bool` matches NSNumber 1);
+    - the test pre-action didn't build the renderers (clang aimed at visionOS);
+    - the test environment variable wasn't expanded.
+  - **COPY now reads the selection of the app you were using**, not Touch Deck itself. It falls back to ⌘C with the clipboard restored, then to the clipboard.
+  - **Closer parity with Windows:**
+    - main window layout;
+    - confirm before installing firmware or rebooting to the bootloader;
+    - update flow texts, progress and once-a-day gating;
+    - single instance, `--quit` and reopen;
+    - `--smoke` snapshots;
+    - fonts, a three-state menu bar icon, notification clicks;
+    - relaunch after an app update;
+    - `app.macos` in the release feed (`publish_release.py --app-macos`).
+- **Mac to-dos that need the owner:**
+  - Grant Accessibility and try COPY in Safari, Chrome, VS Code, Notes and Terminal, plus ⌃⌥C.
+  - Set the signing Team (the grant then survives rebuilds).
+  - Try a firmware install with real UF2s: this Mac has no Pico toolchain or `gh`, so `build/` is empty and the app offers no install.
+  - Look at the real window: the smoke snapshot shows thin bars at pill-button ends, most likely a `cacheDisplay` artifact.
+- **Windows is behind on one point:** it hides BOOT for the ESP32-C3, but firmware 1.8.0 handles `BTN` there (round watch). The Mac shows BOOT for every board.
+- **Not ported:** the 1.6.x jiggler card's letter-lane drawing (the Mac shows text and pills only) and Windows' `--smoke-update` install test.
+
 ## Branches and merge order
 
 None of these branches has been merged or released yet. They are **stacked**, and a stacked PR merges into its *base* branch, not into main. So merge them in this order, and open each PR against `main` only after the one before it is in:

@@ -2,7 +2,7 @@
 
 The Mac companion app for the Touch Deck boards. It does what the Windows app does (`../windows-app/`), with the same protocol, behaviour and wording. The difference: it lives in the **menu bar** (the top-right of the screen), with a monochrome icon and no Dock icon.
 
-> **Status: first pass, not yet built.** It was written on Windows, where Swift can't be compiled. The first job on a Mac is to build it, run the tests and fix what the compiler finds. See `../docs/HANDOFF.md`, "macOS: first steps".
+> **Status: builds and runs (Xcode 27, macOS 27).** The unit tests pass and the app has run against an RP2350 round board: mirror, taps, sending text, smoke snapshots. Still to try by hand: Accessibility-dependent paths (COPY's selection, ESP32-C3 PC mode), firmware install, and signing. See `../docs/HANDOFF.md`.
 
 ## Requirements
 
@@ -27,21 +27,26 @@ xcodebuild -scheme TouchDeck test
 
 | Folder | What it is |
 |---|---|
-| `TouchDeckCore/` | Framework, no UI. A port of `windows-app/src/TouchDeck.Core`: Protocol, Devices (IOKit scan, termios serial), Input (HID → kVK codes, CGEvent), Selection (Accessibility API, then the pasteboard), Session, Mirror (`ui_state_t` bytes, dlopen'd renderers), Jiggler, Updates (CryptoKit-verified feed), Firmware (UF2, onboarding), App (settings, login item) |
+| `TouchDeckCore/` | Framework, no UI. A port of `windows-app/src/TouchDeck.Core`: Protocol, Devices (IOKit scan, termios serial), Input (HID → kVK codes, CGEvent), Selection (Accessibility API, then ⌘C, then the pasteboard), Session, Mirror (`ui_state_t` bytes, dlopen'd renderers), Jiggler, Updates (CryptoKit-verified feed), Firmware (UF2, onboarding), App (settings, login item) |
 | `TouchDeck/` | The SwiftUI app: `MenuBarExtra`, the main window (device mirror on the left), Settings (⌘,), and `AppController`, the port of the Windows `AppController` |
 | `TouchDeckTests/` | XCTest. Ports of the Windows unit tests, with fake transport, keyboard, selection and clock |
 | `scripts/bundle-native.sh` | The app build phase described above |
-| `tools/make_icons.py` | Draws `AppIcon` and the template `MenuBarIcon` / `MenuBarIconBad` (`python macos-app/tools/make_icons.py`) |
+| `tools/make_icons.py` | Draws `AppIcon` and the template `MenuBarIcon` / `MenuBarIconIdle` / `MenuBarIconBad` (`python macos-app/tools/make_icons.py`) |
+| `TouchDeck/Fonts/` | Barlow and JetBrains Mono (OFL), as the Windows app embeds them; registered at launch |
 | `tools/make_xcodeproj.py` | Writes `TouchDeck.xcodeproj` |
 
 ## Mac specifics
 
 - **Serial ports.** Boards appear as `/dev/cu.usbmodem*`, found through IOKit by USB ID (RP boards `CAFE:4011`, ESP32-C3 `303A:1001`). Ports are opened exclusive (`TIOCEXCL`), so a second program gets "port busy". The modem lines are set in one `TIOCMSET`: DTR high for the RP boards, DTR and RTS low for the ESP32-C3, where they are its reset lines. `HUPCL` is cleared so closing the port doesn't reset the C3.
 - **Accessibility permission** is needed for two things: posting the ESP32-C3's PC-mode keys and mouse (CGEvent), and reading the selected text for COPY. Without it, COPY falls back to the clipboard and PC-mode input is dropped. The app asks at first start; Settings shows the state and links to System Settings. With "Sign to Run Locally", macOS forgets the grant on every rebuild, which is another reason to set the team early.
+- **COPY reads the app you were using.** The selection comes from the frontmost app, or from the last app you used when Touch Deck itself is in front (you clicked the mirror). It walks up to 4 parent elements, as Windows does, and asks Chromium and Electron apps for their accessibility tree (`AXManualAccessibility`). When Accessibility can't tell (the app doesn't expose its text), the app sends ⌘C, takes the copied text and puts the previous clipboard back. When Accessibility says nothing is selected, it doesn't send ⌘C (some editors copy the whole line), and the clipboard is used as on Windows.
 - **Hotkey:** ⌃⌥C (Control-Option-C) sends the selection, the Mac version of Ctrl+Alt+C. It uses Carbon `RegisterEventHotKey`, which needs no permission.
 - **Launch at login:** `SMAppService.mainApp`. There's no "start minimized" setting; a menu bar app starts without a window.
 - **Firmware install:** the UF2 bootloader mounts as `/Volumes/RPI-RP2` or `/Volumes/RP2350`. The image is written with a plain data write, not a Finder-style copy, which adds `._` files and extended attributes. Stock Pico programs are rebooted into the bootloader by opening their port at 1200 baud, as on Windows.
-- **Updates:** the same signed feed as Windows (`updates.json` + `.sig`, pinned P-256 key), reading `app.macos`. The Mac app ships as a signed, notarized `.pkg`. The verified package opens in Installer and the app quits. `tools/make_updates.py` doesn't write `app.macos` yet; add that with the first Mac release.
+- **Firmware copy** is forced out to the drive (`F_FULLFSYNC`): macOS can otherwise keep FAT writes cached, and the board only reboots once it has every block.
+- **Updates:** the same signed feed as Windows (`updates.json` + `.sig`, pinned P-256 key), reading `app.macos`. The Mac app ships as a signed, notarized `.pkg`. The verified package opens in Installer and the app quits; a detached shell reopens Touch Deck once Installer closes. Publish it with `tools/publish_release.py --app-macos TouchDeck-X.Y.Z.pkg --app-macos-version X.Y.Z` (the Mac app has its own version line).
+- **One copy at a time.** A second launch brings the running one forward. `"Touch Deck.app/Contents/MacOS/Touch Deck" --quit` closes it (frees the serial port for `flash.py` and the board tests), as `TouchDeck.exe --quit` does on Windows.
+- **Smoke snapshots:** `"Touch Deck.app/Contents/MacOS/Touch Deck" --smoke DIR [--smoke-steps] [--smoke-check-updates]` waits for a board, writes `smoke.png` (the window), `mirror.png` (the device view at 1:1), `settings.png` and `smoke.txt`, and quits. `--smoke-steps` drives the board (jiggler page, `ANIM 1`, a sent clip) and saves the view after each step.
 
 ## Signing (Apple Developer account)
 
