@@ -17,3 +17,20 @@ __pycache__/
 # Brainstorm mockups (superpowers visual companion)
 .superpowers/
 hostui/out/
+
+# Signing material and credentials: never commit (CI keeps them in GitHub secrets)
+*.p12
+*.pfx
+*.p8
+*.cer
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.keychain
+*.keychain-db
+.env
+.env.*
+
+# Claude Code worktrees
+.claude/worktrees/
