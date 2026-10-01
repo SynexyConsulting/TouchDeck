@@ -87,7 +87,7 @@ enum Smoke {
 
     /// The main window's content as the screen shows it (AppKit views included).
     private static func saveWindow(_ url: URL) -> Bool {
-        guard let view = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" })?.contentView,
+        guard let view = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true })?.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
         view.cacheDisplay(in: view.bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else { return false }

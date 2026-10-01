@@ -137,26 +137,52 @@ public struct AXSelection: TextSource {
 /// what the clipboard held. nil when the app copied nothing (no selection) or isn't in front.
 public struct CopyCommandSelection: TextSource {
     public var wait: TimeInterval = 0.5
+    /// After `wait`, a copy that still lands within this long is undone (a slow app must not leave
+    /// the selection on the user's clipboard).
+    public var lateCopyWatch: TimeInterval = 2
     public init() {}
+
+    /// The board's COPY (session thread) and ⌃⌥C (a task) can overlap; one ⌘C at a time, or the
+    /// second snapshot would capture the first one's text and restore that.
+    private static let lock = NSLock()
 
     public func read() -> String? {
         guard AXIsProcessTrusted(), TargetApp.shared.isFrontmost else { return nil }
+        Self.lock.lock()
         let pb = NSPasteboard.general
         let saved = Pasteboard.snapshot()
         let before = pb.changeCount
 
         let source = CGEventSource(stateID: .privateState)
         for down in [true, false] {
-            guard let ev = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: down) else { return nil }
+            guard let ev = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: down) else {
+                Self.lock.unlock()
+                return nil
+            }
             ev.flags = .maskCommand                        // only ⌘, even while the hotkey's ⌃⌥ are still held
             ev.post(tap: .cghidEventTap)
         }
 
         let deadline = Date().addingTimeInterval(wait)
         while pb.changeCount == before && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
-        guard pb.changeCount != before else { return nil }
+        guard pb.changeCount != before else {
+            // Nothing yet: keep the lock while watching, and put the clipboard back if the copy lands late.
+            let watchUntil = Date().addingTimeInterval(lateCopyWatch)
+            DispatchQueue.global(qos: .utility).async {
+                defer { Self.lock.unlock() }
+                while Date() < watchUntil {
+                    if pb.changeCount != before {
+                        Pasteboard.restore(saved)
+                        return
+                    }
+                    Thread.sleep(forTimeInterval: 0.02)
+                }
+            }
+            return nil
+        }
         let text = pb.string(forType: .string)
         Pasteboard.restore(saved)
+        Self.lock.unlock()
         return text
     }
 }

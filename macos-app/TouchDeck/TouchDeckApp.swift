@@ -65,15 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        func others() -> [NSRunningApplication] {
+            NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && !$0.isTerminated }
+        }
         if args.contains("--quit") {
-            for app in others { app.terminate() }
+            for app in others() { app.terminate() }
             DistributedNotificationCenter.default().postNotificationName(Self.quitRequest, object: nil, deliverImmediately: true)
             exit(0)
         }
         // One copy owns the serial port; a second launch brings the first forward.
-        if !others.isEmpty {
+        // A copy that is still quitting (it joins its session thread first) gets half a second.
+        if !others().isEmpty { Thread.sleep(forTimeInterval: 0.5) }
+        if !others().isEmpty {
             DistributedNotificationCenter.default().postNotificationName(Self.showRequest, object: nil, deliverImmediately: true)
             exit(0)
         }
@@ -110,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @MainActor static func showMainWindow() {
         if let open = openMain { open() }
-        else if let w = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+        else if let w = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) {
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
