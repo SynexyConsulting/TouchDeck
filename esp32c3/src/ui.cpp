@@ -24,6 +24,7 @@ void ui_state_fill(ui_state_t *s, bool with_clip) {
     s->screen = app.screen;
     s->sub = app.in_bt ? UI_SUB_BT : app.jig_settings && app.screen == SCR_JIG ? UI_SUB_JIGSET : UI_SUB_NONE;
     s->time_s = app.time_s;
+    s->timer_s = app.timer_s;
     s->helper = app.helper;
     s->link_ok = out_ready();
     s->bt_mode = mode_get() == MODE_BT;
@@ -69,7 +70,7 @@ void ui_task(void *) {
     static const rect_t JIG_STATUS = {0, 180, LCD_W, 34};
     uint32_t drawn_seq = ~0u, last_full = 0, last_part = 0, status_ms = 0;
     rect_t prev_dot = {0, 0, 0, 0};
-    int drawn_screen = -1;
+    int drawn_screen = -1, drawn_time = -2, drawn_timer = -1;
     bool first = true;
     for (;;) {
         int screen = app.screen;
@@ -77,7 +78,10 @@ void ui_task(void *) {
         uint32_t seq = app.redraw_seq, now = now_ms();
         bool anim = !in_bt && !app.jig_settings && screen == SCR_JIG && (app.jig_on || app.anim_demo);
         uint32_t period = app.clip_state != CLIP_IDLE ? 100 : (screen == SCR_JIG ? 1000 : 500);
-        bool full = seq != drawn_seq || screen != drawn_screen || now - last_full >= period;
+        // The watch redraws exactly when its second (or the stopwatch) changes, not on a timer.
+        bool watch_tick = screen == SCR_WATCH && !in_bt && (app.time_s != drawn_time || app.timer_s != drawn_timer);
+        if (screen == SCR_WATCH) period = 5000;
+        bool full = seq != drawn_seq || screen != drawn_screen || now - last_full >= period || watch_tick;
         bool part = anim && now - last_part >= 50;
         if (!full && !part) {
             vTaskDelay(pdMS_TO_TICKS(5));
@@ -90,6 +94,8 @@ void ui_task(void *) {
         if (full) {
             drawn_seq = seq;
             drawn_screen = screen;
+            drawn_time = app.time_s;
+            drawn_timer = app.timer_s;
             last_full = last_part = status_ms = now;
             ui_draw_page(&st);
             display_push();

@@ -276,3 +276,36 @@ def test_an_idle_board_is_quiet_while_watched(board):
     n = len([l for l in board.take() if l.startswith("STATE ")])
     board.send("WATCH 0"); board.pump(0.2)
     assert n <= 2, f"{n} STATE lines in 1 s from an idle board"
+
+
+def test_watch_is_page_one_and_boot_runs_its_stopwatch(board):
+    """Firmware 1.8.0: the round watch is page 0 (Watch, Clipboard, Jiggler, Settings); on it,
+    BOOT starts/pauses the stopwatch and a long press resets it."""
+    board.goto(0)
+    assert board.field("screen") == "0"
+    board.send("SWIPE R"); board.pump(0.2)
+    assert board.field("screen") == "0"
+    for page in ("1", "2", "3", "3"):
+        board.send("SWIPE L"); board.pump(0.2)
+        assert board.field("screen") == page
+    board.goto(0)
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0" and board.field("trun") == "0"
+    board.send("BTN"); board.pump(2.3)
+    assert board.field("trun") == "1" and int(board.field("timer")) >= 2
+    board.send("BTN"); board.pump(0.2)
+    t = board.field("timer"); board.pump(1.2)
+    assert board.field("trun") == "0" and board.field("timer") == t
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0"
+
+
+def test_boot_cycles_the_scale_on_the_jiggler_page(board):
+    board.goto(2)
+    order = ["1.0", "1.5", "2.0"]
+    before = board.field("jscale")
+    board.send("BTN"); board.pump(0.2)
+    after = board.field("jscale")
+    assert after == order[(order.index(before) + 1) % 3]
+    board.send("BTN"); board.pump(0.2); board.send("BTN"); board.pump(0.2)   # back where it was
+    assert board.field("jscale") == before
