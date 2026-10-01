@@ -109,6 +109,10 @@ public enum ErrorLog {
     public static func append(_ text: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(LogRedaction.redact(text))\n"
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Kept small, as on Windows: start over past 256 KB.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 256 * 1024 {
+            try? FileManager.default.removeItem(at: url)
+        }
         if let h = try? FileHandle(forWritingTo: url) {
             defer { try? h.close() }
             _ = try? h.seekToEnd()

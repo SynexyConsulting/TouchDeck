@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import CoreText
 
 /// The devices' palette (../esp32c3/src/ui.cpp), as the Windows app uses it.
 enum Theme {
@@ -13,6 +15,22 @@ enum Theme {
     static let accentTint = Color(hex: 0x2D2214)
     static let ok = Color(hex: 0x3CCB7F)
     static let bad = Color(hex: 0xE5484D)
+
+    // The Windows app's typefaces, bundled in Fonts/ (OFL): Barlow for text and headings,
+    // JetBrains Mono for values and the log. The system fonts stand in if registration failed.
+    static func ui(_ size: CGFloat) -> Font { font("Barlow-Medium", size) ?? .system(size: size, weight: .medium) }
+    static func head(_ size: CGFloat) -> Font { font("Barlow-SemiBold", size) ?? .system(size: size, weight: .semibold) }
+    static func mono(_ size: CGFloat) -> Font { font("JetBrainsMono-Regular", size) ?? .system(size: size, design: .monospaced) }
+
+    private static func font(_ postScriptName: String, _ size: CGFloat) -> Font? {
+        NSFont(name: postScriptName, size: size) != nil ? .custom(postScriptName, fixedSize: size) : nil
+    }
+
+    /// Registers the bundled fonts for this process (call once at launch).
+    static func registerFonts() {
+        let urls = Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? []
+        for url in urls { CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil) }
+    }
 }
 
 extension Color {
@@ -76,7 +94,7 @@ struct PillButtonStyle: ButtonStyle {
     var primary = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(Theme.head(13))
             .padding(.horizontal, 14).padding(.vertical, 6)
             .foregroundStyle(primary ? Theme.bg : Theme.text)
             .background(Capsule().fill(primary ? Theme.accent : Theme.surf2))
@@ -88,7 +106,9 @@ struct PillButtonStyle: ButtonStyle {
 /// A section title, small caps like the Windows cards.
 struct CardTitle: View {
     var text: String
+    /// Space above: a section break in Settings; 0 at the top of a card.
+    var top: CGFloat = 10
     var body: some View {
-        Text(text.uppercased()).font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.dim).padding(.top, 10)
+        Text(text.uppercased()).font(Theme.head(12)).kerning(0.6).foregroundStyle(Theme.dim).padding(.top, top)
     }
 }

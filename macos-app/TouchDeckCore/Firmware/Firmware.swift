@@ -124,10 +124,35 @@ public enum Uf2 {
     public static func copy(_ uf2: URL, toDrive drive: URL) throws {
         let data = try Data(contentsOf: uf2)
         do {
-            try data.write(to: drive.appendingPathComponent(uf2.lastPathComponent), options: [])
+            try writeThrough(data, to: drive.appendingPathComponent(uf2.lastPathComponent))
         } catch where !FileManager.default.fileExists(atPath: drive.path) {
             // The board reboots as soon as the last block lands, taking the drive with it.
         }
+    }
+
+    /// Writes and forces the data out to the device (F_FULLFSYNC). macOS may otherwise keep FAT
+    /// writes in its cache, and the board only reboots once it has every block.
+    static func writeThrough(_ data: Data, to file: URL) throws {
+        let fd = open(file.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard fd >= 0 else { throw posixError("open") }
+        defer { close(fd) }
+        try data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) in
+            var done = 0
+            while done < buf.count {
+                let n = write(fd, buf.baseAddress! + done, buf.count - done)
+                if n < 0 {
+                    if errno == EINTR { continue }
+                    throw posixError("write")
+                }
+                done += n
+            }
+        }
+        // The board may already be rebooting (drive gone); a failed sync then doesn't matter.
+        if fcntl(fd, F_FULLFSYNC) != 0 { _ = fsync(fd) }
+    }
+
+    private static func posixError(_ what: String) -> Error {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSLocalizedDescriptionKey: "\(what): \(String(cString: strerror(errno)))"])
     }
 }
 

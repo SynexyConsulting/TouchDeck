@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Carbon.HIToolbox
 import UserNotifications
+import TouchDeckCore
 
 /// A system-wide hotkey through Carbon's RegisterEventHotKey (no Accessibility permission needed).
 /// Default ⌃⌥C, the Mac version of the Windows app's Ctrl+Alt+C. nil when another app has it.
@@ -44,5 +45,15 @@ enum Notifier {
         content.title = title
         content.body = body
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+}
+
+extension ErrorLog {
+    /// Uncaught Objective-C exceptions go to errors.log before the process ends, as Windows logs
+    /// unexpected exceptions. (Swift runtime traps can't be caught; macOS writes a crash report.)
+    static func installExceptionHandler() {
+        NSSetUncaughtExceptionHandler { e in
+            ErrorLog.append("uncaught \(e.name.rawValue): \(e.reason ?? "") \(e.callStackSymbols.prefix(12).joined(separator: " | "))")
+        }
     }
 }

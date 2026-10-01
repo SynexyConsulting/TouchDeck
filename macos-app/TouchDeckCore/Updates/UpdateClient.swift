@@ -136,6 +136,11 @@ public struct UpdateCheckOutcome: Equatable {
     public var choice: UpdateChoice?
     public var nothingPublished: Bool
     public var error: String?
+    public init(choice: UpdateChoice?, nothingPublished: Bool, error: String?) {
+        self.choice = choice
+        self.nothingPublished = nothingPublished
+        self.error = error
+    }
 }
 
 /// Checks the feed and downloads packages into one per-user folder under fixed names.

@@ -152,3 +152,35 @@ final class Uf2Tests: XCTestCase {
         XCTAssertEqual(LogRedaction.redact("/Users/nikolai/x", home: "/Users/nik"), "/Users/nikolai/x")
     }
 }
+
+final class Uf2CopyTests: XCTestCase {
+    private var dir: URL!
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("uf2copy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: dir) }
+
+    func testCopyWritesTheWholeImageUnderItsName() throws {
+        let drive = dir.appendingPathComponent("RP2350")
+        try FileManager.default.createDirectory(at: drive, withIntermediateDirectories: true)
+        let src = dir.appendingPathComponent("deck128.uf2")
+        let bytes = Data((0..<(512 * 300)).map { UInt8($0 & 0xFF) })
+        try bytes.write(to: src)
+        try Data("old and longer than the new image, padding padding".utf8).write(to: drive.appendingPathComponent("deck128.uf2"))
+        try Uf2.copy(src, toDrive: drive)
+        XCTAssertEqual(try Data(contentsOf: drive.appendingPathComponent("deck128.uf2")), bytes)
+    }
+
+    func testADriveThatVanishedIsNotAnError() throws {
+        let src = dir.appendingPathComponent("watch.uf2")
+        try Data([1, 2, 3]).write(to: src)
+        XCTAssertNoThrow(try Uf2.copy(src, toDrive: dir.appendingPathComponent("gone")))
+    }
+
+    func testAMissingImageIsAnError() {
+        XCTAssertThrowsError(try Uf2.copy(dir.appendingPathComponent("none.uf2"), toDrive: dir))
+    }
+}
