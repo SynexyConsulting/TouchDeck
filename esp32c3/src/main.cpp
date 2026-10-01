@@ -201,6 +201,10 @@ void setup() {
     prefs.begin("touchdeck", false);
     uint8_t js = prefs.getUChar("jscale", 0);
     app.jig_scale_idx = js < JIG_SCALE_COUNT ? js : 0;
+    jig_cfg_t d = jmenu_defaults();
+    app.jig_cfg = {prefs.getUChar("jmenu", d.menu_on), prefs.getUChar("jkey", d.key_f15),
+                   prefs.getUChar("jopen", d.open_s), prefs.getUChar("jpause", d.pause_s)};
+    jmenu_clamp(&app.jig_cfg);
     // Resume jiggling if it was on at power-off; it waits for Bluetooth.
     if (prefs.getBool("jig", false)) jiggler_set(true);
 

@@ -284,6 +284,7 @@ int main(void) {
         if (mounted != app.usb_mounted) { app.usb_mounted = mounted; app_redraw(); }   // chip dot
         usb_io_poll();
         usb_state_poll();
+        settings_poll();          // a debounced settings write, when due
         timer_update();
 
         if ((int32_t)(now_ms() - next_touch) >= 0) {

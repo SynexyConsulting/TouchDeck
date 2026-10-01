@@ -1,11 +1,14 @@
 // Moves the pointer along an outlined letter (jig_paths.h, walked by the shared
-// jig_motion engine). Every so often it stops, right-clicks to open a context
-// menu, presses ESC to close it, then glides on to a new random letter.
+// jig_motion engine). Every so often it runs the menu event from the shared
+// jig_menu engine (app.jig_cfg, the Jiggler settings page): by default it stops,
+// right-clicks, holds the context menu 2 s, presses ESC, then glides on to a new
+// random letter.
 #include <math.h>
 #include "pico/stdlib.h"
 #include "pico/rand.h"
 #include "tusb.h"
 #include "app.h"
+#include "jig_menu.h"
 #include "jig_motion.h"
 #include "jiggler.h"
 #include "usb_io.h"
@@ -88,11 +91,6 @@ bool jiggler_idle(void) {
     return !app.jig_on || app.jig_phase == JIG_MOVING;
 }
 
-static void set_phase(int phase, uint32_t wait_lo, uint32_t wait_hi) {
-    app.jig_phase = phase;
-    next_ms = now_ms() + rand_between(wait_lo, wait_hi);
-}
-
 // Demo (ANIM 1, perf tests): walk the letter on screen without sending HID.
 static void demo_step(void) {
     if (now_ms() < next_ms) return;
@@ -130,32 +128,33 @@ void jiggler_step(void) {
     if (app.jig_paused) return;
     if (!tud_mounted() || now_ms() < next_ms || !usb_hid_ready()) return;
 
-    switch (app.jig_phase) {
-    case JIG_MOVING:
+    if (app.jig_phase == JIG_MOVING) {
         next_ms = now_ms() + STEP_MS;
-        if ((int32_t)(now_ms() - app.jig_next_menu_ms) >= 0) set_phase(JIG_STOP, 400, 900);
-        else move_step();
-        break;
-    case JIG_STOP:            // pointer has settled: open the context menu
-        if (usb_mouse(MOUSE_BUTTON_RIGHT, 0, 0)) set_phase(JIG_CLICK_DOWN, 60, 120);
-        break;
-    case JIG_CLICK_DOWN:
-        if (usb_mouse(0, 0, 0)) set_phase(JIG_MENU_OPEN, 800, 2000);
-        break;
-    case JIG_MENU_OPEN:       // menu has been visible a moment: close it
-        if (usb_key(0, HID_KEY_ESCAPE)) set_phase(JIG_ESC_DOWN, 50, 90);
-        break;
-    case JIG_ESC_DOWN:
-        if (usb_key(0, 0)) set_phase(JIG_RESUME, 300, 700);
-        break;
-    case JIG_RESUME:
+        if ((int32_t)(now_ms() - app.jig_next_menu_ms) >= 0) {
+            app.jig_phase = JIG_STOP;                     // let the pointer settle first
+            next_ms = now_ms() + rand_between(400, 900);
+        } else {
+            move_step();
+        }
+        return;
+    }
+
+    // The menu event: the shared engine decides what to send; advance only once it went out.
+    jm_step_t st = jmenu_step(app.jig_phase, &app.jig_cfg, get_rand_32());
+    switch (st.action) {
+    case JM_RIGHT_DOWN: if (!usb_mouse(MOUSE_BUTTON_RIGHT, 0, 0)) return; break;
+    case JM_RIGHT_UP:   if (!usb_mouse(0, 0, 0)) return; break;
+    case JM_KEY_DOWN:   if (!usb_key(0, jmenu_key(&app.jig_cfg))) return; break;
+    case JM_KEY_UP:     if (!usb_key(0, 0)) return; break;
+    case JM_SWITCH:
         app.jig_menus++;
         schedule_menu();
         jm_switch(&m, jm_pick(m.letter, get_rand_32()));   // a new letter after every menu
         publish();
         app_redraw();                                     // draw the new letter
-        app.jig_phase = JIG_MOVING;
-        next_ms = now_ms();
         break;
+    default: break;
     }
+    app.jig_phase = st.next_phase;
+    next_ms = now_ms() + st.wait_ms;
 }
