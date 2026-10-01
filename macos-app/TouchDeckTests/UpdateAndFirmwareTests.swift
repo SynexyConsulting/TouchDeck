@@ -51,7 +51,7 @@ final class UpdateTests: XCTestCase {
     }
 
     func testSelectorNeverDowngrades() throws {
-        let parsed = try UpdateFeed.parse(feed(app: "1.4.0", fw: "1.9.0"), source: .official)
+        let parsed = try UpdateFeed.parse(feed("1.4.0", fw: "1.9.0"), source: .official)
         let fw = FirmwareInfo(board: "rp2040-169", version: "1.9.0", build: "")
         XCTAssertNil(UpdateSelector.select(parsed, currentApp: SemVer(1, 4, 0), device: fw).app)
         XCTAssertNil(UpdateSelector.select(parsed, currentApp: SemVer(1, 4, 0), device: fw).firmware)

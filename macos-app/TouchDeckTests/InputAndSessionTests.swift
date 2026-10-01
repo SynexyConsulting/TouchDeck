@@ -136,7 +136,7 @@ final class SessionTests: XCTestCase {
         _ = try s.handshake()
         t.incoming = ["COPY"]
         try s.step()
-        XCTAssertTrue(String(decoding: t.written, as: UTF8.self).hasSuffix("CLIP 6 select\npicked"))
+        XCTAssertTrue(String(decoding: t.written, as: UTF8.self).contains("CLIP 6 select\npicked"))
     }
 
     func testRequestsAreSentOnTheSessionThread() throws {
@@ -204,5 +204,49 @@ final class ManagerTests: XCTestCase {
         XCTAssertEqual(DeviceScanner.fromPorts(ports).map(\.port), ["/dev/cu.usbmodem3", "/dev/cu.usbmodem9"])
         XCTAssertFalse(BoardKinds.dtrHigh(.esp32c3))
         XCTAssertTrue(BoardKinds.dtrHigh(.rp2040))
+    }
+}
+
+// MARK: selection
+
+private struct FixedText: TextSource {
+    var text: String?
+    func read() -> String? { text }
+}
+
+private final class CountingText: TextSource {
+    var text: String?
+    var reads = 0
+    init(_ text: String?) { self.text = text }
+    func read() -> String? { reads += 1; return text }
+}
+
+final class SelectionTests: XCTestCase {
+    func testTheSelectionWins() {
+        let copy = CountingText("copied")
+        let p = DefaultSelectionProvider(selection: FixedText(text: "sel"), copyFallback: copy, clipboard: FixedText(text: "clip"))
+        XCTAssertTrue(p.grab() == ("sel", "select"))
+        XCTAssertEqual(copy.reads, 0, "no ⌘C when Accessibility answered")
+    }
+
+    func testNothingSelectedUsesTheClipboardWithoutCopying() {
+        let copy = CountingText("copied")
+        let p = DefaultSelectionProvider(selection: FixedText(text: ""), copyFallback: copy, clipboard: FixedText(text: "clip"))
+        XCTAssertTrue(p.grab() == ("clip", "clipbd"))
+        XCTAssertEqual(copy.reads, 0, "an app that copies the whole line on ⌘C must not be asked")
+    }
+
+    func testUnknownSelectionAsksTheAppToCopy() {
+        let p = DefaultSelectionProvider(selection: FixedText(text: nil), copyFallback: CountingText("copied"), clipboard: FixedText(text: "clip"))
+        XCTAssertTrue(p.grab() == ("copied", "select"))
+    }
+
+    func testCopyingNothingFallsBackToTheClipboard() {
+        for copied in [nil, ""] as [String?] {
+            let p = DefaultSelectionProvider(selection: FixedText(text: nil), copyFallback: CountingText(copied), clipboard: FixedText(text: "clip"))
+            XCTAssertTrue(p.grab() == ("clip", "clipbd"))
+        }
+        let none = DefaultSelectionProvider(selection: FixedText(text: nil), copyFallback: nil, clipboard: FixedText(text: nil))
+        XCTAssertTrue(none.grab() == ("", "clipbd"))
     }
 }

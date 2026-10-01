@@ -97,6 +97,7 @@ final class AppController: ObservableObject {
     }
 
     func start() {
+        _ = TargetApp.shared                      // starts tracking the app COPY reads from
         manager.start()
         // The board mirror: known once the session has either seen STATE or given up waiting.
         timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in

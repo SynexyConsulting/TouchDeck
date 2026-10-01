@@ -81,7 +81,7 @@ public struct UpdateFeed: Equatable {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw UpdateError("The update feed is not valid JSON.")
         }
-        guard let schema = root["schema"] as? NSNumber, schema.intValue == 1, !(root["schema"] is Bool) else {
+        guard let schema = root["schema"] as? NSNumber, schema.intValue == 1, !isJsonBool(schema) else {
             throw UpdateError("Unsupported update feed (schema).")
         }
         var app: UpdatePackage?
@@ -104,6 +104,11 @@ public struct UpdateFeed: Equatable {
         return UpdateFeed(macApp: app, firmware: fw)
     }
 
+    /// JSON true/false arrive as CFBoolean. `is Bool` can't tell them apart: NSNumber 0 and 1 also pass it.
+    private static func isJsonBool(_ n: NSNumber) -> Bool {
+        CFGetTypeID(n) == CFBooleanGetTypeID()
+    }
+
     private static func entry(_ e: [String: Any], _ source: UpdateSource, _ max: Int64) throws -> (SemVer, URL, String, Int64) {
         guard let vs = e["version"] as? String, vs.split(separator: ".").count >= 3, let v = SemVer(vs) else {
             throw UpdateError("Invalid version in the update feed.")
@@ -114,7 +119,7 @@ public struct UpdateFeed: Equatable {
         guard let sha = e["sha256"] as? String, sha.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil else {
             throw UpdateError("The update feed has no valid SHA-256.")
         }
-        guard let n = e["size"] as? NSNumber, !(e["size"] is Bool), n.int64Value > 0, n.int64Value <= max,
+        guard let n = e["size"] as? NSNumber, !isJsonBool(n), n.int64Value > 0, n.int64Value <= max,
               Double(n.int64Value) == n.doubleValue else {
             throw UpdateError("The update feed has an invalid size.")
         }

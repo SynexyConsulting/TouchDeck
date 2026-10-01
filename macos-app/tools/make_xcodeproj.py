@@ -315,7 +315,7 @@ SCHEME = f"""<?xml version="1.0" encoding="UTF-8"?>
    <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "NO">
       <PreActions>
          <ExecutionAction ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
-            <ActionContent title = "Build the device renderers for the mirror tests" scriptText = "sh &quot;$SRCROOT/../hostui/build.sh&quot; &quot;$SRCROOT/../hostui/out&quot;&#10;">
+            <ActionContent title = "Build the device renderers for the mirror tests" scriptText = "# A clean environment: Xcode exports a deployment target for every platform, and clang then targets the wrong one.&#10;env -i PATH=/usr/bin:/bin HOME=&quot;$HOME&quot; sh &quot;$SRCROOT/../hostui/build.sh&quot; &quot;$SRCROOT/../hostui/out&quot;&#10;">
                <EnvironmentBuildable>
                   {TESTS_REF}
                </EnvironmentBuildable>
@@ -330,6 +330,9 @@ SCHEME = f"""<?xml version="1.0" encoding="UTF-8"?>
             {TESTS_REF}
          </TestableReference>
       </Testables>
+      <MacroExpansion>
+         {TESTS_REF}
+      </MacroExpansion>
    </TestAction>
    <LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal" allowLocationSimulation = "YES">
       <BuildableProductRunnable runnableDebuggingMode = "0">
