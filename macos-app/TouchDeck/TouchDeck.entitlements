@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Not sandboxed: the app opens /dev/cu.* serial ports, posts input events (Accessibility),
+	reads other apps' selected text and writes to the UF2 bootloader volume. Distribution is
+	Developer ID (outside the Mac App Store), signed with the hardened runtime and notarized.
+	The hardened runtime needs no exceptions: the tdui renderer dylibs are signed with the
+	same team identity as the app, so library validation accepts them.
+	-->
+</dict>
+</plist>
