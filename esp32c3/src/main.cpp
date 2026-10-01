@@ -7,6 +7,7 @@
 // ui_task (priority 1): rendering only, so slow frames never delay HID reports.
 #include <Arduino.h>
 #include <Preferences.h>
+#include "button.h"
 #include "app.h"
 #include "ble_hid.h"
 #include "display.h"
@@ -48,19 +49,55 @@ static void clock_update() {
     app.time_s = t;
 }
 
+// The watch's stopwatch, as on the RP boards: BOOT starts/pauses it on the watch page,
+// a long press resets it. timer_s is what the face shows.
+static uint32_t timer_accum_ms, timer_start_ms;
+
+static void timer_update() {
+    uint32_t ms = timer_accum_ms + (app.timer_running ? now_ms() - timer_start_ms : 0);
+    app.timer_s = (int)(ms / 1000);
+}
+
+static void timer_toggle() {
+    if (app.timer_running) timer_accum_ms += now_ms() - timer_start_ms;
+    else timer_start_ms = now_ms();
+    app.timer_running = !app.timer_running;
+    timer_update();
+}
+
+static void timer_reset() {
+    app.timer_running = false;
+    timer_accum_ms = 0;
+    timer_update();
+}
+
+// The BOOT button (GPIO 9): stopwatch on the watch, jiggler scale on the Jiggler page.
+static void on_button(btn_ev_t ev) {
+    if (app.in_bt || app.jig_settings) return;     // a panel is open: nothing behind it to change
+    if (app.screen == SCR_WATCH) {
+        if (ev == BTN_SHORT) timer_toggle();
+        else timer_reset();
+    } else if (app.screen == SCR_JIG && ev == BTN_SHORT) {
+        jig_cycle_scale();
+    }
+}
+
+// BTN / BTN LONG over serial (tests) land here.
+void inject_button(bool long_press) { on_button(long_press ? BTN_LONG : BTN_SHORT); }
+
 // Answer to the helper's DBG command. Never reads the touch chip.
 void debug_report() {
-    char s[400];
+    char s[448];
     snprintf(s, sizeof s,
              "LOG up=%lus frames=%lu screen=%d bt_page=%d heap=%u | ble state=%d conn=%d ready=%d host=%s | touch chip=%d ints=%u "
-             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d jmenu=%d jkey=%d jopen=%d jpause=%d jset=%d",
+             "reads=%u fails=%u recoveries=%u presses=%u events=%u xy=%d,%d lines=%d mode=%d jig=%d leds=%02X jscale=%.1f letter=%c clip=%d jnext=%d jmenu=%d jkey=%d jopen=%d jpause=%d jset=%d timer=%d trun=%d",
              (unsigned long)(now_ms() / 1000), (unsigned long)app.frames, app.screen, app.in_bt,
              (unsigned)ESP.getFreeHeap(), (int)ble_state(), ble_connected(), ble_ready(), ble_host_name(), touch_stats.chip_id,
              touch_stats.ints, touch_stats.reads, touch_stats.fails, touch_stats.recoveries,
              touch_stats.presses, touch_stats.events, touch_stats.last_x, touch_stats.last_y,
              touch_diag_lines(), (int)mode_get(), app.jig_on, app.pc_leds,
              (double)JIG_SCALES[app.jig_scale_idx], JIG_PATHS[app.jig_letter].name, app.clip_len, jiggler_next_menu_s(),
-             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s, app.jig_settings);
+             app.jig_cfg.menu_on, app.jig_cfg.key_f15, app.jig_cfg.open_s, app.jig_cfg.pause_s, app.jig_settings, app.timer_s, app.timer_running);
     link_send_line(s);
 }
 
@@ -247,6 +284,7 @@ void setup() {
     link_init();
     display_init();
     touch_init();
+    button_init();
     ble_init();
     mode_init();
 
@@ -270,6 +308,9 @@ void loop() {
     link_state_poll();
     ble_poll();
     clock_update();
+    timer_update();
+    btn_ev_t b = button_poll();
+    if (b != BTN_NONE) on_button(b);
 
     touch_event_t e = touch_poll();
     if (e.type != EV_NONE) {

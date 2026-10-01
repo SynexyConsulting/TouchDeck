@@ -7,15 +7,15 @@
 extern "C" {
 #endif
 
-enum { SCR_CLIP, SCR_JIG, SCR_SETTINGS, SCR_COUNT };
+enum { SCR_WATCH, SCR_CLIP, SCR_JIG, SCR_SETTINGS, SCR_COUNT };
 // ui_state_t.sub: a panel open over a page. UI_SUB_BT = Settings > Bluetooth,
 // UI_SUB_JIGSET = the Jiggler settings, opened by the cog on the Jiggler page.
 enum { UI_SUB_NONE, UI_SUB_BT, UI_SUB_JIGSET };
 
 // Pages a swipe can reach. A USB-only round board (RP2350, UI_USB_ONLY) has no
-// Bluetooth settings: just Clipboard and Jiggler.
+// Bluetooth settings: Watch, Clipboard and Jiggler.
 #ifdef UI_USB_ONLY
-#define UI_PAGE_COUNT 2
+#define UI_PAGE_COUNT 3
 #else
 #define UI_PAGE_COUNT SCR_COUNT
 #endif
@@ -30,6 +30,8 @@ typedef struct { int x, y, w, h; } rect_t;
 // the gfx clip, so a clipped call redraws just that region.
 void ui_draw_page(const ui_state_t *s);
 rect_t ui_dot_rect(float bx, float by);      // the jiggler dot at box position (bx, by)
+rect_t ui_hands_rect(int t);                 // watch hands at time t (seconds of day)
+rect_t ui_stopwatch_rect(void);              // the stopwatch box
 rect_t ui_rect_union(rect_t a, rect_t b);    // clamped to the screen
 
 #ifdef __cplusplus

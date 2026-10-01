@@ -15,7 +15,7 @@ from test_board_pc_mode import Board
 
 PORT = find_board("rp2350-128")
 pytestmark = pytest.mark.skipif(PORT is None, reason="RP2350 round Touch Deck not connected")
-CLIP, JIG = 0, 1
+WATCH, CLIP, JIG = 0, 1, 2
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +84,7 @@ def test_jiggler_settings_page_is_pixel_identical(mirror):
     """The Jiggler settings page (firmware 1.8.0), with the menu on and off (dimmed row)."""
     start = None
     try:
-        settle(mirror, 1, 1.0)
+        settle(mirror, JIG, 1.0)
         mirror.b.send("TAP 52 172"); mirror.pump(0.6)      # open the panel
         assert mirror.st.sub == 2
         start = (mirror.st.jig_menu_on, mirror.st.jig_key, mirror.st.jig_open_s, mirror.st.jig_pause_s)
@@ -96,3 +96,23 @@ def test_jiggler_settings_page_is_pixel_identical(mirror):
         if start:
             mirror.b.send("JIG CFG %d %d %d %d" % start); mirror.pump(0.3)
         mirror.b.send("SWIPE R"); mirror.pump(0.3)                      # close it
+
+
+def test_watch_page_is_pixel_identical(mirror):
+    """The round watch (1.8.0): hands and ticks to the pixel. Right after showing a second the board
+    draws the next one ahead into its framebuffer, so fb holds either second t or t+1."""
+    import time as _t
+    settle(mirror, WATCH, 1.5)
+    for _ in range(3):
+        t0 = mirror.st.time_s
+        end = _t.time() + 2
+        while mirror.st.time_s == t0 and _t.time() < end:
+            mirror.pump(0.02)
+        mirror.pump(0.35)
+        got, t = board_crc(mirror), mirror.st.time_s
+        crcs = set()
+        for tt in (t, (t + 1) % 86400):
+            mirror.st.time_s = tt
+            crcs.add(mirror.r.crc(mirror.r.render(mirror.st)))
+        mirror.st.time_s = t
+        assert got in crcs, f"t={t}"

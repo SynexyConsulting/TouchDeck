@@ -12,8 +12,8 @@ def board():
         b.s.close()
 
 def test_settings_toggle_and_bluetooth_drilldown(board):
-    board.goto(2)
-    assert board.field("screen") == "2"
+    board.goto(3)
+    assert board.field("screen") == "3"
     board.send("TAP 160 94"); board.pump(0.2)          # PC segment
     assert board.field("mode") == "0"
     assert board.field("bt_page") == "0"               # the toggle is not the drill-down
@@ -25,7 +25,7 @@ def test_settings_toggle_and_bluetooth_drilldown(board):
 def test_bluetooth_segment_locked_when_unpaired(board):
     if " state=0 " not in board.dbg():
         pytest.skip("board has a Bluetooth bond")
-    board.goto(2)
+    board.goto(3)
     board.send("TAP 80 94"); board.pump(0.2)
     assert board.field("mode") == "0"
 

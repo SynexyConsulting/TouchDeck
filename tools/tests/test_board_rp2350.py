@@ -14,7 +14,7 @@ from test_board_pc_mode import Board
 PORT = find_board("rp2350-128")
 pytestmark = pytest.mark.skipif(PORT is None, reason="RP2350 round Touch Deck not connected")
 
-CLIP, JIG = 0, 1
+WATCH, CLIP, JIG = 0, 1, 2
 TRASH = (178, 42)          # TRASH_CX, TRASH_CY
 SCALE_PILL = (32, 120)     # SCALE_PILL_X 10 + 44/2, PILL_Y 111 + 18/2
 LETTER = (120, 115)        # JIG_BOX_X 82 + 76/2, JIG_BOX_Y 77 + 76/2
@@ -51,15 +51,26 @@ def test_ver_reports_the_round_board(board):
     assert replies and replies[-1].split()[1] == "rp2350-128"
 
 
-def test_two_pages_and_swipes_stop_at_the_ends(board):
-    board.goto(CLIP)
+def test_three_pages_and_swipes_stop_at_the_ends(board):
+    board.goto(WATCH)
     assert board.field("screen") == "0"
     board.send("SWIPE R"); board.pump(0.2)
     assert board.field("screen") == "0"
-    board.send("SWIPE L"); board.pump(0.2)
-    assert board.field("screen") == "1"
-    board.send("SWIPE L"); board.pump(0.2)             # no third page
-    assert board.field("screen") == "1"
+    for page in ("1", "2", "2"):                      # Clipboard, Jiggler, and no fourth page
+        board.send("SWIPE L"); board.pump(0.2)
+        assert board.field("screen") == page
+
+
+def test_boot_button_runs_the_watch_stopwatch(board):
+    """As on the 1.69: on the watch, BOOT starts/pauses the stopwatch, a long press resets it."""
+    board.goto(WATCH)
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0" and board.field("trun") == "0"
+    board.send("BTN"); board.pump(2.3)
+    assert board.field("trun") == "1" and int(board.field("timer")) >= 2
+    board.send("BTN"); board.pump(0.2)
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0" and board.field("trun") == "0"
 
 
 def test_touch_chip_answers(board):
@@ -114,7 +125,7 @@ def test_watch_streams_state_with_the_page(board):
     assert lines, "no STATE after WATCH 1"
     f = fields(lines[-1])
     assert set(f) >= {"jig", "letter", "scale", "phase", "x", "y", "clip", "paste", "page"}
-    assert f["page"] == "1"
+    assert f["page"] == str(JIG)
     board.send("WATCH 0"); board.pump(0.2)
     assert not state_lines(board, 0.6), "STATE kept coming after WATCH 0"
 
@@ -164,8 +175,8 @@ def test_jiggler_settings_page_taps(board):
     start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
     try:
         board.send("JIG CFG 1 0 2 0"); board.pump(0.3)
-        board.goto(1)
-        assert board.field("screen") == "1" and board.field("jset") == "0"
+        board.goto(JIG)
+        assert board.field("screen") == "2" and board.field("jset") == "0"
         board.send("TAP 52 172"); board.pump(0.25)            # the cog opens the panel
         assert board.field("jset") == "1"
         def tap(xy):
@@ -186,10 +197,10 @@ def test_jiggler_settings_page_taps(board):
         tap((139, 172)); tap((139, 172))             # stops at 0
         assert cfg()[3] == "0"
         board.send("TAP 50 48"); board.pump(0.25)        # X closes it
-        assert board.field("jset") == "0" and board.field("screen") == "1"
+        assert board.field("jset") == "0" and board.field("screen") == "2"
         board.send("TAP 52 172"); board.pump(0.25)
         board.send("SWIPE R"); board.pump(0.25)                        # so does a right swipe
-        assert board.field("jset") == "0" and board.field("screen") == "1"
+        assert board.field("jset") == "0" and board.field("screen") == "2"
     finally:
         board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
 
@@ -210,7 +221,7 @@ def test_a_settings_change_is_streamed_without_asking(board):
 
 def test_an_idle_board_is_quiet_while_watched(board):
     """With the app watching (WATCH 1), a board that isn't changing sends STATE once, not on every poll."""
-    board.send("JIG OFF"); board.goto(0); board.pump(0.5)
+    board.send("JIG OFF"); board.goto(CLIP); board.pump(0.5)
     board.send("WATCH 1"); board.pump(0.6); board.take()
     board.pump(1.0)
     n = len([l for l in board.take() if l.startswith("STATE ")])

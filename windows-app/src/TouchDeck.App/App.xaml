@@ -112,6 +112,53 @@
             <Setter Property="Margin" Value="8,0,0,0" />
         </Style>
 
+        <!-- A two-way choice (Esc / F15): always amber, the knob points at the chosen side. -->
+        <Style x:Key="ChoiceSwitch" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Track" Width="38" Height="22" CornerRadius="11"
+                                Background="{StaticResource AccentTint}" BorderBrush="{StaticResource Accent}" BorderThickness="1">
+                            <Ellipse x:Name="Knob" Width="14" Height="14" Fill="{StaticResource Accent}"
+                                     HorizontalAlignment="Left" Margin="4,0" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Faint}" />
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource Surf2}" />
+                                <Setter TargetName="Knob" Property="Fill" Value="{StaticResource Dim}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- The labels beside a ChoiceSwitch: the chosen one in amber, the other dim but readable. -->
+        <Style x:Key="KeySideLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Dim}" />
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="esc" />
+                        <Condition Binding="{Binding JigF15}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                </MultiDataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="f15" />
+                        <Condition Binding="{Binding JigF15}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Toggle switch for settings. -->
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource Text}" />

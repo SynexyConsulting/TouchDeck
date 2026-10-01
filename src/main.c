@@ -23,15 +23,14 @@
 #include "usb_io.h"
 
 #ifdef TD_ROUND
-// Round board (RP2350-Touch-LCD-1.28): Clipboard and Jiggler only. No watch page,
-// buzzer or power latch, so the watch/buzzer paths below compile to nothing.
-#define SCR_WATCH  (-1)
-#define MUTE_HIT_X LCD_W
+// Round board (RP2350-Touch-LCD-1.28): a silent round watch (no buzzer, so no tick
+// and no mute toggle), Clipboard and Jiggler. No power latch.
+#define MUTE_HIT_X LCD_W         // nothing to tap: no mute on a silent watch
 #define MUTE_HIT_Y 0
 static inline void buzzer_init(void) {}
 static inline void buzzer_tick(void) {}
 static inline void buzzer_tone(uint32_t f, uint32_t ms, uint32_t duty) { (void)f; (void)ms; (void)duty; }
-#define START_SCREEN SCR_CLIP
+#define START_SCREEN SCR_WATCH
 #else
 #include "buzzer.h"
 #define START_SCREEN SCR_WATCH

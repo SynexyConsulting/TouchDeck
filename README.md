@@ -41,11 +41,11 @@ The ESP32-C3 has no USB keyboard/mouse hardware, so it has two **output modes**:
 - **BT:** a Bluetooth LE keyboard and mouse, paired explicitly with an on-screen 6-digit passkey.
 - **PC:** the board sends its key and mouse reports over USB serial, and the PC app performs them.
 
-It has Clipboard, Jiggler and Settings pages with the same trash can, letter lanes and Jiggler menu panel. **F15 over Bluetooth:** firmware 1.8.0 widened the board's keyboard description so it can send F15. If F15 doesn't arrive after updating, Windows is using the copy it saved when you paired, so remove the board in Windows Bluetooth settings and pair it again. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
+It has Watch, Clipboard, Jiggler and Settings pages. The round watch is silent and shows the time once the PC app has sent it. It has the same trash can, letter lanes and Jiggler menu panel. **F15 over Bluetooth:** firmware 1.8.0 widened the board's keyboard description so it can send F15. If F15 doesn't arrive after updating, Windows is using the copy it saved when you paired, so remove the board in Windows Bluetooth settings and pair it again. On the round screen the jiggler's pills sit either side of the letter. There's no clock or speaker on this board.
 
 ### RP2350-Touch-LCD-1.28 (240x240 round, touch)
 
-The round screen on an RP2350 (Pico 2 chip). It is a real USB keyboard and mouse like the 1.69 (`CAFE:4011`, the same firmware tree), with the ESP32-C3's round **Clipboard** and **Jiggler** pages and a `USB` chip. There's no watch, speaker or Bluetooth. The BOOT button cycles the jiggler size, like the scale pill. The RP2350 has a floating-point unit, so it draws about ten times faster than the RP2040: a full jiggler page takes about 10 ms instead of about 120 ms.
+The round screen on an RP2350 (Pico 2 chip). It is a real USB keyboard and mouse like the 1.69 (`CAFE:4011`, the same firmware tree), with a round **Watch** (silent; BOOT runs its stopwatch) and the ESP32-C3's round **Clipboard** and **Jiggler** pages, and a `USB` chip. There's no speaker or Bluetooth. The BOOT button cycles the jiggler size, like the scale pill. The RP2350 has a floating-point unit, so it draws about ten times faster than the RP2040: a full jiggler page takes about 10 ms instead of about 120 ms.
 
 A new board still runs Waveshare's factory demo. Plug it in with the Windows app open and it offers **Install Touch Deck** (see below); no buttons needed.
 

@@ -69,10 +69,8 @@ static void button(int x, int y, int w, int h, uint16_t bg, uint16_t fg, const c
 // Transient message if one is showing, else the given text.
 static const char *msg_or(const ui_state_t *s, const char *normal) { return s->msg[0] ? s->msg : normal; }
 
-// Edge ring + top chip: where output goes, and whether that link is live.
-static void frame(const ui_state_t *s) {
-    gfx_fill(C_BG);
-    gfx_ring(120.f, 120.f, 118.5f, 3.f, accent(s));
+// Top chip: where output goes, and whether that link is live (over the watch face too).
+static void chip(const ui_state_t *s) {
     int bt = s->bt_mode;
     const char *label = bt ? "BLUETOOTH" : UI_PC_LABEL;
     int tw = gfx_text_aa_width(label, &font_caps, 1), w = 8 + 10 + 4 + tw + 5 + 5 + 8, x = 120 - w / 2, y = 16;
@@ -80,6 +78,13 @@ static void frame(const ui_state_t *s) {
     (bt ? icon_bt : icon_monitor)(x + 13.f, y + 9.f, 10.f, accent(s));
     text_at(x + 22, y + 9, label, &font_caps, accent(s), 1);
     gfx_disc(x + w - 10.5f, y + 9.f, 2.6f, s->link_ok ? C_OK : C_BAD);
+}
+
+// Edge ring + top chip.
+static void frame(const ui_state_t *s) {
+    gfx_fill(C_BG);
+    gfx_ring(120.f, 120.f, 118.5f, 3.f, accent(s));
+    chip(s);
 }
 
 static void dots(int count, int active) {
@@ -178,6 +183,100 @@ static void draw_jig(const ui_state_t *s) {
     }
     text_c(206, msg_or(s, stats), &font_body, C_DIM, 0);
     icon_cog(JIG_COG_CX, JIG_COG_CY, 20.f, C_DIM);     // opens the Jiggler settings
+}
+
+// ---------- watch ----------
+// A round face filling the circle, the 1.69's watch language: dark dial, rim,
+// 60 ticks (heavier quarters), white hands, red second hand. No speaker on the
+// round boards, so no tick and no mute icon. The stopwatch sits below the centre.
+
+#define W_CX 120.f
+#define W_CY 120.f
+#define W_DIAL_R 106.f          // the page dots (y 229) sit in the gap between dial and edge ring
+#define W_TICK_R 100.f          // ticks end here
+#define DEG2RAD 0.017453292f
+#define COL_DIAL   RGB(18, 24, 38)
+#define COL_RIM    RGB(90, 100, 120)
+#define COL_MARK   RGB(200, 205, 215)
+#define COL_HAND   RGB(240, 240, 240)
+#define COL_SECOND RGB(255, 70, 40)
+
+static void polar(float deg, float len, float *x, float *y) {
+    float a = deg * DEG2RAD;
+    *x = W_CX + sinf(a) * len;
+    *y = W_CY - cosf(a) * len;
+}
+
+// The three hands at time t: one definition for drawing and for the partial-redraw boxes.
+typedef struct { float deg, tail, len, thick; uint16_t col; } hand_t;
+static void watch_hands(int t, hand_t out[3]) {
+    int h = t / 3600, m = (t / 60) % 60, s = t % 60;
+    hand_t hh = {((h % 12) + m / 60.f + s / 3600.f) * 30.f, 10.f, 52.f, 7.f, COL_HAND};
+    hand_t mh = {(m + s / 60.f) * 6.f, 12.f, 76.f, 4.5f, COL_HAND};
+    hand_t sh = {s * 6.f, 18.f, 88.f, 2.f, COL_SECOND};
+    out[0] = hh; out[1] = mh; out[2] = sh;
+}
+
+rect_t ui_hands_rect(int t) {
+    hand_t hs[3];
+    watch_hands(t, hs);
+    float x0 = W_CX - 8.f, y0 = W_CY - 8.f, x1 = W_CX + 8.f, y1 = W_CY + 8.f;   // centre discs
+    for (int i = 0; i < 3; i++) {
+        float ax, ay, bx, by, m = hs[i].thick * 0.5f + 2.f;
+        polar(hs[i].deg + 180.f, hs[i].tail, &ax, &ay);
+        polar(hs[i].deg, hs[i].len, &bx, &by);
+        x0 = fminf(x0, fminf(ax, bx) - m); y0 = fminf(y0, fminf(ay, by) - m);
+        x1 = fmaxf(x1, fmaxf(ax, bx) + m); y1 = fmaxf(y1, fmaxf(ay, by) + m);
+    }
+    rect_t r = {(int)floorf(x0), (int)floorf(y0), (int)ceilf(x1 - x0) + 1, (int)ceilf(y1 - y0) + 1};
+    return r;
+}
+
+rect_t ui_stopwatch_rect(void) {
+    int tw = gfx_text_aa_width("88:88:88", &font_timer, 0), bw = tw + 16, bh = font_timer.cap_h + 14;
+    int cy = (int)W_CY + 46;
+    rect_t r = {(int)W_CX - bw / 2, cy - bh / 2, bw, bh};
+    return r;
+}
+
+static void draw_watch(const ui_state_t *s) {
+    gfx_disc(W_CX, W_CY, W_DIAL_R, COL_DIAL);
+    gfx_ring(W_CX, W_CY, W_DIAL_R, 2.f, COL_RIM);
+    for (int i = 0; i < 60; i++) {
+        float x0, y0, x1, y1;
+        int hour = (i % 5) == 0;
+        polar(i * 6.f, W_TICK_R - (hour ? 14.f : 5.f), &x0, &y0);
+        polar(i * 6.f, W_TICK_R, &x1, &y1);
+        gfx_line(x0, y0, x1, y1, hour ? ((i % 15) == 0 ? 6.f : 4.f) : 1.5f, COL_MARK);
+    }
+    if (s->time_s < 0)       // no clock until the PC app sends TIME (the ESP32-C3 has no RTC)
+        gfx_text_aa_centered((int)W_CX, gfx_text_aa_ytop(&font_caps, 82), "TIME FROM PC", &font_caps, C_DIM, 1);
+    else if (s->helper)
+        gfx_text_aa_centered((int)W_CX, gfx_text_aa_ytop(&font_caps, 82), "PC", &font_caps, C_DIM, 1);
+
+    // Stopwatch (BOOT on the RP2350): black box below the centre, under the hands.
+    char st[12];
+    int ts = s->timer_s;
+    snprintf(st, sizeof st, "%02d:%02d:%02d", (ts / 3600) % 100, ts / 60 % 60, ts % 60);
+    rect_t box = ui_stopwatch_rect();
+    int cy = box.y + box.h / 2;
+    gfx_rrect(box.x, box.y, box.w, box.h, 6.f, RGB(0, 0, 0));
+    gfx_text_aa_centered((int)W_CX, gfx_text_aa_ytop(&font_timer, cy), st, &font_timer, RGB(255, 255, 255), 0);
+    if (s->jig_on)
+        gfx_text_aa_centered((int)W_CX, gfx_text_aa_ytop(&font_caps, cy + box.h / 2 + 8), "JIGGLING", &font_caps, C_OK, 1);
+
+    hand_t hs[3];
+    watch_hands(s->time_s < 0 ? 0 : s->time_s, hs);
+    for (int i = 0; i < 3 && s->time_s >= 0; i++) {
+        float x0, y0, x1, y1;
+        polar(hs[i].deg + 180.f, hs[i].tail, &x0, &y0);
+        polar(hs[i].deg, hs[i].len, &x1, &y1);
+        gfx_line(x0, y0, x1, y1, hs[i].thick, hs[i].col);
+    }
+    if (s->time_s >= 0) {
+        gfx_disc(W_CX, W_CY, 6.f, COL_SECOND);
+        gfx_disc(W_CX, W_CY, 2.f, COL_DIAL);
+    }
 }
 
 // ---------- jiggler settings ----------
@@ -318,7 +417,8 @@ void ui_draw_page(const ui_state_t *s) {
     if (s->sub == UI_SUB_BT) { draw_bt(s); dots(1, 0); }
     else if (s->sub == UI_SUB_JIGSET) { draw_jigset(s); dots(1, 0); }
     else {
-        if (s->screen == SCR_CLIP) draw_clip(s);
+        if (s->screen == SCR_WATCH) { draw_watch(s); chip(s); }   // the dial covers the chip: redraw it on top
+        else if (s->screen == SCR_CLIP) draw_clip(s);
         else if (s->screen == SCR_JIG) draw_jig(s);
         else draw_settings(s);
         dots(UI_PAGE_COUNT, s->screen);

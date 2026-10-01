@@ -76,10 +76,13 @@
                               Click="OnJigMenu" />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
                         <TextBlock Text="Key" Width="150" VerticalAlignment="Center" />
-                        <RadioButton x:Name="JigEsc" Content="Esc" GroupName="JigKey" Click="OnJigKey"
-                                     IsChecked="{Binding JigF15, Mode=OneWay, Converter={StaticResource NotBool}}" />
-                        <RadioButton x:Name="JigF15" Content="F15" GroupName="JigKey" Click="OnJigKey" Margin="16,0,0,0"
-                                     IsChecked="{Binding JigF15, Mode=OneWay}" />
+                        <!-- Esc or F15: both are real choices, so the switch stays amber and the chosen side lights up -->
+                        <TextBlock x:Name="JigEscLabel" Text="Esc" VerticalAlignment="Center" Cursor="Hand" FontWeight="SemiBold"
+                                   MouseLeftButtonUp="OnJigKeyLabel" Style="{StaticResource KeySideLabel}" Tag="esc" />
+                        <CheckBox x:Name="JigF15Switch" Style="{StaticResource ChoiceSwitch}" Margin="10,0"
+                                  IsChecked="{Binding JigF15, Mode=OneWay}" Click="OnJigKey" ToolTip="Esc or F15" />
+                        <TextBlock x:Name="JigF15Label" Text="F15" VerticalAlignment="Center" Cursor="Hand" FontWeight="SemiBold"
+                                   MouseLeftButtonUp="OnJigKeyLabel" Style="{StaticResource KeySideLabel}" Tag="f15" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,4" IsEnabled="{Binding JigMenuOn}">
                         <TextBlock Text="Menu open" Width="150" VerticalAlignment="Center" />

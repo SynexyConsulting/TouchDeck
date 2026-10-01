@@ -55,6 +55,7 @@ static int rx_want, rx_got;
 extern void debug_report();
 extern void clock_set(int seconds_of_day);
 extern void inject_touch(int type, int x, int y);
+extern void inject_button(bool long_press);
 
 void link_init() {
     // Room for the mirror's longest line (CLIPTEXT, up to ~4 KB) plus K/M reports.
@@ -226,6 +227,8 @@ static void handle_line(char *s) {
         }
     } else if (!strcmp(s, "CLIP CLEAR")) {
         clip_clear();
+    } else if (!strcmp(s, "BTN") || !strcmp(s, "BTN LONG")) {   // scripting / tests: the BOOT button
+        inject_button(s[3] == ' ');
     } else if (!strcmp(s, "VER")) {
         link_send_line("VERSION " FW_BOARD " " FW_VERSION " " __DATE__);
     } else if (!strncmp(s, "FBCRC ", 6)) {         // tests: mirror == device

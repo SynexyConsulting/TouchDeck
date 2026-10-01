@@ -15,6 +15,8 @@ struct app_t {
     volatile bool helper;           // PC helper is talking to us over USB
     volatile uint8_t pc_leds;       // helper's lock-key state (LEDS)
     volatile int time_s = -1;       // seconds since midnight from the helper, -1 = unknown
+    volatile int timer_s;           // the watch's stopwatch (BOOT on the watch page)
+    volatile bool timer_running;
     volatile uint32_t frames;
 
     // Clipboard. clip/clip_src/msg are guarded by clip_mtx.

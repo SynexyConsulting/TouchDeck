@@ -69,7 +69,14 @@ public partial class SettingsWindow : Window
 
     private void OnJigKey(object sender, RoutedEventArgs e)
     {
-        if (app.JigCfg is { } c) app.SetJigConfig(c with { F15 = sender == JigF15 });
+        if (app.JigCfg is { } c) app.SetJigConfig(c with { F15 = JigF15Switch.IsChecked == true });
+    }
+
+    // A click on "Esc" or "F15" picks that side.
+    private void OnJigKeyLabel(object sender, MouseButtonEventArgs e)
+    {
+        if (app.JigCfg is { } c && sender is FrameworkElement { Tag: string side })
+            app.SetJigConfig(c with { F15 = side == "f15" });
     }
 
     private void OnJigStep(object sender, RoutedEventArgs e)

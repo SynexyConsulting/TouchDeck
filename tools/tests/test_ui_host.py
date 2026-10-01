@@ -16,8 +16,8 @@ from tdui_host import UiState
 ROOT = jig_host.ROOT
 C_BG = 0x0041           # RGB(7, 9, 13)
 PC_AMBER = 0xF507       # RGB(242, 163, 58)
-PAGES = {"rp2040": 3, "esp32c3": 3, "rp2350": 2}
-JIG = {"rp2040": 2, "esp32c3": 1, "rp2350": 1}      # the Jiggler page; its settings open over it (sub=2)
+PAGES = {"rp2040": 3, "esp32c3": 4, "rp2350": 3}
+JIG = {"rp2040": 2, "esp32c3": 2, "rp2350": 2}      # the Jiggler page; its settings open over it (sub=2)
 SUB_JIGSET = 2
 COG = {"rp2040": (30, 230), "esp32c3": (52, 172), "rp2350": (52, 172)}
 ROW2_Y = {"rp2040": 84 + 2 * 40, "esp32c3": 76 + 2 * 32, "rp2350": 76 + 2 * 32}   # JS_ROW_Y(2)
@@ -69,10 +69,10 @@ def test_panel_sizes(tdui):
 
 
 def test_round_boards_show_one_dot_per_page(tdui):
-    """Round dots sit 12 px apart around x 120: RP2350 Clipboard and Jiggler (114, 126);
-    ESP32-C3 adds Settings (108, 120, 132)."""
-    for board, xs, gaps in (("rp2350", (114, 126), (108, 120, 132)),
-                            ("esp32c3", (108, 120, 132), (114, 126))):
+    """Round dots sit 12 px apart around x 120: RP2350 Watch, Clipboard, Jiggler (108, 120, 132);
+    ESP32-C3 adds Settings (102, 114, 126, 138)."""
+    for board, xs, gaps in (("rp2350", (108, 120, 132), (102, 114, 126, 138)),
+                            ("esp32c3", (102, 114, 126, 138), (108, 120, 132))):
         r = tdui[board]
         for page in range(PAGES[board]):
             f = r.render(state(screen=page))
@@ -162,7 +162,7 @@ def test_pages_stay_inside_the_panel_shape(tdui, board):
 def test_jiggler_dot_follows_the_synced_position(tdui, board, box):
     r = tdui[board]
     bx, by, size = box
-    jig = 2 if board == "rp2040" else 1
+    jig = 2                              # every board: Watch, Clipboard, Jiggler
     for x, y in [(0, 0), (500, 500), (1000, 250)]:
         f = r.render(state(screen=jig, jig_demo=1, jig_x=x, jig_y=y))
         sx, sy = int(bx + x * size / 1000), int(by + y * size / 1000)
@@ -174,7 +174,7 @@ def test_jiggler_dot_follows_the_synced_position(tdui, board, box):
 @pytest.mark.parametrize("board", ["rp2040", "esp32c3"])
 def test_clip_text_message_and_scale_show(tdui, board):
     r = tdui[board]
-    clip, jig = (1, 2) if board == "rp2040" else (0, 1)
+    clip, jig = 1, 2                     # every board: Watch, Clipboard, Jiggler
     empty = r.render(state(screen=clip))
     text = r.render(state(screen=clip, clip_len=5, clip=b"hello", clip_src=b"select"))
     assert empty != text
@@ -185,7 +185,7 @@ def test_clip_text_message_and_scale_show(tdui, board):
 
 def test_out_of_range_letter_and_scale_do_not_crash(tdui):
     for r in tdui.values():
-        r.render(state(screen=2 if r.h == 280 else 1, jig_letter=999, jig_scale=-4, jig_on=1))
+        r.render(state(screen=2, jig_letter=999, jig_scale=-4, jig_on=1))
 
 
 @pytest.mark.parametrize("board", ["rp2040", "esp32c3"])
@@ -226,3 +226,31 @@ def test_text_lines_apply(tdui):
         b"Copied 5 chars", b"select", b"DESKTOP 1", b"Waiting for Bluetooth")
     r.apply(st, "TEXT msg ")
     assert st.msg == b""
+
+
+@pytest.mark.parametrize("board", ["esp32c3", "rp2350"])
+def test_round_watch_face(tdui, board):
+    """Page 0 on round boards is a watch: the hands follow the time, the stopwatch shows,
+    and with no time yet (ESP32-C3 before the app's TIME) there are no hands."""
+    r = tdui[board]
+    a = r.render(state(screen=0, time_s=10 * 3600 + 9 * 60 + 36))
+    b = r.render(state(screen=0, time_s=10 * 3600 + 9 * 60 + 37))
+    assert a != b                                              # the second hand moved
+    assert r.render(state(screen=0, time_s=36000, timer_s=754)) != r.render(state(screen=0, time_s=36000))
+    none = r.render(state(screen=0, time_s=-1))
+    assert pixel(r, none, 124, 120) != pixel(r, a, 124, 120)   # no red centre cap without a time
+
+
+@pytest.mark.parametrize("board", ["esp32c3", "rp2350"])
+def test_round_watch_regions_cover_the_hands(tdui, board):
+    """The partial-redraw boxes (hands at t and t+1, stopwatch) cover every pixel that changes
+    between two seconds, so drawing a second ahead into just those boxes is enough."""
+    r = tdui[board]
+    for t in (0, 15, 3599, 10 * 3600 + 9 * 60 + 36, 43199):
+        a = r.render(state(screen=0, time_s=t))
+        b = r.render(state(screen=0, time_s=t + 1))
+        boxes = [r.lib_rect("hands", t), r.lib_rect("hands", t + 1), r.lib_rect("stopwatch")]
+        for y in range(r.h):
+            for x in range(r.w):
+                if pixel(r, a, x, y) != pixel(r, b, x, y):
+                    assert any(bx <= x < bx + bw and by <= y < by + bh for bx, by, bw, bh in boxes), (t, x, y)

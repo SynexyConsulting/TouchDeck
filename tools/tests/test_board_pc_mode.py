@@ -47,7 +47,7 @@ class Board:
 
 def jiggler_off(b):
     if b.field("jig") == "1":
-        b.goto(1); b.send("TAP 120 115"); b.pump(0.3)
+        b.goto(2); b.send("TAP 120 115"); b.pump(0.3)
 
 @pytest.fixture
 def board():
@@ -64,7 +64,7 @@ def board():
         b.s.close()
 
 def test_jiggler_in_pc_mode_sends_mouse_reports(board):
-    board.goto(1)
+    board.goto(2)
     board.take(); board.send("TAP 120 115"); board.pump(1.5)
     moves = [l for l in board.take() if l.startswith("M ")]
     assert len(moves) >= 20
@@ -73,7 +73,7 @@ def test_jiggler_in_pc_mode_sends_mouse_reports(board):
     assert not [l for l in board.take() if l.startswith("M ") and l != "M 00 0 0"]
 
 def test_paste_in_pc_mode_types_key_reports(board):
-    board.goto(0)
+    board.goto(1)
     board.s.write(b"CLIP 3 cli\nHi\n"); board.pump(0.3)
     board.take(); board.send("TAP 160 160"); board.pump(1.0)       # Paste (buttons at y 140..180)
     keys = [l for l in board.take() if l.startswith("K ")]
@@ -89,7 +89,7 @@ def test_bluetooth_mode_refused_while_unpaired(board):
 SCALE_PILL = "TAP 32 120"                               # left of the letter
 
 def test_scale_pill_cycles_jiggler_scale(board):
-    board.goto(1)
+    board.goto(2)
     order = ["1.0", "1.5", "2.0"]
     seen = [board.field("jscale")]
     for _ in range(3):
@@ -104,7 +104,7 @@ def _mean_step(board, secs):
     return sum(abs(int(dx)) + abs(int(dy)) for _, _, dx, dy in steps) / max(1, len(steps))
 
 def test_jiggler_scale_widens_the_movement(board):
-    board.goto(1)
+    board.goto(2)
     while board.field("jscale") != "1.0":
         board.send(SCALE_PILL); board.pump(0.2)
     board.send("TAP 120 115"); board.pump(1.5)          # jiggler on at 1x, let it settle
@@ -177,7 +177,7 @@ def test_clip_clear_ignored_while_empty(board):
     board.send("WATCH 0"); board.pump(0.2)
 
 def test_trash_tap_clears_the_clip(board):
-    board.goto(0)
+    board.goto(1)
     board.s.write(b"CLIP 5 test" + bytes([10]) + b"hello"); board.pump(0.3)
     assert board.field("clip") == "5"
     board.send("TAP 178 42"); board.pump(0.3)
@@ -224,8 +224,8 @@ def test_jiggler_settings_page_taps(board):
     start = tuple(board.field(k) for k in ("jmenu", "jkey", "jopen", "jpause"))
     try:
         board.send("JIG CFG 1 0 2 0"); board.pump(0.3)
-        board.goto(1)
-        assert board.field("screen") == "1" and board.field("jset") == "0"
+        board.goto(2)
+        assert board.field("screen") == "2" and board.field("jset") == "0"
         board.send("TAP 52 172"); board.pump(0.25)            # the cog opens the panel
         assert board.field("jset") == "1"
         def tap(xy):
@@ -246,10 +246,10 @@ def test_jiggler_settings_page_taps(board):
         tap((139, 172)); tap((139, 172))             # stops at 0
         assert cfg()[3] == "0"
         board.send("TAP 50 48"); board.pump(0.25)        # X closes it
-        assert board.field("jset") == "0" and board.field("screen") == "1"
+        assert board.field("jset") == "0" and board.field("screen") == "2"
         board.send("TAP 52 172"); board.pump(0.25)
         board.send("SWIPE R"); board.pump(0.25)                        # so does a right swipe
-        assert board.field("jset") == "0" and board.field("screen") == "1"
+        assert board.field("jset") == "0" and board.field("screen") == "2"
     finally:
         board.send("JIG CFG " + " ".join(start)); board.pump(0.3)
 
@@ -270,9 +270,42 @@ def test_a_settings_change_is_streamed_without_asking(board):
 
 def test_an_idle_board_is_quiet_while_watched(board):
     """With the app watching (WATCH 1), a board that isn't changing sends STATE once, not on every poll."""
-    board.send("JIG OFF"); board.goto(0); board.pump(0.5)
+    board.send("JIG OFF"); board.goto(1); board.pump(0.5)
     board.send("WATCH 1"); board.pump(0.6); board.take()
     board.pump(1.0)
     n = len([l for l in board.take() if l.startswith("STATE ")])
     board.send("WATCH 0"); board.pump(0.2)
     assert n <= 2, f"{n} STATE lines in 1 s from an idle board"
+
+
+def test_watch_is_page_one_and_boot_runs_its_stopwatch(board):
+    """Firmware 1.8.0: the round watch is page 0 (Watch, Clipboard, Jiggler, Settings); on it,
+    BOOT starts/pauses the stopwatch and a long press resets it."""
+    board.goto(0)
+    assert board.field("screen") == "0"
+    board.send("SWIPE R"); board.pump(0.2)
+    assert board.field("screen") == "0"
+    for page in ("1", "2", "3", "3"):
+        board.send("SWIPE L"); board.pump(0.2)
+        assert board.field("screen") == page
+    board.goto(0)
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0" and board.field("trun") == "0"
+    board.send("BTN"); board.pump(2.3)
+    assert board.field("trun") == "1" and int(board.field("timer")) >= 2
+    board.send("BTN"); board.pump(0.2)
+    t = board.field("timer"); board.pump(1.2)
+    assert board.field("trun") == "0" and board.field("timer") == t
+    board.send("BTN LONG"); board.pump(0.2)
+    assert board.field("timer") == "0"
+
+
+def test_boot_cycles_the_scale_on_the_jiggler_page(board):
+    board.goto(2)
+    order = ["1.0", "1.5", "2.0"]
+    before = board.field("jscale")
+    board.send("BTN"); board.pump(0.2)
+    after = board.field("jscale")
+    assert after == order[(order.index(before) + 1) % 3]
+    board.send("BTN"); board.pump(0.2); board.send("BTN"); board.pump(0.2)   # back where it was
+    assert board.field("jscale") == before
