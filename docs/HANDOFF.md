@@ -2,6 +2,33 @@
 
 Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE.md` and `docs/superpowers/` (specs and plans). It records what a fresh session can't see: what's merged, what's pending, and decisions made in conversation.
 
+## Repository move and open source (2026-10-01, read first)
+
+- **Repos:**
+  - `SynexyConsulting/TouchDeck` is now the **public** repo, licensed GPL-3.0-or-later (`LICENSE`, plain words in `docs/license.md`, website page `docs/license.html` from `python3 tools/make_license_html.py`).
+  - The old private repo was renamed **`SynexyConsulting/TouchDeckPrivate`**. It's the archive: the original history, PRs #1–#15, and any stale branches.
+  - The public history was rewritten from it:
+    - every commit's author and committer is `Nik Orfanos <norfanos@users.noreply.github.com>`;
+    - a real PC name was replaced in an old test string;
+    - gitleaks and a PII scan were clean.
+  - Commit hashes differ from TouchDeckPrivate, so **don't push between the two**.
+- **Branches in the public repo:** `main`, `fix/macos-first-build` (open a PR to `main`, see below), `release/1.3.0`, and the tag `app-v1.2.1`. The merged feature branches stayed in TouchDeckPrivate.
+- **On the PC, start from a fresh clone** of `git@github.com:SynexyConsulting/TouchDeck.git`, and set `git config user.email norfanos@users.noreply.github.com`. Copy over anything untracked you need from the old folder:
+  - `%USERPROFILE%\.touchdeck\` (the RP2350 factory backup, signing key) lives outside the repo, so nothing to do there;
+  - `build/` folders can be rebuilt.
+- **Re-create the release setup in the new repo before tagging anything** (Settings → Environments, Rules):
+  - environment `release`, limited to `app-v*` / `fw-v*` tags;
+  - its secrets `TOUCHDECK_UPDATES_TOKEN` (fine-grained, Contents read/write on TouchDeckUpdates only) and `TOUCHDECK_FEED_KEY` (the feed-signing PEM);
+  - the tag ruleset restricting who may create `app-v*` / `fw-v*` tags.
+  - Pushing `app-v1.2.1` here started a Release run that can't publish (no secrets yet); ignore or delete it.
+  - Never push an already-published tag again after the secrets exist.
+- **Open items, in order:**
+  1. PR `fix/macos-first-build` → `main` (the description is in `docs/PR-macos-first-build.md` on the Mac, untracked, or write a new one; the branch's commit messages cover it). It adds the licence files too, so GitHub shows the licence on `main` once it's merged.
+  2. Merge `release/1.3.0`, then tag `fw-v1.8.0` and `app-v1.3.0` (after the release secrets are set up).
+  3. Windows app work: see "Next on the Windows PC" below.
+  4. On the Mac: test "Install Touch Deck" on the RP2350. It runs Waveshare's demo now, put there for that test. The app in `/Applications` bundles firmware 1.8.0. Allow the USB accessory if macOS asks, and re-grant Accessibility after a rebuild.
+- **The Mac now builds firmware too:** the Pico toolchain is in `~/.pico-sdk-mac` (`source ~/.pico-sdk-mac/env.sh`, then the usual cmake/ninja commands). `tools/flash.py` finds the UF2 drive in `/Volumes`.
+
 ## Update from the Mac session (2026-10-01, later)
 
 - **PRs #8 to #13 are all merged into `main`.** The merge-order table below is history. Nothing is released yet: `release/1.3.0` holds the version bump (app 1.3.0, firmware 1.8.0) and still needs a PR, merge and the `fw-v1.8.0` / `app-v1.3.0` tags.
