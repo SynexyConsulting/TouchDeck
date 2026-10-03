@@ -301,21 +301,21 @@ main { overflow-x: clip; }
 /* apps: one full-width row per app, screenshots scaled proportionally */
 .apps { display: grid; gap: 28px; }
 .app-row {
-  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 4vw, 56px); align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(24px, 3vw, 40px);
   border-radius: var(--radius-l); background: var(--inner); border: 1px solid #1d2533; padding: clamp(24px, 4vw, 48px);
 }
 .app-row h3 { font-size: 30px; margin: 14px 0 12px; }
 .app-fig { margin: 0; min-width: 0; }
 .app-fig img {
-  display: block; width: 100%; height: auto; max-width: 100%; object-fit: contain;
+  display: block; width: 100%; height: auto; max-width: min(100%, var(--native, 100%)); margin: 0 auto; object-fit: contain;
   border-radius: 14px; border: 1px solid var(--surf2); box-shadow: 0 30px 60px -24px rgba(0,0,0,.9);
 }
-.app-fig figcaption { margin-top: 14px; font-size: 15px; color: var(--dim); }
+.app-fig figcaption { margin-top: 14px; font-size: 15px; color: var(--dim); text-align: center; }
+@media (min-width: 1000px) { .app-text .feature-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; } .app-text > p { max-width: 46em; } }
 .app-linux { font-size: 16px; margin: 4px 0 0; }
 .feature-list { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; }
 .feature-list li { position: relative; padding-left: 22px; font-size: 17px; }
 .feature-list li::before { content: ""; position: absolute; left: 2px; top: .6em; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); }
-@media (max-width: 999px) { .app-row { grid-template-columns: 1fr; } }
 
 /* open source */
 .open { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(40px, 6vw, 90px); align-items: start; }
