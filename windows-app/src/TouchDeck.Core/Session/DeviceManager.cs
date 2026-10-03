@@ -119,7 +119,7 @@ public sealed class DeviceManager(
         {
             transport.Open();
         }
-        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or InvalidOperationException)
         {
             transport.Dispose();                 // another program holds it
             Publish(slot, new LinkState(LinkStatus.PortBusy, device));
@@ -127,7 +127,13 @@ public sealed class DeviceManager(
         }
 
         var session = makeSession(transport);
-        if (!session.Handshake())
+        bool answered;
+        try { answered = session.Handshake(); }
+        catch (Exception e) when (e is IOException or InvalidOperationException or TimeoutException or UnauthorizedAccessException)
+        {
+            answered = false;                    // unplugged or half-dead mid-handshake: this port only
+        }
+        if (!answered)
         {
             transport.Dispose();
             Publish(slot, new LinkState(LinkStatus.NotResponding, device));

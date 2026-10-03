@@ -132,6 +132,20 @@ public class ManagerTests
     }
 
     [Fact]
+    public void A_board_unplugged_mid_handshake_doesnt_stop_the_others()
+    {
+        var dying = Board(Rp, answers: false);
+        dying.FailReads = true;                      // the read throws, as when the cable comes out
+        Board(Esp);
+        var m = Make();
+        m.Tick();
+        Assert.Equal(LinkStatus.NotResponding, StateOf(m, "COM6").Status);
+        Assert.True(dying.Disposed);                 // its handle is let go, not left to the finalizer
+        Assert.Equal(LinkStatus.Connected, StateOf(m, "COM7").Status);
+        m.Dispose();
+    }
+
+    [Fact]
     public void A_failing_transport_factory_is_a_bug_and_surfaces()
     {
         present.Add(Rp);

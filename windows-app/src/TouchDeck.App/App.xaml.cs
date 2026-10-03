@@ -132,19 +132,19 @@ public partial class App : Application
             controller.AddDemoBoards();
             await Task.Delay(300);
             window!.SaveSnapshot(Path.Combine(dir, "smoke-tabs.png"));
-            controller.Selected = controller.Boards[^1];      // the busy port's tab
+            controller.Show(controller.Boards[^1]);      // the busy port's tab
             controller.OnlySelectedLog = true;
             await Task.Delay(300);
             window.SaveSnapshot(Path.Combine(dir, "smoke-tab-busy.png"));
-            controller.Selected = controller.Boards[1];       // the bootloader's tab
+            controller.Show(controller.Boards[1]);       // the bootloader's tab
             await Task.Delay(300);
             window.SaveSnapshot(Path.Combine(dir, "smoke-tab-new.png"));
             controller.OnlySelectedLog = false;
-            controller.Selected = controller.Boards[0];
+            controller.Show(controller.Boards[0]);
             await Task.Delay(300);
         }
 #endif
-        if (port is not null && controller.Find(port) is { } chosen) controller.Selected = chosen;
+        if (port is not null && controller.Find(port) is { } chosen) controller.Show(chosen);
         var b = controller.Selected;
         Directory.CreateDirectory(dir);
         if (steps) await RunSmokeStepsAsync(dir);

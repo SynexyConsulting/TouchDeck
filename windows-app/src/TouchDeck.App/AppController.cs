@@ -110,20 +110,30 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Every attached board, one tab each, in the order they appeared.</summary>
     public ObservableCollection<BoardController> Boards { get; } = [];
 
-    /// <summary>The board the window shows; the placeholder ("No board") while none is attached.</summary>
+    /// <summary>
+    /// The board the window shows; the placeholder ("No board") while none is attached. Setting it is
+    /// the user's choice (a tab click, a just-installed board) and is remembered as the last-used port.
+    /// </summary>
     public BoardController Selected
     {
         get => selected;
-        set
-        {
-            var next = value is not null && Boards.Contains(value) ? value : Boards.FirstOrDefault() ?? placeholder;
-            if (next == selected) return;
-            selected.IsSelected = false;
-            selected = next;
-            selected.IsSelected = !selected.IsPlaceholder;
-            if (selected.Port.Length > 0 && settings.PreferredPort != selected.Port) SaveSettings(settings with { PreferredPort = selected.Port });
-            Raise(nameof(Selected));
-        }
+        set => Select(value, remember: true);
+    }
+
+    /// <summary>Shows a board without remembering it as the user's choice (smoke runs).</summary>
+    internal void Show(BoardController b) => Select(b, remember: false);
+
+    /// <param name="remember">False when the app picks the tab itself (boards coming and going):
+    /// only the user's choice is the "last used" board that is selected again when it returns.</param>
+    private void Select(BoardController? value, bool remember)
+    {
+        var next = value is not null && Boards.Contains(value) ? value : Boards.FirstOrDefault() ?? placeholder;
+        if (remember && next.Port.Length > 0 && settings.PreferredPort != next.Port) SaveSettings(settings with { PreferredPort = next.Port });
+        if (next == selected) return;
+        selected.IsSelected = false;
+        selected = next;
+        selected.IsSelected = !selected.IsPlaceholder;
+        Raise(nameof(Selected));
     }
 
     /// <summary>The tab strip and the log filter appear once there is more than one board.</summary>
@@ -159,7 +169,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         var key = BoardSelection.Next(Boards.Select(b => b.Key).ToList(),
             selected.IsPlaceholder || !Boards.Contains(selected) ? null : selected.Key, added, settings.PreferredPort);
-        Selected = key is null ? placeholder : Find(key)!;
+        Select(key is null ? placeholder : Find(key)!, remember: false);
     }
 
     private void BoardsChanged()
