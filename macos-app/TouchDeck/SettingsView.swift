@@ -4,22 +4,33 @@ import TouchDeckCore
 /// Settings (⌘,): versions, startup, updates, the board's Jiggler settings and advanced
 /// options, in the same order and wording as the Windows Settings window.
 struct SettingsView: View {
+    var body: some View {
+        ScrollView { SettingsContent() }
+            .frame(width: 400, height: 640)
+            .background(Theme.bg)
+    }
+}
+
+/// The settings themselves (also rendered on their own by --smoke: a ScrollView doesn't render offscreen).
+struct SettingsContent: View {
     @EnvironmentObject private var app: AppController
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                versions
-                CardTitle(text: "Startup")
-                Toggle("Launch at login", isOn: Binding(get: { app.launchAtLogin }, set: { app.launchAtLogin = $0 }))
-                    .toggleStyle(PillSwitchStyle())
-                updatesSection
-                jigglerSection
-                advancedSection
+        VStack(alignment: .leading, spacing: 8) {
+            versions
+            CardTitle(text: "Startup")
+            Toggle("Launch at login", isOn: Binding(get: { app.launchAtLogin }, set: { app.launchAtLogin = $0 }))
+                .toggleStyle(PillSwitchStyle())
+            if app.launchAtLoginNeedsApproval {
+                Text("Waiting for approval in System Settings > General > Login Items.")
+                    .font(.caption).foregroundStyle(Theme.accent)
             }
-            .padding(20)
+            updatesSection
+            jigglerSection
+            advancedSection
         }
-        .frame(width: 400, height: 640)
+        .padding(20)
+        .frame(width: 400, alignment: .topLeading)
         .background(Theme.bg)
         .foregroundStyle(Theme.text)
     }

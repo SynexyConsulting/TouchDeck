@@ -71,8 +71,16 @@ UF2_BOARD_IDS = {"rp2040": "RPI-RP2", "rp2350": "RP2350"}
 
 
 def _drive_roots():
+    """Where a UF2 bootloader drive can appear: drive letters on Windows, /Volumes on macOS,
+    /media/<user> and /run/media/<user> on Linux."""
+    import glob
     import string
-    return [f"{letter}:\\" for letter in string.ascii_uppercase[2:]]
+    import sys
+    if sys.platform == "win32":
+        return [f"{letter}:\\" for letter in string.ascii_uppercase[2:]]
+    if sys.platform == "darwin":
+        return sorted(glob.glob("/Volumes/*/"))
+    return sorted(glob.glob("/media/*/*/") + glob.glob("/run/media/*/*/"))
 
 
 def find_uf2_drive(chip=None):

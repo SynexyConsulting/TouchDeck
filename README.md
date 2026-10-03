@@ -153,4 +153,4 @@ git tag fw-v1.7.0  && git push origin fw-v1.7.0      # firmware only
 
 - Fonts: [Barlow](https://github.com/jpt/barlow) and [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) under the SIL Open Font License, and [DSEG7](https://github.com/keshikan/DSEG) for the stopwatch. Their license texts are in [`tools/fonts/`](tools/fonts).
 - Hardware: Waveshare RP2040-Touch-LCD-1.69, Waveshare RP2350-Touch-LCD-1.28 and ESP32-2424S012C.
-- This project has no license file yet.
+- Touch Deck is free software under the [GNU GPL version 3 or later](LICENSE). [`docs/license.md`](docs/license.md) explains it in plain words and lists the third-party licences.

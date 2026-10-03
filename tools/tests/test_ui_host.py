@@ -1,5 +1,5 @@
 """The device pages compiled for the PC (hostui/): what the app's device mirror
-draws. Builds both boards' renderers with MSVC; skips without it."""
+draws. Builds both boards' renderers (MSVC on Windows, cc elsewhere); skips without a compiler."""
 import ctypes
 import filecmp
 import os
@@ -28,7 +28,7 @@ CLOSE = {"rp2040": (30, 42), "esp32c3": (50, 48), "rp2350": (50, 48)}
 def tdui(tmp_path_factory):
     r = tdui_host.build(str(tmp_path_factory.mktemp("tdui")))
     if r is None:
-        pytest.skip("MSVC not installed")
+        pytest.skip(jig_host.NO_COMPILER)
     return r
 
 

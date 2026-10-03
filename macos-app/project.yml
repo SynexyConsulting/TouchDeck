@@ -73,5 +73,6 @@ schemes:
       environmentVariables:
         TOUCHDECK_TDUI_DIR: $(SRCROOT)/../hostui/out
       preActions:
-        - script: sh "$SRCROOT/../hostui/build.sh" "$SRCROOT/../hostui/out"
+        # A clean environment: Xcode exports a deployment target for every platform, and clang then targets the wrong one.
+        - script: env -i PATH=/usr/bin:/bin HOME="$HOME" sh "$SRCROOT/../hostui/build.sh" "$SRCROOT/../hostui/out"
           settingsTarget: TouchDeckTests

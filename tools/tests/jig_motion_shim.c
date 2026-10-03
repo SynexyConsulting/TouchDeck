@@ -1,6 +1,10 @@
 // PC-side test shim: exports the engine through plain functions for ctypes.
 #include "jig_motion.h"
+#ifdef _WIN32
 #define X __declspec(dllexport)
+#else
+#define X __attribute__((visibility("default")))
+#endif
 static jig_motion_t m;
 X void shim_begin(int letter) { jm_begin(&m, letter); }
 X void shim_switch(int letter) { jm_switch(&m, letter); }

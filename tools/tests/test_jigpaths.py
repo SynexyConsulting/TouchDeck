@@ -51,7 +51,7 @@ def test_engine_is_identical_in_both_trees():
 def eng(tmp_path_factory):
     lib = jig_host.build(str(tmp_path_factory.mktemp("jig")))
     if lib is None:
-        pytest.skip("MSVC not installed")
+        pytest.skip(jig_host.NO_COMPILER)
     return lib
 
 

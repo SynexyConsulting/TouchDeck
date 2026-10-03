@@ -42,4 +42,16 @@ public enum ClipMessage {
         if data.count > maxBytes { data = Array(data[0..<maxBytes]) }
         return Array("CLIP \(data.count) \(source)\n".utf8) + data
     }
+
+    /// The line under the send box (Windows MainWindow.UpdateSendInfo): length, characters typed
+    /// as '?', and the board's limit.
+    public static func sendInfo(_ text: String, connected: Bool) -> String {
+        guard connected else { return "Connect a board to send text." }
+        if text.isEmpty { return "The board types this text when you tap PASTE." }
+        let (ascii, lost) = AsciiText.transliterate(text)
+        var parts = ["\(ascii.count) characters"]
+        if lost > 0 { parts.append("\(lost) will be typed as '?'") }
+        if ascii.utf8.count > maxBytes { parts.append("only the first \(maxBytes) fit") }
+        return parts.joined(separator: " · ")
+    }
 }

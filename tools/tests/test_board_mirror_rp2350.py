@@ -22,7 +22,7 @@ WATCH, CLIP, JIG = 0, 1, 2
 def renderer(tmp_path_factory):
     r = tdui_host.build(str(tmp_path_factory.mktemp("tdui")))
     if r is None:
-        pytest.skip("MSVC not installed")
+        pytest.skip(tdui_host.jig_host.NO_COMPILER)
     return r["rp2350"]
 
 

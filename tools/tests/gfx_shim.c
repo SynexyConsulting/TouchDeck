@@ -2,7 +2,11 @@
 // helpers are visible) and keeps the original per-bounding-box gfx_line as the
 // reference that the optimised one must match pixel for pixel.
 #include "../../src/gfx.c"
+#ifdef _WIN32
 #define X __declspec(dllexport)
+#else
+#define X __attribute__((visibility("default")))
+#endif
 
 static void ref_gfx_line(float ax, float ay, float bx, float by, float thick, uint16_t color) {
     float r = thick * 0.5f;

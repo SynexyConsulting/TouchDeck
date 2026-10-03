@@ -47,7 +47,7 @@ final class MirrorTests: XCTestCase {
     /// Needs the renderers: the scheme sets TOUCHDECK_TDUI_DIR to ../hostui/out (run hostui/build.sh).
     func testRenderersAgreeWithTheLayout() throws {
         for model in [UiModel.rp2040Rect, .esp32Round, .rp2350Round] {
-            guard let size = NativeUi.stateSize(model) else { throw XCTSkip("lib\(model.library).dylib not built (hostui/build.sh)") }
+            guard let size = NativeUi.stateSize(model) else { throw XCTSkip("\(NativeUi.unavailableReason(model) ?? "?"); dirs: \(NativeUi.searchDirs.map(\.path)) (hostui/build.sh)") }
             XCTAssertEqual(size, UiState.size, model.library)
             XCTAssertNil(NativeUi.unavailableReason(model))
             var s = UiState()

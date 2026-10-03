@@ -2,6 +2,67 @@
 
 Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE.md` and `docs/superpowers/` (specs and plans). It records what a fresh session can't see: what's merged, what's pending, and decisions made in conversation.
 
+## Repository move and open source (2026-10-01, read first)
+
+- **Repos:**
+  - `SynexyConsulting/TouchDeck` is now the **public** repo, licensed GPL-3.0-or-later (`LICENSE`, plain words in `docs/license.md`, website page `docs/license.html` from `python3 tools/make_license_html.py`).
+  - The old private repo was renamed **`SynexyConsulting/TouchDeckPrivate`**. It's the archive: the original history, PRs #1–#15, and any stale branches.
+  - The public history was rewritten from it:
+    - every commit's author and committer is `Nik Orfanos <norfanos@users.noreply.github.com>`;
+    - a real PC name was replaced in an old test string;
+    - gitleaks and a PII scan were clean.
+  - Commit hashes differ from TouchDeckPrivate, so **don't push between the two**.
+- **Branches in the public repo:** `main`, `fix/macos-first-build` (open a PR to `main`, see below), `release/1.3.0`, and the tag `app-v1.2.1`. The merged feature branches stayed in TouchDeckPrivate.
+- **On the PC, start from a fresh clone** of `git@github.com:SynexyConsulting/TouchDeck.git`, and set `git config user.email norfanos@users.noreply.github.com`. Copy over anything untracked you need from the old folder:
+  - `%USERPROFILE%\.touchdeck\` (the RP2350 factory backup, signing key) lives outside the repo, so nothing to do there;
+  - `build/` folders can be rebuilt.
+- **Re-create the release setup in the new repo before tagging anything** (Settings → Environments, Rules):
+  - environment `release`, limited to `app-v*` / `fw-v*` tags;
+  - its secrets `TOUCHDECK_UPDATES_TOKEN` (fine-grained, Contents read/write on TouchDeckUpdates only) and `TOUCHDECK_FEED_KEY` (the feed-signing PEM);
+  - the tag ruleset restricting who may create `app-v*` / `fw-v*` tags.
+  - Pushing `app-v1.2.1` here started a Release run that can't publish (no secrets yet); ignore or delete it.
+  - Never push an already-published tag again after the secrets exist.
+- **Open items, in order:**
+  1. PR `fix/macos-first-build` → `main`: opened as #1 (the description file was removed after). It adds the licence files too, so GitHub shows the licence on `main` once it's merged.
+  2. Merge `release/1.3.0`, then tag `fw-v1.8.0` and `app-v1.3.0` (after the release secrets are set up).
+  3. Windows app work: see "Next on the Windows PC" below.
+  4. On the Mac: test "Install Touch Deck" on the RP2350. It runs Waveshare's demo now, put there for that test. The app in `/Applications` bundles firmware 1.8.0. Allow the USB accessory if macOS asks, and re-grant Accessibility after a rebuild.
+- **The Mac now builds firmware too:** the Pico toolchain is in `~/.pico-sdk-mac` (`source ~/.pico-sdk-mac/env.sh`, then the usual cmake/ninja commands). `tools/flash.py` finds the UF2 drive in `/Volumes`.
+
+## Update from the Mac session (2026-10-01, later)
+
+- **PRs #8 to #13 are all merged into `main`.** The merge-order table below is history. Nothing is released yet: `release/1.3.0` holds the version bump (app 1.3.0, firmware 1.8.0) and still needs a PR, merge and the `fw-v1.8.0` / `app-v1.3.0` tags.
+- **Branch `fix/macos-first-build`:**
+  - **The macOS app builds and runs.** After `xcodebuild -runFirstLaunch` it built on Xcode 27 with no compile errors. Every XCTest passes, and it ran against the RP2350 round board on `/dev/cu.usbmodem*`.
+  - **Bugs fixed:**
+    - the update feed check refused every feed (`is Bool` matches NSNumber 1);
+    - the test pre-action didn't build the renderers (clang aimed at visionOS);
+    - the test environment variable wasn't expanded.
+  - **COPY now reads the selection of the app you were using**, not Touch Deck itself. It falls back to ⌘C with the clipboard restored, then to the clipboard.
+  - **Closer parity with Windows:**
+    - main window layout;
+    - confirm before installing firmware or rebooting to the bootloader;
+    - update flow texts, progress and once-a-day gating;
+    - single instance, `--quit` and reopen;
+    - `--smoke` snapshots;
+    - fonts, a three-state menu bar icon, notification clicks;
+    - relaunch after an app update;
+    - `app.macos` in the release feed (`publish_release.py --app-macos`).
+- **Owner-verified on the Mac:** COPY sends the selected text once Accessibility is granted. A debug build is installed at `/Applications/Touch Deck.app`. It's ad-hoc signed, so after each rebuild, remove and re-add it under Privacy & Security > Accessibility.
+- **Mac to-dos still open:**
+  - Set the signing Team so the Accessibility grant survives rebuilds.
+  - Try a firmware install with real UF2s. This Mac has no Pico toolchain and no `gh`, so `build/` is empty and the app offers no install.
+  - Check COPY across more apps (Chrome, VS Code, Terminal), and ESP32-C3 PC mode.
+  - The smoke snapshot shows thin bars at pill-button ends, most likely a `cacheDisplay` artifact. Glance at the real window.
+- **Next on the Windows PC (the Windows app):**
+  1. **Show BOOT / Hold BOOT for the ESP32-C3.** `MainWindow.xaml.cs` `UpdateMirror` hides `BootButtons` for `Esp32Round`, but firmware 1.8.0 handles `BTN` there (round watch).
+  2. **Port the Mac's COPY improvement if it helps:** when Touch Deck's own window is in front (you clicked the mirror), read the selection from the previously active window, not Touch Deck's. Windows has the same gap (`Selection.cs` reads `AutomationElement.FocusedElement`).
+  3. **Re-check firmware updates when a board connects.** On both apps, a board plugged in after the first update check isn't offered firmware for 24 h. Consider re-checking on connect.
+  4. **Pull `hostui/build.sh`'s FP-contraction note into `build.bat`.** MSVC doesn't fuse, so the RP2350 mirror on Windows is off on about 1% of watch seconds. The clean fix is building the RP2350 firmware with `-ffp-contract=off` (a firmware change; bump `FW_VERSION`), after which every host matches.
+  5. **Ship 1.3.0:** merge `release/1.3.0`, then tag `fw-v1.8.0` and `app-v1.3.0`.
+  6. **Run the pytest suite on Windows.** The host C test helpers changed (`tools/tests/jig_host.py build_shared`). The MSVC path keeps the same `cl` commands, but `test_jig_menu` now uses `/Fe:` instead of `/link /OUT:`.
+- **Not ported to the Mac:** the 1.6.x jiggler card's letter-lane drawing (the Mac shows text and pills only), and Windows' `--smoke-update` install test.
+
 ## Branches and merge order
 
 None of these branches has been merged or released yet. They are **stacked**, and a stacked PR merges into its *base* branch, not into main. So merge them in this order, and open each PR against `main` only after the one before it is in:

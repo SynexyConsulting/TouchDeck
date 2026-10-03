@@ -30,6 +30,7 @@ final class AppController: ObservableObject {
     @Published private(set) var boardName = "No board"
     @Published private(set) var port = ""
     @Published private(set) var firmwareVersion = ""
+    @Published private(set) var firmwareBuild = ""
     @Published private(set) var isConnected = false
     @Published private(set) var historyItems: [String] = []
     @Published private(set) var logLines: [String] = []
@@ -37,12 +38,15 @@ final class AppController: ObservableObject {
 
     // Board state (firmware 1.6.0+)
     @Published private(set) var jigOn = false
+    @Published private(set) var jigLetter: Character = "O"
     @Published private(set) var jigStatus = ""
     @Published private(set) var jigScaleText = "1.0X"
     @Published private(set) var boardClipText = ""
     @Published private(set) var canClearBoardClip = false
     @Published private(set) var jigConfig: JigConfig?
     @Published private(set) var mirrorFallbackText = ""
+    /// True when the connected board streams STATE (the jiggler card is live).
+    @Published private(set) var mirrorAvailable = false
     private var jigScale = 0
 
     // Device mirror (firmware 1.7.0+)
@@ -69,6 +73,7 @@ final class AppController: ObservableObject {
     @Published private(set) var canInstallFirmware = false
     @Published private(set) var checkingUpdates = false
     private var lastChoice: UpdateChoice?
+    private var checkedOnce = false
 
     // Permissions
     @Published private(set) var accessibilityTrusted = AccessibilityPermission.isTrusted
@@ -97,6 +102,7 @@ final class AppController: ObservableObject {
     }
 
     func start() {
+        _ = TargetApp.shared                      // starts tracking the app COPY reads from
         manager.start()
         // The board mirror: known once the session has either seen STATE or given up waiting.
         timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -108,7 +114,8 @@ final class AppController: ObservableObject {
         timers.append(Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkNewBoards() }
         })
-        timers.append(Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        // First check shortly after start (below), then an hourly tick that checks once a day.
+        timers.append(Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.dailyUpdateCheck() }
         })
         // ⌃⌥C sends the selection, like Ctrl+Alt+C on Windows.
@@ -116,7 +123,10 @@ final class AppController: ObservableObject {
         if hotkey == nil { addLog("⌃⌥C is taken by another app; the send-selection hotkey is off") }
         if !AccessibilityPermission.isTrusted { AccessibilityPermission.request() }
         addLog("Touch Deck \(Self.appVersion) started; bundled firmware: \(bundledSummary)")
-        Task { await dailyUpdateCheck() }
+        Task {
+            try? await Task.sleep(for: .seconds(15))
+            await dailyUpdateCheck()
+        }
     }
 
     func stop() {
@@ -140,6 +150,7 @@ final class AppController: ObservableObject {
         port = s.device?.port ?? ""
         boardName = s.device.map { BoardKinds.displayName($0.kind, board: s.firmware?.board) } ?? "No board"
         firmwareVersion = s.firmware.map { $0.known ? "\($0.version)  (\($0.board))" : "unknown (older than 1.5.0)" } ?? ""
+        firmwareBuild = s.firmware.flatMap { $0.known ? $0.build : nil } ?? ""
         switch s.status {
         case .connected: (health, statusText) = (.ok, "Connected")
         case .portBusy: (health, statusText) = (.bad, "\(port) is in use by another program")
@@ -153,7 +164,7 @@ final class AppController: ObservableObject {
         if s.status == was.status && s.device == was.device { return }
         if isConnected {
             addLog("Connected: \(boardName) on \(port), firmware \(firmwareVersion)")
-            Notifier.post("Touch Deck connected", "\(boardName), firmware \(s.firmware?.version ?? "?")")
+            Notifier.post("Touch Deck connected", "\(boardName) on \(port), firmware \(s.firmware?.version ?? "?")")
             if settings.preferredPort != port { update { $0.preferredPort = self.port } }
         } else if was.status == .connected {
             addLog("Disconnected")
@@ -171,10 +182,26 @@ final class AppController: ObservableObject {
             self.startMirror(MirrorState(model: model))
         }
         s.onLog = { [weak self] t in Task { @MainActor in self?.addLog("board: \(t)") } }
-        s.onDiagnostics = { [weak self] d in Task { @MainActor in self?.diagnostics = d.sorted { $0.key < $1.key }.map { ($0.key, $0.value) } } }
-        s.onState = { [weak self] st in Task { @MainActor in self?.applyBoardState(st); self?.applyMirror(.state(st)) } }
-        s.onText = { [weak self] k, v in Task { @MainActor in self?.applyMirror(.text(key: k, value: v)) } }
-        s.onClipText = { [weak self] b in Task { @MainActor in self?.applyMirror(.clipText(b)) } }
+        // A closing session's late events must not touch the next board's view.
+        s.onDiagnostics = { [weak self] d in
+            Task { @MainActor in
+                guard let self, self.manager.session === s else { return }
+                self.diagnostics = d.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+            }
+        }
+        s.onState = { [weak self] st in
+            Task { @MainActor in
+                guard let self, self.manager.session === s else { return }
+                self.applyBoardState(st)
+                self.applyMirror(.state(st))
+            }
+        }
+        s.onText = { [weak self] k, v in
+            Task { @MainActor in if let self, self.manager.session === s { self.applyMirror(.text(key: k, value: v)) } }
+        }
+        s.onClipText = { [weak self] b in
+            Task { @MainActor in if let self, self.manager.session === s { self.applyMirror(.clipText(b)) } }
+        }
         s.onClipSent = { [weak self] text, src, lost in
             Task { @MainActor in
                 self?.history.add(text)
@@ -227,25 +254,48 @@ final class AppController: ObservableObject {
     func toggleJiggler() { manager.session?.setJiggler(!jigOn) }
     func cycleScale() { manager.session?.setScale((jigScale + 1) % 3) }
     func clearBoardClip() { manager.session?.clearClip() }
+    func animate(_ on: Bool) { manager.session?.animate(on) }
     func pressButton(long: Bool) { manager.session?.pressButton(long: long) }
+
+    /// Restarts the board as its UF2 drive (Bootloader button, after the user confirms).
+    func rebootToBootloader() {
+        guard let s = manager.session else { return }
+        addLog("Rebooting the board into its bootloader")
+        s.requestBootloader()
+    }
 
     /// Jiggler settings: send the change; the controls follow what the board reports back.
     func setJigConfig(_ c: JigConfig) {
-        manager.session?.setJigConfig(menuOn: c.menuOn, f15: c.f15, openS: c.openS, pauseS: c.pauseS)
+        guard let s = manager.session, jigConfig != nil else { return }
+        var n = c
+        n.openS = min(max(c.openS, 0), JigConfig.maxSeconds)
+        n.pauseS = min(max(c.pauseS, 0), JigConfig.maxSeconds)
+        s.setJigConfig(menuOn: n.menuOn, f15: n.f15, openS: n.openS, pauseS: n.pauseS)
+        addLog(n.describe())
     }
 
-    func copyToPasteboard(_ text: String) { Pasteboard.write(text) }
+    func copyToPasteboard(_ text: String) {
+        if Pasteboard.write(text) { addLog("Copied a recent clip to the clipboard") }
+    }
+
+    func clearHistory() { history.clear() }
+
+    func copyLog() { Pasteboard.write(logLines.joined(separator: "\n")) }
+
+    func sendInfo(_ text: String) -> String { ClipMessage.sendInfo(text, connected: isConnected) }
 
     // MARK: board state
 
     private func applyBoardState(_ st: StateReport) {
         jigOn = st.jigOn
+        jigLetter = st.letter
         jigScale = st.scale
         jigScaleText = JigView.scaleText(st.scale)
         jigStatus = JigView.status(st)
         boardClipText = JigView.clipText(st)
         canClearBoardClip = JigView.canClear(st)
         jigConfig = JigView.config(st)
+        mirrorAvailable = true               // the fallback text comes from refreshMirror (once a second)
     }
 
     private func refreshMirror() {
@@ -253,18 +303,21 @@ final class AppController: ObservableObject {
             if !isConnected {
                 // A new board must not inherit the last one's jiggler state or screen.
                 resetMirror()
-                mirrorFallbackText = "Connect a board to see and control it here."
+                mirrorAvailable = false
+                mirrorFallbackText = ""
                 jigOn = false
+                jigLetter = "O"
                 jigStatus = ""
                 boardClipText = ""
                 canClearBoardClip = false
             }
             return
         }
+        mirrorAvailable = supported
         if fullMirror { mirrorFallbackText = "" }
-        else if !supported { mirrorFallbackText = "This board's firmware is older than 1.6.0. Install newer firmware to see it here." }
+        else if !supported { mirrorFallbackText = "This board's firmware is older than 1.6.0. Use Install firmware below to see and control its jiggler here." }
         else if rendererError != nil { mirrorFallbackText = "The device view couldn't load, so only the jiggler is shown." }
-        else if let v = state.firmware?.semVer, v < SemVer(1, 7, 0) { mirrorFallbackText = "Install firmware 1.7.0 or later to see and use the whole device here." }
+        else if let v = state.firmware?.semVer, v < SemVer(1, 7, 0) { mirrorFallbackText = "Install firmware 1.7.0 or later (below) to see and use the whole device here." }
         else { mirrorFallbackText = "" }
     }
 
@@ -404,59 +457,95 @@ final class AppController: ObservableObject {
 
     // MARK: updates
 
+    /// The first check comes shortly after start, then the hourly tick checks once a day. A failed
+    /// check also counts, so an offline Mac doesn't ask GitHub every tick.
     private func dailyUpdateCheck() async {
         guard settings.checkForUpdates, !checkingUpdates else { return }
-        if let last = settings.lastUpdateCheck, Date().timeIntervalSince(last) < 24 * 3600, lastChoice != nil { return }
+        if checkedOnce, let last = settings.lastUpdateCheck, Date().timeIntervalSince(last) < 24 * 3600 { return }
         _ = await checkForUpdates(manual: false)
     }
 
     @discardableResult
     func checkForUpdates(manual: Bool) async -> UpdateCheckOutcome {
+        if checkingUpdates { return UpdateCheckOutcome(choice: lastChoice, nothingPublished: false, error: nil) }
         checkingUpdates = true
         defer { checkingUpdates = false }
+        if manual { (appUpdateText, firmwareUpdateText) = ("Checking...", "") }
         let device = isConnected ? state.firmware : nil
         let outcome = await updates.check(currentApp: SemVer(Self.appVersion) ?? SemVer(0, 0, 0), device: device)
+        checkedOnce = true
         update { $0.lastUpdateCheck = Date() }
-        lastChoice = outcome.choice
-        if let e = outcome.error {
-            appUpdateText = e
-            canInstallApp = false
-            canInstallFirmware = false
-        } else if outcome.nothingPublished {
-            appUpdateText = "No updates published yet"
-        } else if let c = outcome.choice {
-            appUpdateText = c.app.map { "Version \($0.version) is available" } ?? "Up to date"
-            canInstallApp = c.app != nil
-            if state.device?.kind == .esp32c3 { firmwareUpdateText = "This board is updated with PlatformIO" }
-            else { firmwareUpdateText = c.firmware.map { "Firmware \($0.version) is available" } ?? (isConnected ? "Up to date" : "") }
-            canInstallFirmware = c.firmware != nil && state.device?.kind != .esp32c3
-            if !manual, let app = c.app { Notifier.post("Touch Deck update", "Version \(app.version) is available in Settings.") }
-        }
+        applyOutcome(outcome, device: device)
         return outcome
     }
 
+    private func applyOutcome(_ o: UpdateCheckOutcome, device: FirmwareInfo?) {
+        lastChoice = o.choice
+        if let err = o.error {
+            (appUpdateText, firmwareUpdateText, canInstallApp, canInstallFirmware) = ("Couldn't check: \(err)", "", false, false)
+            addLog("Update check failed: \(err)")
+            return
+        }
+        if o.nothingPublished {
+            (appUpdateText, firmwareUpdateText, canInstallApp, canInstallFirmware) = ("No updates published yet", "", false, false)
+            return
+        }
+        let app = o.choice?.app
+        appUpdateText = app.map { "\($0.version) available" } ?? "Up to date"
+        canInstallApp = app != nil
+        // The app flashes the RP boards (UF2); the ESP32-C3 is updated with PlatformIO.
+        let fw = o.choice?.firmware.flatMap { BoardModels.find($0.board) != nil ? $0 : nil }
+        if let device, device.known {
+            firmwareUpdateText = BoardModels.find(device.board) == nil ? "This board is updated with PlatformIO"
+                : fw.map { "\($0.version) available" } ?? "Up to date"
+        } else {
+            firmwareUpdateText = "Connect a board to check its firmware"
+        }
+        canInstallFirmware = fw != nil && device != nil
+        if let app { Notifier.post("Touch Deck update", "Version \(app.version) is available. Open Settings to install it.") }
+        if let fw { addLog("Firmware \(fw.version) is available for \(fw.board)") }
+    }
+
     func installAppUpdate() async {
-        guard let p = lastChoice?.app else { return }
+        guard let p = lastChoice?.app, canInstallApp else { return }
+        canInstallApp = false
+        appUpdateText = "Downloading..."
         do {
-            appUpdateText = "Downloading \(p.version)..."
-            let pkg = try await updates.downloadApp(p, progress: nil)
-            addLog("Update \(p.version) verified; opening the installer")
+            let pkg = try await updates.downloadApp(p) { f in
+                Task { @MainActor in self.appUpdateText = "Downloading... \(Int((f * 100).rounded()))%" }
+            }
+            addLog("Downloaded and verified Touch Deck \(p.version); opening the installer")
+            appUpdateText = "Installing... Touch Deck quits so the installer can replace it."
             UpdateService.launchInstaller(pkg)
             NSApp.terminate(nil)
         } catch {
-            appUpdateText = "\(error)"
+            appUpdateText = "Update failed: \(Self.describe(error))"
+            canInstallApp = true
+            addLog(appUpdateText)
         }
     }
 
     func installFirmwareUpdate() async {
-        guard let p = lastChoice?.firmware, let model = BoardModels.find(p.board) else { return }
+        guard let p = lastChoice?.firmware, let dev = state.firmware, dev.known, dev.board == p.board,
+              let model = BoardModels.find(p.board), canInstallFirmware else { return }
+        canInstallFirmware = false
+        firmwareUpdateText = "Downloading..."
         do {
-            firmwareUpdateText = "Downloading \(p.version)..."
             let uf2 = try await updates.downloadFirmware(p, progress: nil)
-            if await flash(uf2, label: "\(p.version) (downloaded)", model: model) { canInstallFirmware = false }
+            firmwareUpdateText = "Installing..."
+            let ok = await flash(uf2, label: "\(p.version) (downloaded, verified)", model: model)
+            firmwareUpdateText = ok ? "Updated to \(p.version)" : "Install failed: see the activity log"
+            canInstallFirmware = !ok
         } catch {
-            firmwareUpdateText = "\(error)"
+            firmwareUpdateText = "Update failed: \(Self.describe(error))"
+            canInstallFirmware = true
+            addLog(firmwareUpdateText)
         }
+    }
+
+    nonisolated static func describe(_ error: Error) -> String {
+        if let e = error as? UpdateError { return e.message }
+        return error.localizedDescription
     }
 
     // MARK: settings
@@ -466,7 +555,7 @@ final class AppController: ObservableObject {
         set {
             sink.dryRun = newValue
             update { $0.dryRun = newValue }
-            addLog(newValue ? "Dry run on: PC-mode keys are logged, not typed" : "Dry run off")
+            addLog(newValue ? "Dry run on: keys and mouse from the board are logged, not performed" : "Dry run off")
         }
     }
 
@@ -492,6 +581,8 @@ final class AppController: ObservableObject {
         }
     }
 
+    var launchAtLoginNeedsApproval: Bool { LoginItem.needsApproval }
+
     func openAccessibilitySettings() {
         AccessibilityPermission.request()
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
@@ -501,7 +592,10 @@ final class AppController: ObservableObject {
 
     private func update(_ change: (inout AppSettings) -> Void) {
         change(&settings)
-        do { try settings.save() } catch { ErrorLog.append("settings: \(error)") }
+        do { try settings.save() } catch {
+            ErrorLog.append("settings: \(error)")
+            addLog("Couldn't save settings: \(error.localizedDescription)")
+        }
         objectWillChange.send()
     }
 
