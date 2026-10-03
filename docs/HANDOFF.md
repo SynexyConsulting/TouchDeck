@@ -23,7 +23,7 @@ Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE
   - Pushing `app-v1.2.1` here started a Release run that can't publish (no secrets yet); ignore or delete it.
   - Never push an already-published tag again after the secrets exist.
 - **Open items, in order:**
-  1. PR `fix/macos-first-build` → `main` (paste `docs/PR-macos-first-build.md` as the description, then delete that file in a follow-up commit). It adds the licence files too, so GitHub shows the licence on `main` once it's merged.
+  1. PR `fix/macos-first-build` → `main`: opened as #1 (the description file was removed after). It adds the licence files too, so GitHub shows the licence on `main` once it's merged.
   2. Merge `release/1.3.0`, then tag `fw-v1.8.0` and `app-v1.3.0` (after the release secrets are set up).
   3. Windows app work: see "Next on the Windows PC" below.
   4. On the Mac: test "Install Touch Deck" on the RP2350. It runs Waveshare's demo now, put there for that test. The app in `/Applications` bundles firmware 1.8.0. Allow the USB accessory if macOS asks, and re-grant Accessibility after a rebuild.
