@@ -2,14 +2,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Windows;
 using System.Windows.Threading;
 using TouchDeck.Core;
 using TouchDeck.Core.App;
 using TouchDeck.Core.Devices;
 using TouchDeck.Core.Firmware;
 using TouchDeck.Core.Input;
-using TouchDeck.Core.Jiggler;
 using TouchDeck.Core.Mirror;
 using TouchDeck.Core.Protocol;
 using TouchDeck.Core.Selection;
@@ -21,8 +19,9 @@ namespace TouchDeck.App;
 public enum Health { Idle, Ok, Bad }
 
 /// <summary>
-/// Everything the window and tray show and do. Core events arrive on background
-/// threads and are marshalled to the UI thread here.
+/// The app-wide side of the window and tray: the boards (one <see cref="BoardController"/> per tab),
+/// which one is selected, settings, app updates, recent clips and the activity log. Core events
+/// arrive on background threads and are marshalled to the UI thread here.
 /// </summary>
 public sealed class AppController : INotifyPropertyChanged, IDisposable
 {
@@ -34,7 +33,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private readonly SelectionProvider selection = SelectionProvider.CreateDefault();
     private readonly DeviceManager manager;
     private readonly Autostart autostart = new();
-    private readonly DispatcherTimer bootDriveWatch;
+    private readonly DispatcherTimer bootDriveWatch, mirrorWatch;
     private AppSettings settings;
 
     public AppController(Dispatcher ui, string? settingsPath = null, UpdateSource? updateSource = null)
@@ -49,16 +48,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
         FirmwareDir = Path.Combine(AppContext.BaseDirectory, "firmware");
         Bundled = BundledFirmware.LoadManifest(FirmwareDir);
+        placeholder = BoardController.Placeholder(this, ui);
+        selected = placeholder;
 
         manager = new DeviceManager(
             DeviceScanner.Scan,
             d => new SerialPortTransport(d),
-            t => new DeviceSession(t, new Injector(sink), new WindowsKeyboardState(), selection, new SystemClock()))
-        {
-            PreferredPort = settings.PreferredPort,
-        };
+            t => new DeviceSession(t, new Injector(sink), new WindowsKeyboardState(), selection, new SystemClock()));
         manager.SessionStarted += OnSessionStarted;
-        manager.StateChanged += s => Post(() => ApplyState(s));
+        manager.SlotChanged += (port, s) => Post(() => GetOrAdd(port, port).ApplyState(s));
+        manager.SlotRemoved += port => Post(() => RemoveBoard(port));
         History.Changed += () => Post(() =>
         {
             HistoryItems.Clear();
@@ -72,11 +71,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             (!autostart.IsEnabled(Environment.ProcessPath!) || autostart.IsMinimized(Environment.ProcessPath!) != settings.StartMinimized))
             autostart.Set(true, Environment.ProcessPath!, settings.StartMinimized);
 
-        // The board mirror: known once the session has either seen STATE or given up waiting.
-        mirrorWatch = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshMirror(), ui);
-
+        // The board mirrors: known once a session has either seen STATE or given up waiting.
+        mirrorWatch = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) =>
+        {
+            foreach (var b in Boards) b.RefreshMirror();
+        }, ui);
         bootDriveWatch = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => CheckNewBoards(), ui);
-        ApplyState(LinkState.Searching);
     }
 
     public static string AppVersion => CoreInfo.Version;
@@ -88,42 +88,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public ClipHistory History { get; } = new();
     public ObservableCollection<string> HistoryItems { get; } = [];
-    public ObservableCollection<string> LogLines { get; } = [];
-    public ObservableCollection<KeyValuePair<string, string>> DiagnosticItems { get; } = [];
+    public ObservableCollection<LogEntry> LogLines { get; } = [];
 
     public event Action<string, string>? Notify;             // (title, text) for tray balloons
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    // ---------- link state ----------
-
-    public LinkState State { get; private set; } = LinkState.Searching;
-    public Health Health { get => health; private set => Set(ref health, value); }
-    public string StatusText { get => statusText; private set => Set(ref statusText, value); }
-    public string BoardName { get => boardName; private set => Set(ref boardName, value); }
-    public string Port { get => port; private set => Set(ref port, value); }
-    public string FirmwareVersion { get => firmwareVersion; private set => Set(ref firmwareVersion, value); }
-    public string FirmwareBuild { get => firmwareBuild; private set => Set(ref firmwareBuild, value); }
-    public bool IsConnected { get => isConnected; private set => Set(ref isConnected, value); }
-    /// <summary>A Raspberry Pi board without Touch Deck (factory firmware or its bootloader), while none is connected.</summary>
-    public NewBoard? NewBoard { get => newBoard; private set => Set(ref newBoard, value); }
-    /// <summary>The models the app has firmware for on that board's chip (one choice today per chip).</summary>
-    public IReadOnlyList<BoardModel> NewBoardModels { get => newBoardModels; private set => Set(ref newBoardModels, value); }
-    public BoardModel? SelectedModel
-    {
-        get => selectedModel;
-        set { Set(ref selectedModel, value); RefreshUpdateOffer(); }
-    }
-    public string UpdateText { get => updateText; private set => Set(ref updateText, value); }
-    public bool CanUpdate { get => canUpdate; private set => Set(ref canUpdate, value); }
-    public bool Busy { get => busy; private set { Set(ref busy, value); RefreshUpdateOffer(); } }
-
-    private Health health;
-    private string statusText = "", boardName = "", port = "", firmwareVersion = "", firmwareBuild = "", updateText = "";
-    private bool isConnected, canUpdate, busy;
-    private NewBoard? newBoard;
-    private IReadOnlyList<BoardModel> newBoardModels = [];
-    private BoardModel? selectedModel;
-    private bool scanningNewBoards;
 
     public void Start()
     {
@@ -134,69 +102,122 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         AddLog($"Touch Deck {AppVersion} started; bundled firmware: {BundledSummary}");
     }
 
-    private void ApplyState(LinkState s)
-    {
-        var was = State;
-        State = s;
-        IsConnected = s.Status == LinkStatus.Connected;
-        if (!IsConnected) JigCfg = null;
-        Port = s.Device?.Port ?? "";
-        BoardName = s.Device is null ? "No board" : BoardKinds.DisplayName(s.Device.Kind, s.Firmware?.Board);
-        FirmwareVersion = s.Firmware switch
-        {
-            null => "",
-            { Known: false } => "unknown (older than 1.5.0)",
-            var f => $"{f.Version}  ({f.Board})",
-        };
-        FirmwareBuild = s.Firmware?.Build ?? "";
-        Raise(nameof(DeviceFirmwareText));
-        (Health, StatusText) = s.Status switch
-        {
-            LinkStatus.Connected => (Health.Ok, "Connected"),
-            LinkStatus.PortBusy => (Health.Bad, $"{s.Device!.Port} is in use by another program (the Python helper?)"),
-            LinkStatus.NotResponding => (Health.Bad, $"{s.Device!.Port} doesn't answer. Is it running Touch Deck firmware?"),
-            _ => (Health.Idle, "Looking for a Touch Deck..."),
-        };
-        if (!DiagnosticsEnabled || !IsConnected) DiagnosticItems.Clear();
-        if (!IsConnected) ResetMirror();         // the board's screen goes with it, at once
-        RefreshUpdateOffer();
+    // ---------- boards ----------
 
-        if (s.Status == was.Status && s.Device == was.Device) return;
-        if (IsConnected)
+    private readonly BoardController placeholder;
+    private BoardController selected;
+
+    /// <summary>Every attached board, one tab each, in the order they appeared.</summary>
+    public ObservableCollection<BoardController> Boards { get; } = [];
+
+    /// <summary>The board the window shows; the placeholder ("No board") while none is attached.</summary>
+    public BoardController Selected
+    {
+        get => selected;
+        set
         {
-            AddLog($"Connected: {BoardName} on {Port}, firmware {FirmwareVersion}");
-            Notify?.Invoke("Touch Deck connected", $"{BoardName} on {Port}, firmware {s.Firmware?.Version}");
-            if (settings.PreferredPort != Port) SaveSettings(settings with { PreferredPort = Port });
-            // The daily check may have run with no board, or another one; this board's offer would then wait a day.
-            if (CheckForUpdates && checkedOnce && !CheckingUpdates && s.Firmware is { } fw && UpdateRecheck.OnConnect(checkedFor, fw))
-                _ = CheckForUpdatesAsync(manual: false);
-        }
-        else if (was.Status == LinkStatus.Connected)
-        {
-            AddLog("Disconnected");
-            if (!Busy) Notify?.Invoke("Touch Deck disconnected", "Plug it back in; the app reconnects by itself.");
-        }
-        else if (s.Status != LinkStatus.Searching)
-        {
-            AddLog(StatusText);
+            var next = value is not null && Boards.Contains(value) ? value : Boards.FirstOrDefault() ?? placeholder;
+            if (next == selected) return;
+            selected.IsSelected = false;
+            selected = next;
+            selected.IsSelected = !selected.IsPlaceholder;
+            if (selected.Port.Length > 0 && settings.PreferredPort != selected.Port) SaveSettings(settings with { PreferredPort = selected.Port });
+            Raise(nameof(Selected));
         }
     }
 
-    private void OnSessionStarted(DeviceSession s)
+    /// <summary>The tab strip and the log filter appear once there is more than one board.</summary>
+    public bool ShowTabs => Boards.Count > 1;
+
+    public BoardController? Find(string key) => Boards.FirstOrDefault(b => b.Key == key);
+
+    private BoardController GetOrAdd(string key, string? port, NewBoard? newBoard = null)
     {
-        s.DiagnosticsEnabled = settings.Diagnostics;
-        s.Log += text => Post(() => AddLog($"board: {text}"));
-        s.Diagnostics += d => Post(() => ShowDiagnostics(d));
+        if (Find(key) is { } b) return b;
+        b = new BoardController(this, ui, key, port);
+        if (newBoard is not null) b.SetNewBoard(newBoard);
+        b.PropertyChanged += OnBoardChanged;
+        Boards.Add(b);
+        Reselect(added: key);
+        BoardsChanged();
+        return b;
+    }
+
+    private void RemoveBoard(string key)
+    {
+        if (Find(key) is not { } b) return;
+        if (Installing == b) return;                  // being installed: its port comes and goes
+        b.Detached = true;
+        b.PropertyChanged -= OnBoardChanged;
+        Boards.Remove(b);
+        if (b == selected) selected.IsSelected = false;
+        Reselect(added: null);
+        BoardsChanged();
+    }
+
+    private void Reselect(string? added)
+    {
+        var key = BoardSelection.Next(Boards.Select(b => b.Key).ToList(),
+            selected.IsPlaceholder || !Boards.Contains(selected) ? null : selected.Key, added, settings.PreferredPort);
+        Selected = key is null ? placeholder : Find(key)!;
+    }
+
+    private void BoardsChanged()
+    {
+        Raise(nameof(ShowTabs));
+        if (!ShowTabs && OnlySelectedLog) OnlySelectedLog = false;
+        RefreshSummary();
+    }
+
+    private void OnBoardChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(BoardController.Health) or nameof(BoardController.StatusText) or nameof(BoardController.FirmwareVersion)
+            or nameof(BoardController.IsConnected) or nameof(BoardController.Label))
+            RefreshSummary();
+    }
+
+    /// <summary>The tray's view of all boards: green if one is connected, red if one has a problem.</summary>
+    public Health Health { get => health; private set => Set(ref health, value); }
+    /// <summary>One line per board (the tray tooltip).</summary>
+    public string Summary { get => summary; private set => Set(ref summary, value); }
+    public bool AnyConnected => Boards.Any(b => b.IsConnected);
+    private Health health;
+    private string summary = "";
+
+    private void RefreshSummary()
+    {
+        Health = Boards.Any(b => b.IsConnected) ? Health.Ok : Boards.Any(b => b.Health == Health.Bad) ? Health.Bad : Health.Idle;
+        Summary = Boards.Count == 0 ? "Looking for a Touch Deck..."
+            : string.Join("\n", Boards.Select(b => b.IsConnected ? $"{b.Label}, firmware {b.State.Firmware?.Version}" : $"{b.Label}: {b.StatusText}"));
+        Raise(nameof(AnyConnected));
+    }
+
+    /// <summary>A board's balloon names the board once there is more than one.</summary>
+    public void NotifyBoard(BoardController b, string title, string text) =>
+        Notify?.Invoke(title, ShowTabs ? $"{b.Label}: {text}" : text);
+
+    private void OnSessionStarted(string port, DeviceSession s)
+    {
+        // Runs on the manager's thread before the session reads: hook its events now, act on the UI thread.
         var mirror = new MirrorState(UiModels.For(s.Kind, s.Firmware?.Board));   // both RP boards are CAFE:4011
-        Post(() => StartMirror(mirror));
-        s.StateReceived += st => Post(() => { ApplyBoardState(st); ApplyMirror(mirror, st); });
-        s.TextReceived += t => Post(() => ApplyMirror(mirror, t));
-        s.ClipTextReceived += c => Post(() => ApplyMirror(mirror, c));
+        BoardController? Board() => Find(port) is { } b && b.Session == s ? b : null;
+        Post(() => GetOrAdd(port, port).Attach(s, mirror));
+        s.Log += text => Post(() => Board()?.Log($"board: {text}"));
+        s.Diagnostics += d => Post(() => Board()?.ShowDiagnostics(d));
+        s.StateReceived += st => Post(() =>
+        {
+            if (Board() is not { } b) return;
+            b.ApplyBoardState(st);
+            b.ApplyMirror(mirror, st);
+        });
+        s.TextReceived += t => Post(() => Board()?.ApplyMirror(mirror, t));
+        s.ClipTextReceived += c => Post(() => Board()?.ApplyMirror(mirror, c));
         s.ClipSent += (text, src, lost) => Post(() =>
         {
             History.Add(text);
             var note = lost > 0 ? $", {lost} non-ASCII characters as '?'" : "";
-            AddLog($"Sent {text.Length} characters from {Source(src)}{note}");
+            var line = $"Sent {text.Length} characters from {Source(src)}{note}";
+            if (Board() is { } b) b.Log(line); else AddLog(line);
         });
     }
 
@@ -207,23 +228,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         _ => "the app",
     };
 
-    private void ShowDiagnostics(IReadOnlyDictionary<string, string> d)
-    {
-        DiagnosticItems.Clear();
-        foreach (var kv in d) DiagnosticItems.Add(kv);
-    }
-
-    // ---------- actions ----------
-
-    public void SendText(string text)
-    {
-        if (manager.Session is { } s && !string.IsNullOrEmpty(text)) s.SendText(text);
-    }
-
-    /// <summary>Global hotkey: the same as tapping COPY on the board.</summary>
+    /// <summary>Global hotkey: the same as tapping COPY on the selected board.</summary>
     public void SendSelection()
     {
-        if (manager.Session is not { } s)
+        if (Selected.Session is not { } s)
         {
             Notify?.Invoke("Touch Deck", "No board connected.");
             return;
@@ -248,206 +256,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         return one.Length <= 60 ? one : one[..57] + "...";
     }
 
-    public void Swipe(bool left) => manager.Session?.Swipe(left);
+    // ---------- new boards (no Touch Deck firmware) ----------
 
-    // ---------- board mirror (firmware 1.6.0+) ----------
+    private bool scanningNewBoards;
 
-    public bool JigOn { get => jigOn; private set => Set(ref jigOn, value); }
-    public char JigLetter { get => jigLetter; private set => Set(ref jigLetter, value); }
-    public double JigX { get => jigX; private set => Set(ref jigX, value); }
-    public double JigY { get => jigY; private set => Set(ref jigY, value); }
-    public string JigScaleText { get => jigScaleText; private set => Set(ref jigScaleText, value); }
-    public string JigStatus { get => jigStatus; private set => Set(ref jigStatus, value); }
-    public string BoardClipText { get => boardClipText; private set => Set(ref boardClipText, value); }
-    public bool CanClearBoardClip { get => canClearBoardClip; private set => Set(ref canClearBoardClip, value); }
-    /// <summary>True when the connected board streams STATE (jiggler card live).</summary>
-    public bool MirrorAvailable { get => mirrorAvailable; private set => Set(ref mirrorAvailable, value); }
-    public string MirrorFallbackText { get => mirrorFallbackText; private set => Set(ref mirrorFallbackText, value); }
-
-    private bool jigOn, canClearBoardClip, mirrorAvailable;
-    private char jigLetter = 'O';
-    private double jigX, jigY;
-    private int jigScale;
-    private string jigScaleText = "1.0X", jigStatus = "", boardClipText = "", mirrorFallbackText = "";
-    private readonly DispatcherTimer mirrorWatch;
-
-    private void ApplyBoardState(StateReport st)
-    {
-        JigOn = st.JigOn;
-        JigLetter = st.Letter;
-        JigX = st.X;
-        JigY = st.Y;
-        jigScale = st.Scale;
-        JigScaleText = JigView.ScaleText(st.Scale);
-        JigStatus = JigView.Status(st);
-        BoardClipText = JigView.ClipText(st);
-        CanClearBoardClip = JigView.CanClear(st);
-        MirrorAvailable = true;             // the fallback text comes from RefreshMirror (once a second)
-        JigCfg = JigView.Config(st);
-    }
-
-    private void RefreshMirror()
-    {
-        var supported = manager.Session?.MirrorSupported;
-        if (!IsConnected || supported is null)
-        {
-            if (!IsConnected)
-            {
-                // A new board must not inherit the last one's jiggler state or screen.
-                ResetMirror();
-                MirrorAvailable = false;
-                MirrorFallbackText = "Connect a board to see and control its jiggler.";
-                JigOn = false;
-                JigLetter = 'O';
-                JigStatus = "";
-                BoardClipText = "";
-                CanClearBoardClip = false;
-            }
-            return;
-        }
-        MirrorAvailable = supported.Value;
-        MirrorFallbackText = FullMirror ? ""
-            : !supported.Value ? "This board's firmware is older than 1.6.0. Use Install firmware below to see and control its jiggler here."
-            : RendererError is not null ? "The device view couldn't load, so only the jiggler is shown."
-            : State.Firmware?.SemVer is { } v && v < new Version(1, 7, 0)
-                ? "Install firmware 1.7.0 or later (below) to see and use the whole device here."
-                : "";
-    }
-
-    // ---------- device mirror (firmware 1.7.0+) ----------
-
-    private MirrorState? mirror;
-    private bool mirrorFramePending;
-
-    /// <summary>The board streams its whole UI and the renderer loaded: the device view is live.</summary>
-    public bool FullMirror { get => fullMirror; private set => Set(ref fullMirror, value); }
-    /// <summary>Which device the mirror draws (its shape and renderer).</summary>
-    public UiModel MirrorModel { get => mirrorModel; private set => Set(ref mirrorModel, value); }
-    /// <summary>The latest device frame: RGB565, <see cref="NativeUi.Size"/> of <see cref="MirrorModel"/>.</summary>
-    public ushort[]? MirrorFrame { get; private set; }
-    /// <summary>Raised on the UI thread when <see cref="MirrorFrame"/> has a new frame.</summary>
-    public event Action? MirrorFrameChanged;
-    /// <summary>Set when the renderer failed to load (the app falls back to the jiggler card).</summary>
-    public string? RendererError { get; private set; }
-
-    private bool fullMirror;
-    private UiModel mirrorModel = UiModel.Rp2040Rect;
-
-    private void StartMirror(MirrorState m)
-    {
-        mirror = m;
-        MirrorModel = m.Model;
-        FullMirror = false;
-        MirrorFrame = null;
-        MirrorFrameChanged?.Invoke();
-        if (!NativeUi.Available(m.Model, out var error))
-        {
-            RendererError = error;
-            AddLog($"Device view unavailable: {error}");
-        }
-        else RendererError = null;
-    }
-
-    private void ApplyMirror(MirrorState m, BoardMessage message)
-    {
-        if (m != mirror || !m.Apply(message) || !m.Complete || RendererError is not null) return;
-        if (!FullMirror)
-        {
-            FullMirror = true;
-            RefreshMirror();
-        }
-        // Lines arrive in bursts (TEXT, CLIPTEXT, STATE): draw once when the burst is applied.
-        if (mirrorFramePending) return;
-        mirrorFramePending = true;
-        ui.BeginInvoke(DispatcherPriority.Render, () =>
-        {
-            mirrorFramePending = false;
-            if (disposed || mirror is null || !FullMirror) return;
-            var (w, h) = NativeUi.Size(mirror.Model);
-            var frame = MirrorFrame is { } f && f.Length == w * h ? f : new ushort[w * h];   // reused: 134 KB per frame would churn the LOH
-            NativeUi.Render(mirror.Model, mirror.State, frame);
-            MirrorFrame = frame;
-            MirrorFrameChanged?.Invoke();
-        });
-    }
-
-    private void ResetMirror()
-    {
-        if (mirror is null && !FullMirror) return;
-        mirror = null;
-        FullMirror = false;
-        MirrorFrame = null;
-        MirrorFrameChanged?.Invoke();
-    }
-
-    /// <summary>A click on the device view: the board's own hit testing decides what it hits.</summary>
-    public void Tap(int x, int y) => manager.Session?.Tap(x, y);
-
-    /// <summary>ANIM 1|0 (smoke steps): animate the jiggler page without HID.</summary>
-    public void Animate(bool on) => manager.Session?.Animate(on);
-
-    public void ToggleJiggler() => manager.Session?.SetJiggler(!JigOn);
-    public void CycleScale() => manager.Session?.SetScale((jigScale + 1) % 3);
-    public void ClearBoardClip() => manager.Session?.ClearClip();
-    public void PressButton(bool longPress) => manager.Session?.PressButton(longPress);
-
-    public void RebootToBootloader()
-    {
-        if (manager.Session is not { } s) return;
-        AddLog("Rebooting the board into its bootloader");
-        s.RequestBootloader();
-    }
-
-    private BundledFirmware? UpdateCandidate()
-    {
-        var board = State.Firmware is { Known: true } f ? f.Board : "rp2040-169";   // pre-VER boards were all the RP2040 build
-        if (State.Device?.Kind == BoardKind.Esp32C3) return null;                     // flashed with PlatformIO, not UF2
-        return BundledFirmware.For(Bundled, board);
-    }
-
-    private void RefreshUpdateOffer()
-    {
-        var fw = UpdateCandidate();
-        if (Busy)
-        {
-            CanUpdate = false;
-            return;
-        }
-        if (!IsConnected)
-        {
-            if (NewBoard is not { } nb) (CanUpdate, UpdateText) = (false, "");
-            else if (SelectedModel is { } m && BundledFirmware.For(Bundled, m.Board) is { } nfw)
-                (CanUpdate, UpdateText) = (true, $"Found an {nb.Describe()}. Install Touch Deck {nfw.Version} for the {m.Name}?");
-            else (CanUpdate, UpdateText) = (false, $"Found an {nb.Describe()}, but this app has no firmware for it.");
-        }
-        else if (State.Device?.Kind == BoardKind.Esp32C3)
-        {
-            (CanUpdate, UpdateText) = (false, "ESP32-C3 firmware is updated with PlatformIO.");
-        }
-        else if (fw is null)
-        {
-            (CanUpdate, UpdateText) = (false, "");
-        }
-        else
-        {
-            bool newer = fw.IsNewerThan(State.Firmware);
-            CanUpdate = true;
-            UpdateText = newer ? $"Firmware {fw.Version} is available." : $"Up to date (bundled {fw.Version}).";
-        }
-    }
-
-    public bool UpdateIsUpgrade => UpdateCandidate() is { } fw && fw.IsNewerThan(State.Firmware);
-
-    // Every 2 s while no Touch Deck is connected: a Raspberry Pi board on its factory firmware or
-    // in its bootloader (by USB ID). The WMI query runs off the UI thread.
+    // Every 2 s: Raspberry Pi boards on their factory firmware or in their bootloader (by USB ID),
+    // each its own tab. Paused while an install runs: the board being flashed passes through its
+    // bootloader. The WMI query runs off the UI thread.
     private async void CheckNewBoards()
     {
-        if (Busy || IsConnected)
-        {
-            if (NewBoard is not null) { NewBoard = null; RefreshUpdateOffer(); }
-            return;
-        }
-        if (scanningNewBoards) return;
+        if (Installing is not null || scanningNewBoards) return;
+#if DEBUG
+        if (demoBoards) return;
+#endif
         scanningNewBoards = true;
         try
         {
@@ -456,14 +277,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 try { return NewBoards.Scan(); }
                 catch (System.Management.ManagementException) { return []; }
             });
-            if (disposed || Busy || IsConnected) return;
-            var board = found.FirstOrDefault();
-            if (board == NewBoard) return;
-            NewBoard = board;
-            NewBoardModels = board is null ? [] : BoardModels.For(board.Chip);
-            SelectedModel = NewBoardModels.FirstOrDefault(m => BundledFirmware.For(Bundled, m.Board) is not null) ?? NewBoardModels.FirstOrDefault();
-            if (board is not null) AddLog($"Found an {board.Describe()}");
-            RefreshUpdateOffer();
+            if (disposed || Installing is not null) return;
+            var keys = new HashSet<string>();
+            foreach (var nb in found)
+            {
+                var key = NewBoardKey(nb);
+                keys.Add(key);
+                var b = GetOrAdd(key, nb.Port, nb);
+                if (!b.IsConnected) b.SetNewBoard(nb);
+            }
+            foreach (var b in Boards.Where(b => b.NewBoard is not null && !keys.Contains(b.Key)).ToList())
+            {
+                if (manager.SessionFor(b.Key) is not null) b.SetNewBoard(null);   // its port runs Touch Deck now
+                else RemoveBoard(b.Key);
+            }
         }
         finally
         {
@@ -471,64 +298,100 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public async Task UpdateFirmwareAsync()
+    private static string NewBoardKey(NewBoard nb) => nb.Port ?? $"boot:{nb.Chip}";
+
+#if DEBUG
+    private bool demoBoards;
+
+    /// <summary>
+    /// --smoke-demo-boards (debug builds): two pretend tabs, a board in its bootloader and a busy port,
+    /// so the tab strip and the log filter can be checked with one real board attached.
+    /// </summary>
+    public void AddDemoBoards()
     {
-        if (Busy) return;
-        if (!IsConnected)
+        demoBoards = true;                                // the new-board scan would drop the pretend one
+        var boot = new NewBoard(Uf2Chip.Rp2350, NewBoardState.Bootloader, null);
+        GetOrAdd(NewBoardKey(boot), null, boot);
+        GetOrAdd("COM99", "COM99").ApplyState(new LinkState(LinkStatus.PortBusy,
+            new DeviceCandidate("COM99", BoardKind.Rp2040, new UsbId(0xCAFE, 0x4011))));
+    }
+#endif
+
+    // ---------- firmware installs (one at a time) ----------
+
+    private BoardController? installing;
+    /// <summary>The board being installed; the others keep working, but wait to be installed.</summary>
+    public BoardController? Installing
+    {
+        get => installing;
+        private set
         {
-            if (NewBoard is not { } nb || SelectedModel is not { } model || BundledFirmware.For(Bundled, model.Board) is not { } nfw) return;
-            // A stock program reboots at 1200 baud; a board already in its bootloader needs nothing.
-            Action reboot = nb is { State: NewBoardState.StockFirmware, Port: { } p } ? () => NewBoards.RebootToBootloader(p) : () => { };
-            await FlashAsync(Path.Combine(FirmwareDir, nfw.File), $"{nfw.Version} ({nfw.File}) on a new {model.Name}", model, reboot);
-            return;
+            if (installing == value) return;
+            installing = value;
+            Raise(nameof(Installing));
+            foreach (var b in Boards) { b.RefreshUpdateOffer(); b.RefreshFeedOffer(); }
         }
-        if (UpdateCandidate() is not { } fw || BoardModels.Find(fw.Board) is not { } m) return;
-        await FlashAsync(Path.Combine(FirmwareDir, fw.File), $"{fw.Version} ({fw.File})", m);
     }
 
     /// <summary>
-    /// Installs a UF2 (bundled, or downloaded and verified) for <paramref name="model"/>: chip and model
-    /// are checked before the board is touched. <paramref name="enterBootloader"/> overrides BOOT over
-    /// the session (a new board has no Touch Deck session).
+    /// Installs a UF2 (bundled, or downloaded and verified) for <paramref name="model"/> on
+    /// <paramref name="board"/>: chip and model are checked before the board is touched. Success
+    /// is a session that wasn't there before reporting the model: another board of the same model
+    /// can't be mistaken for it.
     /// </summary>
-    private async Task<bool> FlashAsync(string uf2, string label, BoardModel model, Action? enterBootloader = null)
+    public async Task<bool> FlashAsync(BoardController board, string uf2, string label, BoardModel model, Action enterBootloader,
+                                       IProgress<string> boardProgress)
     {
-        if (Busy) return false;
-        Busy = true;
-        manager.RequiredBoard = model.Board;      // another RP board (also CAFE:4011) must not take the session
-        var old = manager.Session;
+        if (Installing is not null) return false;
+        Installing = board;
+        var before = manager.Sessions.ToHashSet();
+        DeviceSession? fresh = null;
         bool ok = false;
-        AddLog($"Installing firmware {label}");
+        board.Log($"Installing firmware {label}");
         var steps = new UpdateSteps
         {
-            EnterBootloader = enterBootloader ?? (() => old?.RequestBootloader()),
+            EnterBootloader = enterBootloader,
             FindBootDrive = () => Uf2.FindBootDrive(Uf2.RemovableRoots(), model.Chip),
             BootloaderChip = () => Uf2.FindBootDrive(Uf2.RemovableRoots(), Uf2Chip.Rp2350) is not null ? Uf2Chip.Rp2350
                                  : Uf2.FindBootDrive(Uf2.RemovableRoots(), Uf2Chip.Rp2040) is not null ? Uf2Chip.Rp2040 : null,
             CopyImage = CopyToBootDrive,
-            // Only a new session counts: the old one may not have noticed the reboot yet.
-            ReadRunningFirmware = () => manager.Session is { } s && s != old ? s.Firmware : null,
+            ReadRunningFirmware = () =>
+            {
+                fresh = manager.Sessions.FirstOrDefault(s => !before.Contains(s) && s.Firmware?.Board == model.Board);
+                return fresh?.Firmware;
+            },
         };
-        var progress = new Progress<string>(m => { AddLog(m); UpdateText = m; });
+        var progress = new Progress<string>(m => { board.Log(m); boardProgress.Report(m); });
         try
         {
             var result = await FirmwareUpdater.InstallAsync(uf2, model, steps, progress);
             ok = result.Ok;
-            AddLog(result.Message);
-            Notify?.Invoke(result.Ok ? "Firmware updated" : "Firmware update failed", result.Message);
+            board.Log(result.Message);
+            NotifyBoard(board, result.Ok ? "Firmware updated" : "Firmware update failed", result.Message);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // e.g. antivirus holding the new file on the boot drive: the board is still in its
             // bootloader, and the app offers the install again from there.
             var msg = $"Firmware update failed: {e.Message}";
-            AddLog(msg);
-            Notify?.Invoke("Firmware update failed", msg);
+            board.Log(msg);
+            NotifyBoard(board, "Firmware update failed", msg);
         }
         finally
         {
-            manager.RequiredBoard = null;
-            Busy = false;
+            Installing = null;
+        }
+        // The installed board's tab is the one to show: its port may be new (a new board gets one).
+        var port = fresh is null ? null : manager.Links.FirstOrDefault(l => l.Session == fresh)?.Port;
+        if (port is not null && port != board.Key)
+        {
+            var now = GetOrAdd(port, port);
+            if (!board.IsConnected && manager.SessionFor(board.Key) is null) RemoveBoard(board.Key);
+            Selected = now;
+        }
+        else if (manager.SessionFor(board.Key) is null && board.NewBoard is null && !board.IsConnected)
+        {
+            RemoveBoard(board.Key);                   // gone and not back: drop the tab
         }
         return ok;
     }
@@ -563,9 +426,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         get => settings.Diagnostics;
         set
         {
-            if (manager.Session is { } s) s.DiagnosticsEnabled = value;
+            foreach (var s in manager.Sessions) s.DiagnosticsEnabled = value;
             SaveSettings(settings with { Diagnostics = value });
-            if (!value) DiagnosticItems.Clear();
+            if (!value) foreach (var b in Boards) b.DiagnosticItems.Clear();
         }
     }
 
@@ -596,23 +459,38 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         set => SaveSettings(settings with { CheckForUpdates = value });
     }
 
+    // ---------- the activity log ----------
+
+    /// <summary>Show only the selected board's lines (and the app's own); offered with more than one board.</summary>
+    public bool OnlySelectedLog { get => onlySelectedLog; set => Set(ref onlySelectedLog, value); }
+    private bool onlySelectedLog;
+
+    public void AddLog(string line) => AddLog(null, line);
+
+    public void AddLog(string? board, string line)
+    {
+        LogLines.Add(new LogEntry(DateTime.Now, board, line));
+        while (LogLines.Count > LogLimit) LogLines.RemoveAt(0);
+    }
+
     // ---------- updates ----------
 
     private readonly UpdateService updates;
     private UpdateChoice? lastChoice;
     private bool checkedOnce;
-    private FirmwareInfo? checkedFor;           // the board the last check chose firmware for
     private DispatcherTimer? updateTimer;
     public bool UpdateSourceIsTest { get; }
 
+    /// <summary>The last verified feed: each board's firmware offer is worked out from it.</summary>
+    public UpdateFeed? LastFeed { get; private set; }
+    /// <summary>What a board's Firmware line says while there is no feed.</summary>
+    public string FeedNote { get; private set; } = "";
+
     public string AppUpdateText { get => appUpdateText; private set => Set(ref appUpdateText, value); }
-    public string FirmwareUpdateText { get => firmwareUpdateText; private set => Set(ref firmwareUpdateText, value); }
     public bool CanInstallApp { get => canInstallApp; private set => Set(ref canInstallApp, value); }
-    public bool CanInstallFirmware { get => canInstallFirmware; private set => Set(ref canInstallFirmware, value); }
     public bool CheckingUpdates { get => checkingUpdates; private set => Set(ref checkingUpdates, value); }
-    public string DeviceFirmwareText => IsConnected && State.Firmware is { Known: true } f ? $"{f.Version}  ({f.Board})" : "";
-    private string appUpdateText = "Not checked yet", firmwareUpdateText = "";
-    private bool canInstallApp, canInstallFirmware, checkingUpdates;
+    private string appUpdateText = "Not checked yet";
+    private bool canInstallApp, checkingUpdates;
 
     /// <summary>Raised when the app must quit so the installer can replace it.</summary>
     public event Action? QuitForUpdate;
@@ -632,17 +510,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public async Task<UpdateCheckOutcome> CheckForUpdatesAsync(bool manual)
     {
-        if (CheckingUpdates) return new UpdateCheckOutcome(lastChoice, false, null);
+        if (CheckingUpdates) return new UpdateCheckOutcome(lastChoice, false, null, LastFeed);
         CheckingUpdates = true;
-        if (manual) { AppUpdateText = "Checking..."; FirmwareUpdateText = ""; }
+        if (manual)
+        {
+            AppUpdateText = "Checking...";
+            FeedNote = "";
+        }
         try
         {
-            var device = IsConnected ? State.Firmware : null;
+            var device = Selected.IsConnected ? Selected.State.Firmware : null;
             var outcome = await Task.Run(() => updates.CheckAsync(new Version(AppVersion), device, CancellationToken.None));
             checkedOnce = true;
-            checkedFor = device;
             SaveSettings(settings with { LastUpdateCheck = DateTime.UtcNow });
-            ApplyOutcome(outcome, device);
+            ApplyOutcome(outcome);
             return outcome;
         }
         finally
@@ -651,31 +532,32 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ApplyOutcome(UpdateCheckOutcome o, FirmwareInfo? device)
+    private void ApplyOutcome(UpdateCheckOutcome o)
     {
         lastChoice = o.Choice;
         if (o.Error is { } err)
         {
-            (AppUpdateText, FirmwareUpdateText, CanInstallApp, CanInstallFirmware) = ($"Couldn't check: {err}", "", false, false);
+            (AppUpdateText, CanInstallApp, FeedNote) = ($"Couldn't check: {err}", false, "");
             AddLog($"Update check failed: {err}");
-            return;
         }
-        if (o.NothingPublished)
+        else if (o.NothingPublished)
         {
-            (AppUpdateText, FirmwareUpdateText, CanInstallApp, CanInstallFirmware) = ("No updates published yet", "", false, false);
-            return;
+            (AppUpdateText, CanInstallApp, FeedNote, LastFeed) = ("No updates published yet", false, "", null);
         }
-        var app = o.Choice?.App;
-        AppUpdateText = app is null ? "Up to date" : $"{app.Version.ToString(3)} available";
-        CanInstallApp = app is not null;
-        // The app flashes the RP boards (UF2); the ESP32-C3 is updated with PlatformIO.
-        var fw = o.Choice?.Firmware is { } f && BoardModels.Find(f.Board) is not null ? f : null;
-        FirmwareUpdateText = device is not { Known: true } ? "Connect a board to check its firmware"
-            : BoardModels.Find(device.Board) is null ? "This board is updated with PlatformIO"
-            : fw is null ? "Up to date" : $"{fw.Version.ToString(3)} available";
-        CanInstallFirmware = fw is not null && device is not null;
-        if (app is not null) Notify?.Invoke("Touch Deck update", $"Version {app.Version.ToString(3)} is available. Open Settings to install it.");
-        if (fw is not null) AddLog($"Firmware {fw.Version.ToString(3)} is available for {fw.Board}");
+        else
+        {
+            LastFeed = o.Feed;
+            var app = o.Choice?.App;
+            AppUpdateText = app is null ? "Up to date" : $"{app.Version.ToString(3)} available";
+            CanInstallApp = app is not null;
+            if (app is not null) Notify?.Invoke("Touch Deck update", $"Version {app.Version.ToString(3)} is available. Open Settings to install it.");
+        }
+        foreach (var b in Boards)
+        {
+            b.RefreshFeedOffer();
+            if (b.CanInstallFirmware) b.Log($"Firmware {b.FirmwareUpdateText} on the update feed");
+        }
+        placeholder.RefreshFeedOffer();
     }
 
     public async Task InstallAppUpdateAsync()
@@ -701,28 +583,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public async Task InstallFirmwareUpdateAsync()
-    {
-        if (lastChoice?.Firmware is not { } fw || State.Firmware is not { Known: true } dev || dev.Board != fw.Board
-            || BoardModels.Find(fw.Board) is not { } model) return;
-        CanInstallFirmware = false;
-        FirmwareUpdateText = "Downloading...";
-        try
-        {
-            var uf2 = await updates.DownloadFirmwareAsync(fw, null, CancellationToken.None);
-            FirmwareUpdateText = "Installing...";
-            bool ok = await FlashAsync(uf2, $"{fw.Version.ToString(3)} (downloaded, verified)", model);
-            FirmwareUpdateText = ok ? $"Updated to {fw.Version.ToString(3)}" : "Install failed: see the activity log";
-            CanInstallFirmware = !ok;
-        }
-        catch (Exception e) when (e is UpdateVerificationException or IOException or UnauthorizedAccessException)
-        {
-            FirmwareUpdateText = $"Update failed: {e.Message}";
-            CanInstallFirmware = true;
-            AddLog(FirmwareUpdateText);
-        }
-    }
-
+    /// <summary>Downloads a firmware the feed offers (verified while streaming).</summary>
+    public Task<string> DownloadFirmwareAsync(FirmwarePackage fw) => updates.DownloadFirmwareAsync(fw, null, CancellationToken.None);
 
     private void SaveSettings(AppSettings next)
     {
@@ -734,12 +596,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     // ---------- plumbing ----------
-
-    public void AddLog(string line)
-    {
-        LogLines.Add($"{DateTime.Now:HH:mm:ss}  {line}");
-        while (LogLines.Count > LogLimit) LogLines.RemoveAt(0);
-    }
 
     private void Post(Action a) => ui.BeginInvoke(() =>
     {
@@ -755,40 +611,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-    // ---------- the board's Jiggler settings (firmware 1.8.0+) ----------
-
-    private JigConfig? jigCfg;
-    /// <summary>The board's Jiggler settings as it last reported them (STATE); null when not known.</summary>
-    public JigConfig? JigCfg
-    {
-        get => jigCfg;
-        private set
-        {
-            if (Equals(jigCfg, value)) return;
-            jigCfg = value;
-            foreach (var n in new[] { nameof(JigCfg), nameof(HasJigConfig), nameof(JigNote), nameof(JigMenuOn), nameof(JigF15),
-                                      nameof(JigOpenText), nameof(JigPauseText) })
-                Raise(n);
-        }
-    }
-    public bool HasJigConfig => JigCfg is not null;
-    public string JigNote => JigCfg is not null ? "Saved on the board. Also on the board: the cog on its Jiggler page."
-        : IsConnected ? "Update the board's firmware to 1.8.0 or later to change these here."
-        : "Connect a board to change its jiggler settings.";
-    public bool JigMenuOn => JigCfg?.MenuOn ?? true;
-    public bool JigF15 => JigCfg?.F15 ?? false;
-    public string JigOpenText => $"{JigCfg?.OpenS ?? 2} s";
-    public string JigPauseText => $"{JigCfg?.PauseS ?? 0} s";
-
-    /// <summary>Sends new settings to the board; the dialog shows them once the board reports them back.</summary>
-    public void SetJigConfig(JigConfig c)
-    {
-        if (manager.Session is not { } s || JigCfg is null) return;
-        var n = c with { OpenS = Math.Clamp(c.OpenS, 0, JigConfig.MaxSeconds), PauseS = Math.Clamp(c.PauseS, 0, JigConfig.MaxSeconds) };
-        s.SetJigConfig(n.MenuOn, n.F15, n.OpenS, n.PauseS);
-        AddLog(n.Describe());
-    }
-
     private bool disposed;
 
     public void Dispose()
@@ -798,6 +620,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         bootDriveWatch.Stop();
         mirrorWatch.Stop();
         updateTimer?.Stop();
-        manager.Dispose();               // ends the session, which releases any held key or button
+        manager.Dispose();               // ends every session, which releases any held key or button
     }
 }

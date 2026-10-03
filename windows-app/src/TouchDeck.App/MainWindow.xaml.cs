@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows.Data;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
     private const int WmHotkey = 0x0312;
 
     private readonly AppController app;
+    private readonly ListCollectionView log;
+    private BoardController board;          // the selected board, whose events the window follows
     private HwndSource? source;
 
     /// <summary>Set by Quit: a real close rather than hiding to the tray.</summary>
@@ -34,7 +37,12 @@ public partial class MainWindow : Window
         DataContext = app;
         Title = $"Touch Deck {AppController.AppVersion}";
 
+        board = app.Selected;
+        board.PropertyChanged += OnBoardChanged;
+        board.MirrorFrameChanged += ShowMirrorFrame;
         app.PropertyChanged += OnAppChanged;
+        log = new ListCollectionView(app.LogLines) { Filter = o => ((Core.App.LogEntry)o).Shows(board.LogTag, app.OnlySelectedLog) };
+        LogList.ItemsSource = log;
         // Scroll after the ListBox has seen the new line: this handler is subscribed before the
         // ListBox's own binding, and scrolling here forces a layout while its item generator is still
         // one line behind ("ItemsControl is inconsistent with its items source").
@@ -52,8 +60,8 @@ public partial class MainWindow : Window
         UpdateDiagnosticsCard();
         UpdateSendInfo();
         UpdateJigPill();
+        UpdateFirmwareButton();
         Mirror.Gesture += OnMirrorGesture;
-        app.MirrorFrameChanged += ShowMirrorFrame;
         UpdateMirror();
     }
 
@@ -125,35 +133,80 @@ public partial class MainWindow : Window
     {
         switch (e.PropertyName)
         {
-            case nameof(AppController.Health):
+            case nameof(AppController.Selected):
+                // Follow the newly selected board: its events, its screen, its log lines.
+                board.PropertyChanged -= OnBoardChanged;
+                board.MirrorFrameChanged -= ShowMirrorFrame;
+                board = app.Selected;
+                board.PropertyChanged += OnBoardChanged;
+                board.MirrorFrameChanged += ShowMirrorFrame;
                 UpdateStatusDot();
-                break;
-            case nameof(AppController.JigOn):
                 UpdateJigPill();
-                break;
-            case nameof(AppController.MirrorFallbackText):
-            case nameof(AppController.MirrorAvailable):
-            case nameof(AppController.FullMirror):
-            case nameof(AppController.MirrorModel):
-                UpdateMirror();
-                break;
-            case nameof(AppController.DiagnosticsEnabled):
-            case nameof(AppController.IsConnected):
                 UpdateDiagnosticsCard();
                 UpdateSendInfo();
+                UpdateFirmwareButton();
+                ModelPicker.Visibility = board.NewBoardModels.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
                 UpdateMirror();
+                ShowMirrorFrame();
+                log.Refresh();
                 break;
-            case nameof(AppController.UpdateText):
-                UpdateButton.Content = app.IsConnected && !app.UpdateIsUpgrade ? "Reinstall firmware"
-                    : !app.IsConnected && app.NewBoard is not null ? "Install Touch Deck" : "Install firmware";
+            case nameof(AppController.OnlySelectedLog):
+                log.Refresh();
                 break;
-            case nameof(AppController.NewBoardModels):
-                ModelPicker.Visibility = app.NewBoardModels.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            case nameof(AppController.DiagnosticsEnabled):
+                UpdateDiagnosticsCard();
                 break;
         }
     }
 
-    private void UpdateStatusDot() => StatusDot.Fill = (Brush)FindResource(app.Health switch
+    private void OnBoardChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(BoardController.Health):
+                UpdateStatusDot();
+                break;
+            case nameof(BoardController.JigOn):
+                UpdateJigPill();
+                break;
+            case nameof(BoardController.MirrorFallbackText):
+            case nameof(BoardController.MirrorAvailable):
+            case nameof(BoardController.FullMirror):
+            case nameof(BoardController.MirrorModel):
+            case nameof(BoardController.Busy):
+            case nameof(BoardController.NewBoard):
+                UpdateMirror();
+                UpdateFirmwareButton();
+                break;
+            case nameof(BoardController.IsConnected):
+                UpdateDiagnosticsCard();
+                UpdateSendInfo();
+                UpdateMirror();
+                UpdateFirmwareButton();
+                break;
+            case nameof(BoardController.UpdateText):
+                UpdateFirmwareButton();
+                break;
+            case nameof(BoardController.NewBoardModels):
+                ModelPicker.Visibility = board.NewBoardModels.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+                break;
+            case nameof(BoardController.Port):
+            case nameof(BoardController.Label):
+                log.Refresh();
+                break;
+        }
+    }
+
+    private void UpdateFirmwareButton() =>
+        UpdateButton.Content = board.IsConnected && !board.UpdateIsUpgrade ? "Reinstall firmware"
+            : !board.IsConnected && board.NewBoard is not null ? "Install Touch Deck" : "Install firmware";
+
+    private void OnTab(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BoardController b }) app.Selected = b;
+    }
+
+    private void UpdateStatusDot() => StatusDot.Fill = (Brush)FindResource(board.Health switch
     {
         Health.Ok => "Ok",
         Health.Bad => "Bad",
@@ -161,7 +214,7 @@ public partial class MainWindow : Window
     });
 
     private void UpdateDiagnosticsCard() =>
-        DiagCard.Visibility = app.DiagnosticsEnabled && app.IsConnected ? Visibility.Visible : Visibility.Collapsed;
+        DiagCard.Visibility = app.DiagnosticsEnabled && board.IsConnected ? Visibility.Visible : Visibility.Collapsed;
 
     private void UpdateHistoryEmpty() =>
         HistoryEmpty.Visibility = app.HistoryItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -169,8 +222,8 @@ public partial class MainWindow : Window
     private void UpdateSendInfo()
     {
         var text = SendBox.Text;
-        SendButton.IsEnabled = app.IsConnected && text.Length > 0;
-        if (!app.IsConnected)
+        SendButton.IsEnabled = board.IsConnected && text.Length > 0;
+        if (!board.IsConnected)
         {
             SendInfo.Text = "Connect a board to send text.";
             return;
@@ -186,9 +239,9 @@ public partial class MainWindow : Window
 
     private void OnSendTextChanged(object sender, TextChangedEventArgs e) => UpdateSendInfo();
 
-    private void OnSend(object sender, RoutedEventArgs e) => app.SendText(SendBox.Text);
+    private void OnSend(object sender, RoutedEventArgs e) => board.SendText(SendBox.Text);
 
-    private void OnHistoryResend(object sender, RoutedEventArgs e) => app.SendText((string)((Button)sender).Tag);
+    private void OnHistoryResend(object sender, RoutedEventArgs e) => board.SendText((string)((Button)sender).Tag);
 
     private void OnHistoryCopy(object sender, RoutedEventArgs e)
     {
@@ -197,7 +250,8 @@ public partial class MainWindow : Window
 
     private void OnClearHistory(object sender, RoutedEventArgs e) => app.History.Clear();
 
-    private void OnCopyLog(object sender, RoutedEventArgs e) => Win32Clipboard.Write(string.Join(Environment.NewLine, app.LogLines));
+    /// <summary>Copies what the log shows (with "Only selected board", that board's lines).</summary>
+    private void OnCopyLog(object sender, RoutedEventArgs e) => Win32Clipboard.Write(string.Join(Environment.NewLine, log.Cast<object>()));
 
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
 
@@ -208,15 +262,15 @@ public partial class MainWindow : Window
         new SettingsWindow(app, this).ShowDialog();
     }
 
-    private void OnJigToggle(object sender, RoutedEventArgs e) => app.ToggleJiggler();
-    private void OnLaneClick(object sender, MouseButtonEventArgs e) => app.ToggleJiggler();
-    private void OnScale(object sender, RoutedEventArgs e) => app.CycleScale();
-    private void OnClearBoardClip(object sender, RoutedEventArgs e) => app.ClearBoardClip();
+    private void OnJigToggle(object sender, RoutedEventArgs e) => board.ToggleJiggler();
+    private void OnLaneClick(object sender, MouseButtonEventArgs e) => board.ToggleJiggler();
+    private void OnScale(object sender, RoutedEventArgs e) => board.CycleScale();
+    private void OnClearBoardClip(object sender, RoutedEventArgs e) => board.ClearBoardClip();
 
     private void UpdateJigPill()
     {
-        JigPill.Content = app.JigOn ? "ON" : "OFF";
-        JigPill.Tag = app.JigOn ? "Primary" : null;
+        JigPill.Content = board.JigOn ? "ON" : "OFF";
+        JigPill.Tag = board.JigOn ? "Primary" : null;
     }
 
     /// <summary>
@@ -225,23 +279,25 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateMirror()
     {
-        bool full = app.FullMirror, legacy = app.IsConnected && !full && app.MirrorAvailable;
+        bool full = board.FullMirror, legacy = board.IsConnected && !full && board.MirrorAvailable;
         Mirror.Visibility = legacy ? Visibility.Collapsed : Visibility.Visible;
         MirrorHint.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
         LegacyJiggler.Visibility = legacy ? Visibility.Visible : Visibility.Collapsed;
-        MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
-        if (Mirror.Model != app.MirrorModel) Mirror.SetModel(app.MirrorModel);
-        if (!full || app.MirrorFrame is null)
-            Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck"
-                : full || !string.IsNullOrEmpty(app.MirrorFallbackText) ? ""     // the note below says why
-                : app.MirrorAvailable ? null : "Waiting for the board...";
+        MirrorFallback.Visibility = string.IsNullOrEmpty(board.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
+        if (Mirror.Model != board.MirrorModel) Mirror.SetModel(board.MirrorModel);
+        if (!full || board.MirrorFrame is null)
+            Mirror.Placeholder = board.NewBoard is not null ? "No Touch Deck firmware yet"
+                : board.Busy ? "Installing..."
+                : !board.IsConnected ? "Connect a Touch Deck"
+                : full || !string.IsNullOrEmpty(board.MirrorFallbackText) ? ""     // the note below says why
+                : board.MirrorAvailable ? null : "Waiting for the board...";
     }
 
     private void ShowMirrorFrame()
     {
-        if (app.MirrorFrame is { } frame && app.FullMirror)
+        if (board.MirrorFrame is { } frame && board.FullMirror)
         {
-            Mirror.Show(app.MirrorModel, frame);
+            Mirror.Show(board.MirrorModel, frame);
             Mirror.Placeholder = null;
         }
         else UpdateMirror();
@@ -251,16 +307,16 @@ public partial class MainWindow : Window
     {
         switch (g)
         {
-            case MirrorTap t: app.Tap(t.X, t.Y); break;
-            case MirrorSwipe sw: app.Swipe(sw.Left); break;
+            case MirrorTap t: board.Tap(t.X, t.Y); break;
+            case MirrorSwipe sw: board.Swipe(sw.Left); break;
         }
     }
 
     /// <summary>The device view at 1:1 as a PNG (smoke tests: compare with the board).</summary>
     public bool SaveMirror(string path)
     {
-        if (app.MirrorFrame is not { } frame || !app.FullMirror) return false;
-        var (w, h) = NativeUi.Size(app.MirrorModel);
+        if (board.MirrorFrame is not { } frame || !board.FullMirror) return false;
+        var (w, h) = NativeUi.Size(board.MirrorModel);
         var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr565, null, frame, w * 2);
         var png = new PngBitmapEncoder();
         png.Frames.Add(BitmapFrame.Create(bmp));
@@ -269,17 +325,17 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private void OnSwipeLeft(object sender, RoutedEventArgs e) => app.Swipe(left: true);
-    private void OnSwipeRight(object sender, RoutedEventArgs e) => app.Swipe(left: false);
-    private void OnButton(object sender, RoutedEventArgs e) => app.PressButton(longPress: false);
-    private void OnLongButton(object sender, RoutedEventArgs e) => app.PressButton(longPress: true);
+    private void OnSwipeLeft(object sender, RoutedEventArgs e) => board.Swipe(left: true);
+    private void OnSwipeRight(object sender, RoutedEventArgs e) => board.Swipe(left: false);
+    private void OnButton(object sender, RoutedEventArgs e) => board.PressButton(longPress: false);
+    private void OnLongButton(object sender, RoutedEventArgs e) => board.PressButton(longPress: true);
 
     private void OnBootloader(object sender, RoutedEventArgs e)
     {
         var ok = MessageBox.Show(this,
             "The board will restart as a USB drive (RPI-RP2) and stop working as a Touch Deck until firmware is copied to it or it is unplugged and replugged.",
             "Reboot to bootloader", MessageBoxButton.OKCancel, MessageBoxImage.Information);
-        if (ok == MessageBoxResult.OK) app.RebootToBootloader();
+        if (ok == MessageBoxResult.OK) board.RebootToBootloader();
     }
 
     private async void OnUpdate(object sender, RoutedEventArgs e)
@@ -287,7 +343,7 @@ public partial class MainWindow : Window
         var ok = MessageBox.Show(this,
             "The board restarts into its bootloader, the bundled firmware is copied to it, and it reconnects. Keep it plugged in. Continue?",
             "Install firmware", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-        if (ok == MessageBoxResult.OK) await app.UpdateFirmwareAsync();
+        if (ok == MessageBoxResult.OK) await board.UpdateFirmwareAsync();
     }
 
     // ---------- Win32 ----------

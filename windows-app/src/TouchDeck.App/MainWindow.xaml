@@ -34,9 +34,31 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- Left: the device (live mirror) and its details -->
+        <!-- Left: the selected board (live mirror) and its details; a tab per board once there are two -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="0,0,2,0">
+                <ItemsControl x:Name="BoardTabs" ItemsSource="{Binding Boards}" Margin="0,0,0,10"
+                              Visibility="{Binding ShowTabs, Converter={StaticResource BoolVis}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource SmallButton}" Tag="{Binding TabTag}" Margin="0,0,6,6" Click="OnTab"
+                                    ToolTip="{Binding StatusText}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+                                             Fill="{Binding Health, Converter={StaticResource HealthBrush}}" />
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel x:Name="BoardColumn" DataContext="{Binding Selected}">
                 <Border x:Name="DeviceCard" Style="{StaticResource Card}" Padding="16,18">
                     <StackPanel>
                         <!-- Firmware 1.7.0+: the board's own screen, drawn by its own code -->
@@ -110,6 +132,7 @@
                         </WrapPanel>
                     </StackPanel>
                 </Border>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
@@ -122,8 +145,8 @@
                 <RowDefinition Height="1.6*" MinHeight="140" />
             </Grid.RowDefinitions>
 
-            <!-- Remote -->
-            <Border Style="{StaticResource Card}" IsEnabled="{Binding IsConnected}">
+            <!-- Remote: the selected board -->
+            <Border x:Name="RemoteCard" Style="{StaticResource Card}" DataContext="{Binding Selected}" IsEnabled="{Binding IsConnected}">
                 <StackPanel>
                     <TextBlock Text="Remote" Style="{StaticResource CardTitle}" />
                     <WrapPanel>
@@ -193,7 +216,7 @@
             <Border x:Name="DiagCard" Grid.Row="2" Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="Board diagnostics" Style="{StaticResource CardTitle}" />
-                    <ItemsControl ItemsSource="{Binding DiagnosticItems}">
+                    <ItemsControl ItemsSource="{Binding Selected.DiagnosticItems}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel />
@@ -219,9 +242,12 @@
                     <DockPanel DockPanel.Dock="Top">
                         <Button DockPanel.Dock="Right" Content="Copy log" Style="{StaticResource SmallButton}" Click="OnCopyLog"
                                 VerticalAlignment="Top" />
+                        <CheckBox DockPanel.Dock="Right" Content="Only selected board" IsChecked="{Binding OnlySelectedLog}"
+                                  Visibility="{Binding ShowTabs, Converter={StaticResource BoolVis}}" VerticalAlignment="Top"
+                                  FontSize="12" Margin="0,4,6,0" />
                         <TextBlock Text="Activity" Style="{StaticResource CardTitle}" />
                     </DockPanel>
-                    <ListBox x:Name="LogList" ItemsSource="{Binding LogLines}" Style="{StaticResource PlainList}"
+                    <ListBox x:Name="LogList" Style="{StaticResource PlainList}"
                              FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Dim}" />
                 </DockPanel>
             </Border>

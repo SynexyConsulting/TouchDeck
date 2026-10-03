@@ -52,16 +52,14 @@ public sealed class TrayIcon : IDisposable
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppController.Health) or nameof(AppController.StatusText) or nameof(AppController.FirmwareVersion))
+        if (e.PropertyName is nameof(AppController.Health) or nameof(AppController.Summary))
             Refresh();
     }
 
     private void Refresh()
     {
         icon.Icon = icons[app.Health];
-        var tip = app.IsConnected
-            ? $"Touch Deck: {app.BoardName} on {app.Port}\nfirmware {app.State.Firmware?.Version}"
-            : $"Touch Deck: {app.StatusText}";
+        var tip = $"Touch Deck: {app.Summary}";
         icon.Text = tip.Length > 127 ? tip[..127] : tip;        // NotifyIcon's limit
     }
 

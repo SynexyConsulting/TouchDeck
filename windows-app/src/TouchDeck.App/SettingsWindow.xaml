@@ -35,7 +35,7 @@
                         <TextBlock Text="App Version" Margin="0,2" />
                         <TextBlock x:Name="AppVersionValue" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontSize="13" Margin="0,2" />
                         <TextBlock x:Name="DeviceLabel" Grid.Row="1" Text="Device Firmware" Margin="0,2" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DeviceFirmwareText}" FontFamily="{StaticResource MonoFont}"
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.DeviceFirmwareText}" FontFamily="{StaticResource MonoFont}"
                                    FontSize="13" Margin="0,2" />
                     </Grid>
                 </Border>
@@ -62,17 +62,17 @@
                 </DockPanel>
                 <DockPanel Margin="0,2">
                     <Button DockPanel.Dock="Right" Style="{StaticResource SmallButton}" Content="Install" Tag="Primary"
-                            Visibility="{Binding CanInstallFirmware, Converter={StaticResource BoolVis}}" Click="OnInstallFirmware" />
+                            Visibility="{Binding Selected.CanInstallFirmware, Converter={StaticResource BoolVis}}" Click="OnInstallFirmware" />
                     <TextBlock FontSize="13" Foreground="{StaticResource Dim}" VerticalAlignment="Center" TextWrapping="Wrap">
-                        <Run Text="Firmware:" Foreground="{StaticResource Text}" /> <Run Text="{Binding FirmwareUpdateText, Mode=OneWay}" />
+                        <Run Text="Firmware:" Foreground="{StaticResource Text}" /> <Run Text="{Binding Selected.FirmwareUpdateText, Mode=OneWay}" />
                     </TextBlock>
                 </DockPanel>
 
                 <!-- Jiggler: the board's "Jiggler menu" panel, edited from here (firmware 1.8.0+) -->
                 <TextBlock Text="Jiggler" Style="{StaticResource CardTitle}" Margin="0,14,0,4" />
-                <TextBlock Text="{Binding JigNote}" Foreground="{StaticResource Faint}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6" />
-                <StackPanel IsEnabled="{Binding HasJigConfig}">
-                    <CheckBox x:Name="JigMenuBox" Content="Right-click context menu" IsChecked="{Binding JigMenuOn, Mode=OneWay}"
+                <TextBlock Text="{Binding Selected.JigNote}" Foreground="{StaticResource Faint}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <StackPanel IsEnabled="{Binding Selected.HasJigConfig}">
+                    <CheckBox x:Name="JigMenuBox" Content="Right-click context menu" IsChecked="{Binding Selected.JigMenuOn, Mode=OneWay}"
                               Click="OnJigMenu" />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
                         <TextBlock Text="Key" Width="150" VerticalAlignment="Center" />
@@ -80,20 +80,20 @@
                         <TextBlock x:Name="JigEscLabel" Text="Esc" VerticalAlignment="Center" Cursor="Hand" FontWeight="SemiBold"
                                    MouseLeftButtonUp="OnJigKeyLabel" Style="{StaticResource KeySideLabel}" Tag="esc" />
                         <CheckBox x:Name="JigF15Switch" Style="{StaticResource ChoiceSwitch}" Margin="10,0"
-                                  IsChecked="{Binding JigF15, Mode=OneWay}" Click="OnJigKey" ToolTip="Esc or F15" />
+                                  IsChecked="{Binding Selected.JigF15, Mode=OneWay}" Click="OnJigKey" ToolTip="Esc or F15" />
                         <TextBlock x:Name="JigF15Label" Text="F15" VerticalAlignment="Center" Cursor="Hand" FontWeight="SemiBold"
                                    MouseLeftButtonUp="OnJigKeyLabel" Style="{StaticResource KeySideLabel}" Tag="f15" />
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,4" IsEnabled="{Binding JigMenuOn}">
+                    <StackPanel Orientation="Horizontal" Margin="0,4" IsEnabled="{Binding Selected.JigMenuOn}">
                         <TextBlock Text="Menu open" Width="150" VerticalAlignment="Center" />
                         <Button Style="{StaticResource SmallButton}" Content="-" Tag="open-1" Click="OnJigStep" MinWidth="34" />
-                        <TextBlock Text="{Binding JigOpenText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Selected.JigOpenText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
                         <Button Style="{StaticResource SmallButton}" Content="+" Tag="open+1" Click="OnJigStep" MinWidth="34" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,4">
                         <TextBlock Text="Pause before next letter" Width="150" VerticalAlignment="Center" />
                         <Button Style="{StaticResource SmallButton}" Content="-" Tag="pause-1" Click="OnJigStep" MinWidth="34" />
-                        <TextBlock Text="{Binding JigPauseText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Selected.JigPauseText}" Width="52" TextAlignment="Center" VerticalAlignment="Center" />
                         <Button Style="{StaticResource SmallButton}" Content="+" Tag="pause+1" Click="OnJigStep" MinWidth="34" />
                     </StackPanel>
                 </StackPanel>

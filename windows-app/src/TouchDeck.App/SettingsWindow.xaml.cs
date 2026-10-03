@@ -22,6 +22,8 @@ public partial class SettingsWindow : Window
         AppVersionValue.Text = AppController.AppVersion;
         CoverOwner(owner);
         app.PropertyChanged += OnAppChanged;
+        board = app.Selected;
+        board.PropertyChanged += OnBoardChanged;
         UpdateDeviceLabel();
         UpdateCheckButton();
     }
@@ -39,15 +41,28 @@ public partial class SettingsWindow : Window
         Height = owner.ActualHeight;
     }
 
+    private BoardController board;          // the selected board: its firmware and jiggler settings
+
     private void OnAppChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppController.DeviceFirmwareText)) UpdateDeviceLabel();
         if (e.PropertyName is nameof(AppController.CheckingUpdates)) UpdateCheckButton();
+        if (e.PropertyName is nameof(AppController.Selected))
+        {
+            board.PropertyChanged -= OnBoardChanged;
+            board = app.Selected;
+            board.PropertyChanged += OnBoardChanged;
+            UpdateDeviceLabel();
+        }
+    }
+
+    private void OnBoardChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(BoardController.DeviceFirmwareText)) UpdateDeviceLabel();
     }
 
     /// <summary>No board: the label is dimmed and the version left out.</summary>
     private void UpdateDeviceLabel() =>
-        DeviceLabel.Foreground = (Brush)FindResource(string.IsNullOrEmpty(app.DeviceFirmwareText) ? "Faint" : "Text");
+        DeviceLabel.Foreground = (Brush)FindResource(string.IsNullOrEmpty(board.DeviceFirmwareText) ? "Faint" : "Text");
 
     private void UpdateCheckButton()
     {
@@ -57,33 +72,33 @@ public partial class SettingsWindow : Window
 
     private async void OnCheckNow(object sender, RoutedEventArgs e) => await app.CheckForUpdatesAsync(manual: true);
     private async void OnInstallApp(object sender, RoutedEventArgs e) => await app.InstallAppUpdateAsync();
-    private async void OnInstallFirmware(object sender, RoutedEventArgs e) => await app.InstallFirmwareUpdateAsync();
+    private async void OnInstallFirmware(object sender, RoutedEventArgs e) => await board.InstallFirmwareUpdateAsync();
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     // Jiggler settings: send the change; the controls follow what the board reports back.
     private void OnJigMenu(object sender, RoutedEventArgs e)
     {
-        if (app.JigCfg is { } c) app.SetJigConfig(c with { MenuOn = JigMenuBox.IsChecked == true });
+        if (board.JigCfg is { } c) board.SetJigConfig(c with { MenuOn = JigMenuBox.IsChecked == true });
     }
 
     private void OnJigKey(object sender, RoutedEventArgs e)
     {
-        if (app.JigCfg is { } c) app.SetJigConfig(c with { F15 = JigF15Switch.IsChecked == true });
+        if (board.JigCfg is { } c) board.SetJigConfig(c with { F15 = JigF15Switch.IsChecked == true });
     }
 
     // A click on "Esc" or "F15" picks that side.
     private void OnJigKeyLabel(object sender, MouseButtonEventArgs e)
     {
-        if (app.JigCfg is { } c && sender is FrameworkElement { Tag: string side })
-            app.SetJigConfig(c with { F15 = side == "f15" });
+        if (board.JigCfg is { } c && sender is FrameworkElement { Tag: string side })
+            board.SetJigConfig(c with { F15 = side == "f15" });
     }
 
     private void OnJigStep(object sender, RoutedEventArgs e)
     {
-        if (app.JigCfg is not { } c || sender is not FrameworkElement { Tag: string tag }) return;
+        if (board.JigCfg is not { } c || sender is not FrameworkElement { Tag: string tag }) return;
         int delta = tag.EndsWith("-1", StringComparison.Ordinal) ? -1 : 1;
-        app.SetJigConfig(tag.StartsWith("open", StringComparison.Ordinal) ? c with { OpenS = c.OpenS + delta }
+        board.SetJigConfig(tag.StartsWith("open", StringComparison.Ordinal) ? c with { OpenS = c.OpenS + delta }
                                                                           : c with { PauseS = c.PauseS + delta });
     }
 
@@ -122,6 +137,7 @@ public partial class SettingsWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         app.PropertyChanged -= OnAppChanged;
+        board.PropertyChanged -= OnBoardChanged;
         base.OnClosed(e);
     }
 }
