@@ -121,6 +121,12 @@ def main():
                   for s in range(60)]
         frames[0].save(os.path.join(OUT, f"{shape}-watch-anim.webp"), save_all=True,
                        append_images=frames[1:], duration=1000, loop=0, lossless=True)
+    # ESP32-C3 (round, Bluetooth): Clipboard in Bluetooth mode (blue accent) and Settings.
+    r = renderers["esp32c3"]
+    for name, kw in (("clipboard-bt", dict(screen=1, clip=CLIP, clip_len=len(CLIP), clip_src=b"PC")),
+                     ("settings-bt", dict(screen=3))):
+        img = to_image(r, r.render(state(bt_mode=1, bt_avail=1, bt_state=3, bt_ready=1, bt_host=b"DESK-PC", **kw)))
+        img.save(os.path.join(OUT, f"esp32-{name}.png"), optimize=True)
     print("render_screens: wrote", OUT)
 
 
