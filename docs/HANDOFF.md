@@ -2,6 +2,16 @@
 
 Read this first in a new session, together with `CLAUDE.md`, `windows-app/CLAUDE.md` and `docs/superpowers/` (specs and plans). It records what a fresh session can't see: what's merged, what's pending, and decisions made in conversation.
 
+## Overnight build, 2026-10-03 (read first)
+
+- **Released:** app 1.3.0 and firmware 1.8.0 (both RP boards) are live in the signed feed. The release workflow now downloads artifacts by name, so `fw-v*` tags publish too; that path hasn't run yet.
+- **Local branch `feature/multi-board`** (not pushed; it includes `feature/windows-app-todos`):
+  - Windows: BOOT for the ESP32-C3, COPY from the app used before Touch Deck (`FocusTracker`), and **several boards at once** (a tab per board; spec `docs/superpowers/specs/2026-10-03-multi-board-design.md`). 263 tests pass. Checked with one real board plus `--smoke-demo-boards`.
+  - macOS: the same multi-board change, **written on Windows and never compiled**. A review agent fixed what it found by reading. Build it next on the Mac.
+  - Open questions and decisions: `docs/QUESTIONS-multi-board.md`.
+- **Website:** branch `feature/website` in the worktree `C:i\TouchDesk-website` (not pushed). Its open items are in the questions file.
+- **Lanyard** (`C:i\Lanyard`) is the new project for driving the Mac from the PC over SSH; it has its own handoff.
+
 ## Repository move and open source (2026-10-01, read first)
 
 - **Repos:**
