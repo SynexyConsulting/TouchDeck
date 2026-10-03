@@ -47,37 +47,46 @@
   if ("IntersectionObserver" in window) {
     var pio = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (e.isIntersecting) { e.target.classList.add("struck"); pio.unobserve(e.target); }
+        if (e.isIntersecting) { e.target.classList.add("lit"); pio.unobserve(e.target); }
       });
     }, { rootMargin: "0px 0px -35% 0px" });
     pains.forEach(function (p) { pio.observe(p); });
   } else {
-    pains.forEach(function (p) { p.classList.add("struck"); });
+    pains.forEach(function (p) { p.classList.add("lit"); });
   }
 
   // ---------- Console: paste fails, then the board types ----------
+  // Plays once when the console scrolls into view; the little board's Paste replays it.
   var typed = document.getElementById("typed");
   var toast = document.getElementById("toast");
   var con = document.getElementById("console");
+  var replay = document.getElementById("replay");
   var LINE = "export API_TOKEN=tdk_9f2c41e07ab3";
+  var timers = [];
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
   function runConsole() {
+    timers.forEach(clearTimeout); timers = [];
+    typed.textContent = "";
+    toast.classList.remove("show");
     if (reduce) { toast.classList.add("show"); typed.textContent = LINE; return; }
-    toast.classList.add("show");
+    later(function () { toast.classList.add("show"); }, 250);
     var i = 0;
-    setTimeout(function step() {
+    later(function step() {
       typed.textContent = LINE.slice(0, ++i);
-      if (i < LINE.length) setTimeout(step, 38 + Math.random() * 40);
-    }, 1300);
+      if (i < LINE.length) later(step, 38 + Math.random() * 40);
+    }, 1400);
   }
   if (con && typed) {
+    var played = false;
     if ("IntersectionObserver" in window) {
       var cio = new IntersectionObserver(function (entries) {
-        if (entries[0].isIntersecting) { cio.disconnect(); runConsole(); }
+        if (entries[0].isIntersecting && !played) { played = true; cio.disconnect(); runConsole(); }
       }, { threshold: 0.6 });
       cio.observe(con);
     } else {
-      runConsole();
+      played = true; runConsole();
     }
+    if (replay) replay.addEventListener("click", function () { played = true; runConsole(); });
   }
 
   // ---------- Scroll-driven motion (GSAP) ----------
@@ -120,12 +129,12 @@
       rotateY: wide ? -10 : -4, rotateX: -2, ease: "none",
       scrollTrigger: { trigger: ".scrolly", start: "top bottom", end: "bottom top", scrub: 0.8 }
     });
-    gsap.fromTo(".stage-tilt", { scale: 0.92 }, {
-      scale: wide ? 1.08 : 1.02, ease: "none",
+    gsap.fromTo(".stage-tilt", { scale: 0.96 }, {
+      scale: wide ? 1.04 : 1.0, ease: "none",
       scrollTrigger: { trigger: '.step[data-step="2"]', start: "top bottom", end: "center center", scrub: 0.8 }
     });
-    gsap.fromTo("#stage-round", { y: 60, rotateZ: 8 }, {
-      y: -40, rotateZ: -6, ease: "none",
+    gsap.fromTo("#stage-round", { y: 16, rotateZ: 8 }, {
+      y: -16, rotateZ: -6, ease: "none",
       scrollTrigger: { trigger: ".scrolly", start: "top bottom", end: "bottom top", scrub: 1 }
     });
 
@@ -138,8 +147,10 @@
     });
 
     // Apps: the screenshot slides up into its card.
-    gsap.from(".app-shot", { yPercent: 18, ease: "none",
-      scrollTrigger: { trigger: ".app-shot", start: "top bottom", end: "top 40%", scrub: 0.6 } });
+    gsap.utils.toArray(".app-fig img").forEach(function (img) {
+      gsap.from(img, { y: 40, ease: "none",
+        scrollTrigger: { trigger: img, start: "top bottom", end: "top 55%", scrub: 0.6 } });
+    });
   });
 
   mm.add("(prefers-reduced-motion: reduce)", function () {

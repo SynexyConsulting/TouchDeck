@@ -14,6 +14,10 @@
   --bad: #E5484D;
   --bt: #4C8DF6;
   --ring: 3px;
+  /* The 1.69" panel's corners: the firmware draws its edge ring with a 44 px radius on 240x280
+     (src/ui_pages.c, gfx_rrect_ring(0, 0, 240, 280, 44, ...)). Every rectangular mockup uses these. */
+  --rect-glass: 18.333% / 15.714%;       /* 44/240 of the glass width, 44/280 of its height */
+  --rect-bezel: 23.083% / 20.219%;       /* concentric: glass radius + the 7.5% bezel padding */
   --radius-l: 28px;
   --radius-m: 18px;
   --wrap: 1180px;
@@ -94,7 +98,7 @@ kbd { border: 1px solid var(--faint); border-bottom-width: 2px; border-radius: 6
 /* ---------- device mockups ---------- */
 .board { position: relative; transform-style: preserve-3d; }
 .board-body {
-  position: relative; border-radius: 22% / 19%;
+  position: relative; border-radius: var(--rect-bezel);
   padding: 7.5%;
   background:
     radial-gradient(120% 80% at 30% 0%, rgba(255,255,255,.10), transparent 55%),
@@ -110,11 +114,14 @@ kbd { border: 1px solid var(--faint); border-bottom-width: 2px; border-radius: 6
 .board.round .board-body { border-radius: 50%; padding: 9%; }
 .screen {
   position: relative; overflow: hidden; background: #000;
-  aspect-ratio: 240 / 280; border-radius: 13% / 11%;
+  aspect-ratio: 240 / 280;
   box-shadow: 0 0 0 2px #000, inset 0 0 0 1px rgba(255,255,255,.04);
 }
+.board.rect .screen { box-shadow: none; }   /* the ring art reaches the glass edge: no black band around it */
+/* The rectangular glass: one rule for every 1.69" mockup (add .rect-glass to anything showing its screen). */
+.rect-glass, .board.rect .screen { border-radius: var(--rect-glass); overflow: hidden; }
 .board.round .screen { aspect-ratio: 1; border-radius: 50%; }
-.screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
+.screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; image-rendering: auto; }
 .screen::after { /* glass */
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(125deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 32%, rgba(255,255,255,0) 70%, rgba(255,255,255,.04) 100%);
@@ -153,7 +160,7 @@ kbd { border: 1px solid var(--faint); border-bottom-width: 2px; border-radius: 6
   background: radial-gradient(circle, rgba(242,163,58,.16) 0%, rgba(242,163,58,.05) 35%, transparent 65%);
 }
 .hero-lane { position: absolute; inset: auto -10% -6% auto; width: 520px; opacity: .22; pointer-events: none; }
-@media (max-width: 900px) {
+@media (max-width: 999px) {
   .hero { padding: 116px 0 40px; min-height: 0; }
   .hero .wrap { grid-template-columns: 1fr; gap: 10px; }
   .hero-stage { height: 440px; max-width: 460px; width: 100%; margin: 0 auto; }
@@ -178,8 +185,8 @@ main { overflow-x: clip; }
 .pain-list { list-style: none; margin: 0; padding: 0; }
 .pain { padding: 26px 0; border-top: 1px solid var(--surf2); }
 .pain:last-child { border-bottom: 1px solid var(--surf2); }
-.pain h3 { font-size: 23px; position: relative; display: inline; background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: var(--strike, 0%) 2px; background-position: 0 58%; transition: background-size .9s cubic-bezier(.6,0,.2,1); }
-.pain.struck h3 { --strike: 100%; color: var(--dim); }
+.pain h3 { font-size: 23px; display: inline; padding-bottom: 7px; line-height: 1.5; background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: var(--line, 0%) 2px; background-position: 0 100%; transition: background-size .9s cubic-bezier(.6,0,.2,1); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.pain.lit h3 { --line: 100%; }
 .pain p { margin: 10px 0 0; color: var(--clip); }
 .console-col { position: sticky; top: 110px; }
 .console {
@@ -193,8 +200,28 @@ main { overflow-x: clip; }
 .console .warn { color: var(--bad); }
 .console .typed { color: var(--text); }
 .console .caret { display: inline-block; width: .6em; height: 1.1em; vertical-align: -0.18em; background: var(--accent); animation: blink 1s steps(1) infinite; }
-.console-caption { display: flex; gap: 14px; align-items: center; margin-top: 18px; color: var(--dim); font-size: 16px; }
-.console-caption img { width: 52px; flex: none; border-radius: 10px; }
+.console-caption { display: flex; gap: 20px; align-items: center; margin-top: 22px; color: var(--dim); font-size: 16px; }
+.console-caption p { margin: 0; }
+.console-caption strong { color: var(--text); font-weight: 600; }
+.mini-board {
+  flex: none; width: 108px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 25px;
+  transition: transform .15s ease;
+}
+.mini-board:hover { transform: translateY(-2px); }
+.mini-board:active { transform: scale(.96); }
+.mini-board:focus-visible { outline-offset: 4px; border-radius: 25px; }
+.mini-body {
+  position: relative; display: block; padding: 8px; border-radius: 25px;   /* 8 px + the glass radius at 92 px wide */
+  background: linear-gradient(160deg, #232a36, #0b0e13); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 0 1px #2a3242, 0 14px 30px -12px rgba(0,0,0,.9);
+}
+.mini-body .rect-glass { display: block; aspect-ratio: 240 / 280; background: #000; }
+.mini-body img { display: block; width: 100%; height: 100%; }
+.mini-paste {
+  position: absolute; left: 46%; top: 59%; width: 46%; height: 21%; display: grid; place-items: center;
+  border-radius: 999px; background: var(--accent); color: #1a1206; font: 700 14px/1 var(--sans);
+  box-shadow: 0 0 0 0 rgba(242,163,58,.6); animation: ping 2.2s ease-out infinite;
+}
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(242,163,58,.55); } 70%, 100% { box-shadow: 0 0 0 12px rgba(242,163,58,0); } }
 .toast { display: inline-block; margin: 4px 0 10px; padding: 6px 12px; border-radius: 10px; background: rgba(229,72,77,.12); color: #ff8a8d; font-family: var(--sans); font-size: 14px; opacity: 0; transition: opacity .3s; }
 .toast.show { opacity: 1; }
 @keyframes blink { 50% { opacity: 0; } }
@@ -218,14 +245,15 @@ main { overflow-x: clip; }
 
 /* screens (pinned stage) */
 .screens-sec { padding-top: clamp(80px, 12vw, 150px); }
-.scrolly { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+.scrolly { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(40px, 6vw, 96px); }
 .stage-col { position: relative; }
 .stage {
   position: sticky; top: 0; height: 100vh; height: 100svh; display: grid; place-items: center; perspective: 1600px;
 }
-.stage-tilt { position: relative; width: min(400px, 82%); transform-style: preserve-3d; }
-.stage .board.rect { width: 100%; }
-.stage .board.round { position: absolute; width: 58%; right: -34%; bottom: -10%; }
+/* The stage box holds both boards: the rectangle top left, the round one bottom right, never outside it. */
+.stage-tilt { position: relative; width: min(88%, 500px, calc((100svh - 150px) / 0.95)); aspect-ratio: 1 / 0.95; transform-style: preserve-3d; }
+.stage .board.rect { position: absolute; left: 0; top: 0; width: 70%; }
+.stage .board.round { position: absolute; width: 42%; right: 0; bottom: 0; }
 .stage-dots { position: absolute; bottom: 7vh; left: 50%; translate: -50% 0; display: flex; gap: 10px; }
 .stage-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: background .3s, transform .3s; }
 .stage-dots i.on { background: var(--text); transform: scale(1.25); }
@@ -237,14 +265,15 @@ main { overflow-x: clip; }
 .step li { position: relative; padding-left: 22px; margin: 8px 0; color: var(--clip); }
 .step li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); }
 .step-name { font: 600 15px/1 var(--mono); color: var(--accent); }
-@media (max-width: 900px) {
+@media (max-width: 999px) {
   .scrolly { grid-template-columns: 1fr; gap: 0; }
-  .stage-col { position: sticky; top: 64px; z-index: 2; height: 54vh; height: 54svh; background: linear-gradient(var(--bg) 90%, rgba(7,9,13,0)); }
+  /* Stacked: the stage is an opaque sticky panel; the copy scrolls out of sight beneath it, never visibly under a board. */
+  .stage-col { position: sticky; top: 64px; z-index: 2; height: 54vh; height: 54svh; background: var(--bg); box-shadow: 0 1px 0 var(--surf), 0 18px 24px -12px var(--bg); }
   .stage { position: relative; height: 100%; }
-  .stage-tilt { width: auto; height: 76%; aspect-ratio: 240 / 280; margin-top: -4%; }
-  .stage .board.round { width: 42%; right: -10%; bottom: -6%; }
-  .stage-dots { bottom: 10%; }
-  .step { min-height: 72vh; justify-content: flex-start; padding-top: 6vh; }
+  .stage-tilt { width: min(92%, calc(54svh * 0.74 / 0.95)); margin-top: -4%; }
+  .stage-dots { bottom: 4%; }
+  .step { max-width: 620px; }
+  .step { min-height: 72vh; justify-content: flex-start; padding-top: 5vh; }
   .step h3 { margin-top: 10px; }
 }
 
@@ -269,21 +298,24 @@ main { overflow-x: clip; }
 .fineprint { margin-top: 26px; font-size: 15px; color: var(--dim); max-width: 60em; }
 @media (max-width: 980px) { .boards { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; } .board-card .board { width: 46%; } .board-card .board.round { width: 52%; } }
 
-/* apps */
-.apps { display: grid; grid-template-columns: 1.35fr 1fr; gap: 24px; align-items: stretch; }
-.app-card { border-radius: var(--radius-l); background: var(--inner); border: 1px solid #1d2533; padding: 34px; position: relative; overflow: hidden; }
-.app-card h3 { font-size: 30px; margin: 14px 0 12px; }
-.app-shot { margin: 28px -34px -34px 34px; border-radius: 14px 0 0 0; border-top: 1px solid var(--surf2); border-left: 1px solid var(--surf2); box-shadow: 0 -20px 60px -20px rgba(0,0,0,.8); }
+/* apps: one full-width row per app, screenshots scaled proportionally */
+.apps { display: grid; gap: 28px; }
+.app-row {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 4vw, 56px); align-items: center;
+  border-radius: var(--radius-l); background: var(--inner); border: 1px solid #1d2533; padding: clamp(24px, 4vw, 48px);
+}
+.app-row h3 { font-size: 30px; margin: 14px 0 12px; }
+.app-fig { margin: 0; min-width: 0; }
+.app-fig img {
+  display: block; width: 100%; height: auto; max-width: 100%; object-fit: contain;
+  border-radius: 14px; border: 1px solid var(--surf2); box-shadow: 0 30px 60px -24px rgba(0,0,0,.9);
+}
+.app-fig figcaption { margin-top: 14px; font-size: 15px; color: var(--dim); }
+.app-linux { font-size: 16px; margin: 4px 0 0; }
 .feature-list { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; }
 .feature-list li { position: relative; padding-left: 22px; font-size: 17px; }
 .feature-list li::before { content: ""; position: absolute; left: 2px; top: .6em; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); }
-.mac-bar { margin-top: 26px; border-radius: 14px; background: #0b0e13; border: 1px solid var(--surf2); padding: 10px 14px; display: flex; justify-content: flex-end; align-items: center; gap: 16px; color: var(--dim); font-size: 14px; }
-.mac-bar img { width: 20px; height: 20px; }
-.mac-menu { margin: 8px 0 0 auto; width: min(270px, 100%); border-radius: 12px; background: var(--surf); border: 1px solid var(--surf2); padding: 8px; font-size: 15px; box-shadow: 0 20px 40px -10px rgba(0,0,0,.7); }
-.mac-menu div { padding: 7px 10px; border-radius: 8px; color: var(--text); display: flex; justify-content: space-between; }
-.mac-menu div:first-child { background: var(--accent-tint); color: var(--accent); }
-.mac-menu kbd { font-size: 12px; color: var(--dim); border: 0; }
-@media (max-width: 900px) { .apps { grid-template-columns: 1fr; } .app-card { padding: 26px; } .app-shot { margin: 24px -26px -26px 26px; } }
+@media (max-width: 999px) { .app-row { grid-template-columns: 1fr; } }
 
 /* open source */
 .open { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(40px, 6vw, 90px); align-items: start; }
@@ -358,3 +390,7 @@ main { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* how it works: the board in the cable diagram is the same HTML mockup, inside the SVG */
+.wire-board { width: 130px; }
+.wire-board .board-body { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 0 1px #2a3242; }

@@ -46,12 +46,12 @@
       <div class="cta-row">
         <a class="pill pill-amber" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
-          Download for Windows</a>
+          Download for Windows or Mac</a>
         <a class="pill pill-ghost" href="https://github.com/SynexyConsulting/TouchDeck">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>
           Read the source</a>
       </div>
-      <p class="hero-note">No drivers. No account. Open source under GPL-3.0. The macOS app is coming soon.</p>
+      <p class="hero-note">No drivers. No account. Open source under GPL-3.0. Apps for Windows and macOS.</p>
     </div>
     <div class="hero-stage" aria-hidden="true">
       <div class="board round" data-parallax="-18">
@@ -97,13 +97,18 @@
       <div class="console-col">
         <div class="console" id="console">
           <div class="console-bar"><i></i><i></i><i></i><span>Remote console: build-vm-02</span></div>
-<pre><span>build-vm-02 login: deploy
+<pre aria-live="polite"><span>build-vm-02 login: deploy
 Password:
 Last login: Fri Oct  2 22:14 from 10.0.4.1
 deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="caret"></span>
 <span class="toast" id="toast">Ctrl+V: paste is disabled for this session</span></pre>
         </div>
-        <p class="console-caption"><img src="assets/screens/rect-clipboard-paste.png" alt="" width="52" height="61">Tap Paste on the board and it types the line for you, one keystroke at a time.</p>
+        <div class="console-caption">
+          <button class="mini-board" id="replay" type="button" aria-label="Paste: type the line into the console again" aria-controls="console">
+            <span class="mini-body"><span class="rect-glass"><img src="assets/screens/rect-clipboard.png" alt="" width="240" height="280"></span><span class="mini-paste" aria-hidden="true">Paste</span></span>
+          </button>
+          <p>The board types the line for you, one keystroke at a time. <strong>Tap Paste on the little board to run it again.</strong></p>
+        </div>
       </div>
     </div>
   </div>
@@ -116,23 +121,23 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       <h2>Plug it in. That&rsquo;s the setup.</h2>
       <p class="lede">Over USB the board introduces itself as a keyboard and a mouse, the two devices every computer has supported for decades. There&rsquo;s nothing to install for that part.</p>
     </div>
-    <svg class="wire" id="wire" viewBox="0 0 1100 250" role="img" aria-label="The board connects to the computer with one USB cable and appears as a keyboard, a mouse and a serial port for the app.">
-      <defs>
-        <linearGradient id="bodyg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#232a36"/><stop offset="1" stop-color="#090c11"/></linearGradient>
-      </defs>
-      <!-- board -->
-      <rect x="40" y="40" width="130" height="150" rx="30" fill="url(#bodyg)" stroke="#2a3242"/>
-      <rect x="52" y="52" width="106" height="126" rx="16" fill="#000"/>
-      <image href="assets/screens/rect-clipboard.png" x="56" y="56" width="98" height="118" />
-      <!-- cable -->
-      <path id="cable" d="M105 190 C105 236, 260 236, 340 168 S 520 90, 640 125" fill="none" stroke="#4A5366" stroke-width="7" stroke-linecap="round"/>
-      <path id="cable-glow" d="M105 190 C105 236, 260 236, 340 168 S 520 90, 640 125" fill="none" stroke="#F2A33A" stroke-width="3" stroke-linecap="round" stroke-dasharray="0 1000" />
+    <svg class="wire" id="wire" viewBox="0 0 1100 270" role="img" aria-label="The board connects to the computer with one USB cable and appears as a keyboard, a mouse and a serial port for the app.">
+      <!-- One coordinate space for board, cable and laptop, so the cable stays attached at every width.
+           Board: 130 wide at (40, 30); its body is 130 x 148.4, so the USB port (bottom centre) is at (105, 178.4). -->
+      <foreignObject x="40" y="30" width="130" height="160">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="board rect wire-board"><div class="board-body"><div class="screen"><img src="assets/screens/rect-clipboard.png" alt="" width="240" height="280"/></div><span class="port"></span></div></div>
+      </foreignObject>
+      <!-- cable: from below the board's port, under and clear of the board, into the laptop's side port at (612, 223) -->
+      <path id="cable" d="M105 186 C105 246, 260 258, 400 246 S 560 223, 610 223" fill="none" stroke="#4A5366" stroke-width="7" stroke-linecap="round"/>
+      <path id="cable-glow" d="M105 186 C105 246, 260 258, 400 246 S 560 223, 610 223" fill="none" stroke="#F2A33A" stroke-width="3" stroke-linecap="round" stroke-dasharray="0 1000" />
       <!-- laptop -->
       <rect x="650" y="34" width="300" height="182" rx="14" fill="#10151E" stroke="#1C2432" stroke-width="2"/>
       <rect x="664" y="48" width="272" height="154" rx="6" fill="#07090D"/>
-      <path d="M612 216 H988 L970 232 H630 Z" fill="#1C2432"/>
+      <rect x="620" y="216" width="360" height="15" rx="5" fill="#1C2432"/>
+      <!-- the laptop's side USB port, where the cable plugs in -->
+      <rect x="606" y="218.5" width="16" height="9" rx="2" fill="#59626f"/>
       <g class="wire-labels" font-size="20" font-weight="600">
-        <g class="wl"><circle cx="694" cy="88" r="6" fill="#3CCB7F"/><text x="712" y="95" fill="#E8ECF2">Keyboard</text><text x="798" y="95" fill="#8A94A6" font-weight="400">types your clip</text></g>
+        <g class="wl"><circle cx="694" cy="88" r="6" fill="#3CCB7F"/><text x="712" y="95" fill="#E8ECF2">Keyboard</text><text x="804" y="95" fill="#8A94A6" font-weight="400">types your clip</text></g>
         <g class="wl"><circle cx="694" cy="128" r="6" fill="#3CCB7F"/><text x="712" y="135" fill="#E8ECF2">Mouse</text><text x="776" y="135" fill="#8A94A6" font-weight="400">for the jiggler</text></g>
         <g class="wl"><circle cx="694" cy="168" r="6" fill="#F2A33A"/><text x="712" y="175" fill="#E8ECF2">Serial</text><text x="772" y="175" fill="#8A94A6" font-weight="400">talks to the app</text></g>
       </g>
@@ -144,7 +149,7 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       </li>
       <li class="step3">
         <h3>Install Touch Deck</h3>
-        <p>Open the Windows app and plug in the board. It spots the factory firmware and offers <em>Install Touch Deck</em>. One click, no buttons to hold.</p>
+        <p>Open the app on Windows or Mac and plug in the board. It spots the factory firmware and offers <em>Install Touch Deck</em>. One click, no buttons to hold.</p>
       </li>
       <li class="step3">
         <h3>Swipe and tap</h3>
@@ -276,32 +281,40 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       <p class="lede">The board works on its own as a keyboard and mouse. The app adds the bits that need your computer: grabbing the selected text for Copy, setting the clock, and keeping the firmware up to date.</p>
     </div>
     <div class="apps">
-      <article class="app-card">
-        <span class="chip">Windows 10 and 11</span>
-        <h3>Touch Deck for Windows</h3>
-        <ul class="feature-list">
-          <li>A live copy of the board&rsquo;s screen. Click it to tap, drag to swipe.</li>
-          <li>Installs Touch Deck on a new board with one click, and updates it later.</li>
-          <li>Connect several boards at once, each in its own tab.</li>
-          <li>Recent clips kept in memory only. Nothing written to disk.</li>
-          <li>Per-user installer: no admin rights, no .NET to install. Updates are signed and checked.</li>
-        </ul>
-        <img class="app-shot" src="assets/img/windows-app.png" alt="The Touch Deck Windows app showing a live mirror of the board's watch screen, remote controls and recent clips." width="984" height="841" loading="lazy">
-      </article>
-      <article class="app-card">
-        <span class="chip soon">Coming soon</span>
-        <h3>Touch Deck for macOS</h3>
-        <p>A menu bar app with the same features as the Windows one: the live mirror, Copy from any app, firmware installs and signed updates. It runs today in testing and will ship once it&rsquo;s signed.</p>
-        <div class="mac-bar" aria-hidden="true"><span>Fri 9:41</span><img src="assets/img/logo.svg" alt=""></div>
-        <div class="mac-menu" aria-hidden="true">
-          <div>RP2350 Touch Deck <kbd>connected</kbd></div>
-          <div>Open Touch Deck <kbd>&#8984;O</kbd></div>
-          <div>Jiggler <kbd>on</kbd></div>
-          <div>Settings&hellip; <kbd>&#8984;,</kbd></div>
-          <div>Quit <kbd>&#8984;Q</kbd></div>
+      <article class="app-row">
+        <div class="app-text">
+          <span class="chip">Windows 10 and 11</span>
+          <h3>Touch Deck for Windows</h3>
+          <ul class="feature-list">
+            <li>A live copy of the board&rsquo;s screen. Click it to tap, drag to swipe.</li>
+            <li>Installs Touch Deck on a new board with one click, and updates it later.</li>
+            <li>Connect several boards at once, each in its own tab.</li>
+            <li>Recent clips kept in memory only. Nothing written to disk.</li>
+            <li>Per-user installer: no admin rights, no .NET to install. Updates are signed and checked.</li>
+          </ul>
         </div>
-        <p class="muted" style="margin-top:22px;font-size:16px">Linux: the board works as a keyboard and mouse there too. There&rsquo;s no app yet, so Copy needs Windows or macOS.</p>
+        <figure class="app-fig">
+          <img src="assets/img/app-windows-live.png" alt="The Touch Deck Windows app with a live mirror of a round board's watch screen, remote controls, recent clips and the activity log." width="984" height="841" loading="lazy">
+          <figcaption>The live mirror: the board&rsquo;s own screen, drawn by its own firmware code. Click it to tap.</figcaption>
+        </figure>
       </article>
+      <article class="app-row">
+        <div class="app-text">
+          <span class="chip">macOS 14 and later</span>
+          <h3>Touch Deck for macOS</h3>
+          <p>A menu bar app with the same features as the Windows one: the live mirror, Copy from any app, firmware installs and signed updates. It runs on Apple silicon and Intel Macs.</p>
+          <ul class="feature-list">
+            <li>Lives in the menu bar, out of the Dock.</li>
+            <li>Finds a new board on its factory firmware and offers to install Touch Deck.</li>
+            <li>Copy reads your selection in any app once you allow Accessibility.</li>
+          </ul>
+        </div>
+        <figure class="app-fig">
+          <img src="assets/img/app-macos.png" alt="The Touch Deck Mac app has found a new RP2350 board on its factory firmware and offers an Install Touch Deck button." width="1800" height="1624" loading="lazy">
+          <figcaption>One-click install on a new board: the Mac app spots a fresh RP2350 and offers <em>Install Touch Deck</em>.</figcaption>
+        </figure>
+      </article>
+      <p class="muted app-linux">Linux: the board works as a keyboard and mouse there too. There&rsquo;s no app yet, so Copy needs Windows or macOS.</p>
     </div>
   </div>
 </section>
@@ -341,12 +354,16 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
     <div class="download">
       <div>
         <h2>Get Touch Deck.</h2>
-        <p class="lede" style="margin-top:18px">The Windows installer includes the firmware for the RP2040 and RP2350 boards and installs it for you. The firmware files are there too, if you&rsquo;d rather drop one onto the board yourself.</p>
+        <p class="lede" style="margin-top:18px">The apps include the firmware for the RP2040 and RP2350 boards and install it for you. The firmware files are there too, if you&rsquo;d rather drop one onto the board yourself.</p>
       </div>
       <div class="dl-list">
         <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
-          <div><strong>Latest release</strong><span>Windows installer (.msi) and firmware (.uf2)</span></div>
+          <div><strong>Windows</strong><span>Latest release: installer (.msi) and firmware (.uf2)</span></div>
+        </a>
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
+          <div><strong>macOS</strong><span>Same releases page. The .pkg arrives with the next release.</span></div>
         </a>
         <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -384,7 +401,7 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       </details>
       <details>
         <summary>Does it work on a Mac or Linux?</summary>
-        <div class="answer"><p>The board works on both as a keyboard and mouse, so Paste and the jiggler work anywhere. Filling the clipboard from your computer&rsquo;s selection needs the app. The Windows app is out now and the macOS app is coming soon.</p></div>
+        <div class="answer"><p>The board works on both as a keyboard and mouse, so Paste and the jiggler work anywhere. Filling the clipboard from your computer&rsquo;s selection needs the app. The apps run on Windows 10 and 11 and on macOS 14 and later.</p></div>
       </details>
       <details>
         <summary>How much does it cost?</summary>
