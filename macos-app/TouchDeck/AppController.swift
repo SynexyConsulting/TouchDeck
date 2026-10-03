@@ -32,8 +32,10 @@ final class AppController: ObservableObject {
     // Boards
     /// Every attached board, one tab each, in the order they appeared.
     @Published private(set) var boards: [BoardController] = []
-    /// The board the window shows; the placeholder ("No board") while none is attached.
-    @Published private(set) var selected: BoardController!
+    /// The board the window shows; the placeholder ("No board") while none is attached. Implicitly
+    /// unwrapped because the placeholder needs `self`, so it is published by hand rather than with
+    /// @Published (whose wrapper doesn't reliably keep the implicit unwrap).
+    private(set) var selected: BoardController! { willSet { objectWillChange.send() } }
     private var placeholder: BoardController!
     /// The menu bar icon's view of all boards: connected if one is, bad if one has a problem.
     @Published private(set) var health = Health.idle
@@ -129,13 +131,16 @@ final class AppController: ObservableObject {
 
     func find(_ key: String) -> BoardController? { boards.first { $0.key == key } }
 
-    func select(_ b: BoardController) {
-        let next = boards.contains { $0 === b } ? b : (boards.first ?? placeholder!)
+    /// - Parameter remember: false when the app picks the tab itself (boards coming and going): only
+    ///   the user's choice (a tab click, a just-installed board) is the "last used" board, selected
+    ///   again when it returns.
+    func select(_ b: BoardController, remember: Bool = true) {
+        let next = boards.contains(where: { $0 === b }) ? b : (boards.first ?? placeholder!)
+        if remember, !next.port.isEmpty, settings.preferredPort != next.port { update { $0.preferredPort = next.port } }
         if next === selected { return }
         selected.isSelected = false
         selected = next
         selected.isSelected = !selected.isPlaceholder
-        if !selected.port.isEmpty, settings.preferredPort != selected.port { update { $0.preferredPort = self.selected.port } }
     }
 
     @discardableResult
@@ -161,7 +166,7 @@ final class AppController: ObservableObject {
     private func reselect(added: String?) {
         let current = selected.isPlaceholder || !boards.contains(where: { $0 === selected }) ? nil : selected.key
         let key = BoardSelection.next(boards.map(\.key), current: current, added: added, preferred: settings.preferredPort)
-        select(key.flatMap { find($0) } ?? placeholder!)
+        select(key.flatMap { find($0) } ?? placeholder!, remember: false)
     }
 
     private func boardsChanged() {
@@ -184,31 +189,33 @@ final class AppController: ObservableObject {
     nonisolated private func hookSession(_ port: String, _ s: DeviceSession) {
         let mirror = MirrorState(model: UiModel.for(s.kind, board: s.firmware?.board))   // both RP boards are CAFE:4011
         Task { @MainActor in self.board(port, port: port).attach(s, mirror: mirror) }
-        // A closing session's late events must not touch the board's next session.
-        @MainActor func live() -> BoardController? {
-            guard let b = self.find(port), b.session === s else { return nil }
-            return b
-        }
-        s.onLog = { t in Task { @MainActor in live()?.log("board: \(t)") } }
-        s.onDiagnostics = { d in Task { @MainActor in live()?.showDiagnostics(d) } }
-        s.onState = { st in
+        s.onLog = { [weak self] t in Task { @MainActor in self?.live(port, s)?.log("board: \(t)") } }
+        s.onDiagnostics = { [weak self] d in Task { @MainActor in self?.live(port, s)?.showDiagnostics(d) } }
+        s.onState = { [weak self] st in
             Task { @MainActor in
-                guard let b = live() else { return }
+                guard let b = self?.live(port, s) else { return }
                 b.applyBoardState(st)
                 b.applyMirror(mirror, .state(st))
             }
         }
-        s.onText = { k, v in Task { @MainActor in live()?.applyMirror(mirror, .text(key: k, value: v)) } }
-        s.onClipText = { bytes in Task { @MainActor in live()?.applyMirror(mirror, .clipText(bytes)) } }
+        s.onText = { [weak self] k, v in Task { @MainActor in self?.live(port, s)?.applyMirror(mirror, .text(key: k, value: v)) } }
+        s.onClipText = { [weak self] bytes in Task { @MainActor in self?.live(port, s)?.applyMirror(mirror, .clipText(bytes)) } }
         s.onClipSent = { [weak self] text, src, lost in
             Task { @MainActor in
                 guard let self else { return }
                 self.history.add(text)
                 let note = lost > 0 ? ", \(lost) non-ASCII characters as '?'" : ""
                 let line = "Sent \(text.count) characters from \(Self.sourceName(src))\(note)"
-                if let b = live() { b.log(line) } else { self.addLog(line) }
+                if let b = self.live(port, s) { b.log(line) } else { self.addLog(line) }
             }
         }
+    }
+
+    /// The board `s` is still the session of: a closing session's late events must not touch the
+    /// board's next session.
+    private func live(_ port: String, _ s: DeviceSession) -> BoardController? {
+        guard let b = find(port), b.session === s else { return nil }
+        return b
     }
 
     private static func sourceName(_ src: String) -> String {
@@ -300,7 +307,7 @@ final class AppController: ObservableObject {
         guard installing == nil else { return false }
         installing = board
         let manager = self.manager
-        let before = manager.sessions.map(ObjectIdentifier.init)
+        let before = manager.sessions.map { ObjectIdentifier($0) }
         let fresh = FreshSession()
         board.log("Installing firmware \(label)")
         let steps = UpdateSteps(

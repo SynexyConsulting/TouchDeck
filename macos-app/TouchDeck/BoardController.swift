@@ -12,7 +12,7 @@ final class BoardController: ObservableObject, Identifiable {
 
     /// The port, or "boot:RP2040" for a board in its bootloader (a volume has no port).
     let key: String
-    var id: String { key }
+    nonisolated var id: String { key }
     var isPlaceholder: Bool { key.isEmpty }
     /// Set when the board went away; late events for it are ignored.
     var detached = false

@@ -65,10 +65,9 @@ public enum NewBoards {
             if paths.isEmpty { found.append(NewBoard(chip: chip, state: state, port: nil)) }
             for p in paths { found.append(NewBoard(chip: chip, state: state, port: p)) }
         }
-        return found.sorted {
-            ($0.chip == .rp2350 ? 1 : 0, $0.state == .bootloader ? 1 : 0, $0.port ?? "")
-                < ($1.chip == .rp2350 ? 1 : 0, $1.state == .bootloader ? 1 : 0, $1.port ?? "")
-        }
+        // A named key keeps the tuple comparison quick to type-check.
+        func key(_ b: NewBoard) -> (Int, Int, String) { (b.chip == .rp2350 ? 1 : 0, b.state == .bootloader ? 1 : 0, b.port ?? "") }
+        return found.sorted { key($0) < key($1) }
     }
 
     /// Reboots a stock Pico SDK program into its bootloader: opening its USB serial port at 1200
