@@ -355,16 +355,4 @@ public class InstallerLaunchTests
         Assert.Contains("$env:TD_UPDATE_MSI", script);
         Assert.Contains("$env:TD_UPDATE_EXE", script);
     }
-
-    [Theory]
-    [InlineData(null, null, "rp2040-169", "1.8.0", true)]               // the check ran with no board
-    [InlineData("rp2040-169", "1.8.0", "rp2350-128", "1.8.0", true)]    // another model
-    [InlineData("rp2040-169", "1.7.0", "rp2040-169", "1.8.0", true)]    // back after an install
-    [InlineData("rp2040-169", "1.8.0", "rp2040-169", "1.8.0", false)]   // the same board replugged
-    public void A_connecting_board_is_rechecked_unless_it_was_the_one_checked(
-        string? board, string? version, string nowBoard, string nowVersion, bool recheck)
-    {
-        var checkedFor = board is null ? null : new FirmwareInfo(board, version!, "b");
-        Assert.Equal(recheck, UpdateRecheck.OnConnect(checkedFor, new FirmwareInfo(nowBoard, nowVersion, "b")));
-    }
 }

@@ -5,8 +5,11 @@ using TouchDeck.Core.Session;
 
 namespace TouchDeck.Core.Updates;
 
-/// <summary>Outcome of a check: a choice (possibly empty), "nothing published yet", or an error text.</summary>
-public sealed record UpdateCheckOutcome(UpdateChoice? Choice, bool NothingPublished, string? Error);
+/// <summary>
+/// Outcome of a check: a choice (possibly empty), "nothing published yet", or an error text. The verified
+/// feed is kept so each attached board's firmware offer can be worked out without fetching it again.
+/// </summary>
+public sealed record UpdateCheckOutcome(UpdateChoice? Choice, bool NothingPublished, string? Error, UpdateFeed? Feed = null);
 
 /// <summary>Checks the feed and downloads packages into one per-user folder under fixed names.</summary>
 public sealed class UpdateService(UpdateClient client, string downloadDir)
@@ -20,7 +23,7 @@ public sealed class UpdateService(UpdateClient client, string downloadDir)
         {
             var feed = await client.FetchFeedAsync(ct);
             if (feed is null) return new UpdateCheckOutcome(null, NothingPublished: true, null);
-            return new UpdateCheckOutcome(UpdateSelector.Select(feed, currentApp, device), false, null);
+            return new UpdateCheckOutcome(UpdateSelector.Select(feed, currentApp, device), false, null, feed);
         }
         catch (UpdateFeedException e)
         {

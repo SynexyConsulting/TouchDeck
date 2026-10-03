@@ -64,19 +64,27 @@ public static class NewBoards
         return FromEntities(entities);
     }
 
-    /// <summary>The pure part of <see cref="Scan"/>: one entry per board (a USB device has several interfaces).</summary>
+    /// <summary>
+    /// The pure part of <see cref="Scan"/>: one entry per board. A USB device has several interfaces;
+    /// only its serial interface names a COM port, so two stock boards are told apart by their ports.
+    /// A bootloader has no port, so one entry per chip.
+    /// </summary>
     public static IReadOnlyList<NewBoard> FromEntities(IEnumerable<(string Name, string Pnp)> entities)
     {
-        var found = new Dictionary<(Uf2Chip, NewBoardState), string?>();
+        var withPort = new HashSet<NewBoard>();
+        var seen = new HashSet<(Uf2Chip, NewBoardState)>();
         foreach (var (name, pnp) in entities)
         {
             if (!UsbId.TryParse(pnp, out var usb) || FromUsb(usb.Vid, usb.Pid) is not { } key) continue;
+            seen.Add(key);
             var com = ComPort.Match(name);
-            if (!found.TryGetValue(key, out var port) || port is null)
-                found[key] = com.Success ? com.Groups[1].Value : null;
+            if (com.Success) withPort.Add(new NewBoard(key.Chip, key.State, com.Groups[1].Value));
         }
-        return found.OrderBy(kv => kv.Key.Item1).ThenBy(kv => kv.Key.Item2)
-            .Select(kv => new NewBoard(kv.Key.Item1, kv.Key.Item2, kv.Value)).ToList();
+        var portless = seen.Where(k => !withPort.Any(b => b.Chip == k.Item1 && b.State == k.Item2))
+                           .Select(k => new NewBoard(k.Item1, k.Item2, null));
+        return withPort.Concat(portless)
+            .OrderBy(b => b.Chip).ThenBy(b => b.State).ThenBy(b => b.Port?.Length).ThenBy(b => b.Port, StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>

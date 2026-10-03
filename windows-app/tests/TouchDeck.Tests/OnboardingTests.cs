@@ -162,4 +162,20 @@ public sealed class OnboardingTests : IDisposable
     }
 
     public void Dispose() => Directory.Delete(dir, true);
+
+    [Fact]
+    public void Two_stock_boards_are_two_new_boards()
+    {
+        var found = NewBoards.FromEntities(
+        [
+            ("USB Serial Device (COM12)", @"USB\VID_2E8A&PID_000A&MI_00&1&0&0000"),
+            ("Reset", @"USB\VID_2E8A&PID_000A&MI_02&1&0&0002"),
+            ("USB Serial Device (COM9)", @"USB\VID_2E8A&PID_000A&MI_00&2&0&0000"),
+        ]);
+        Assert.Equal(
+        [
+            new NewBoard(Uf2Chip.Rp2040, NewBoardState.StockFirmware, "COM9"),
+            new NewBoard(Uf2Chip.Rp2040, NewBoardState.StockFirmware, "COM12"),
+        ], found);
+    }
 }
