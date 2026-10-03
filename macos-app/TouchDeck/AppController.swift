@@ -5,8 +5,9 @@ import TouchDeckCore
 
 enum Health { case idle, ok, bad }
 
-/// The app's state and actions: a port of the Windows AppController. Core events arrive on
-/// background threads and are applied on the main actor.
+/// The app-wide side of the window and menu bar: the boards (one `BoardController` per tab), which
+/// one is selected, settings, app updates, recent clips and the activity log. A port of the Windows
+/// AppController. Core events arrive on background threads and are applied on the main actor.
 @MainActor
 final class AppController: ObservableObject {
     private static let logLimit = 500
@@ -23,55 +24,33 @@ final class AppController: ObservableObject {
     let bundled: [BundledFirmware]
     let history = ClipHistory()
 
-    // Link
-    @Published private(set) var state = LinkState.searching
-    @Published private(set) var health = Health.idle
-    @Published private(set) var statusText = ""
-    @Published private(set) var boardName = "No board"
-    @Published private(set) var port = ""
-    @Published private(set) var firmwareVersion = ""
-    @Published private(set) var firmwareBuild = ""
-    @Published private(set) var isConnected = false
     @Published private(set) var historyItems: [String] = []
-    @Published private(set) var logLines: [String] = []
-    @Published private(set) var diagnostics: [(String, String)] = []
+    @Published private(set) var logLines: [LogEntry] = []
+    /// Show only the selected board's lines (and the app's own); offered with more than one board.
+    @Published var onlySelectedLog = false
 
-    // Board state (firmware 1.6.0+)
-    @Published private(set) var jigOn = false
-    @Published private(set) var jigLetter: Character = "O"
-    @Published private(set) var jigStatus = ""
-    @Published private(set) var jigScaleText = "1.0X"
-    @Published private(set) var boardClipText = ""
-    @Published private(set) var canClearBoardClip = false
-    @Published private(set) var jigConfig: JigConfig?
-    @Published private(set) var mirrorFallbackText = ""
-    /// True when the connected board streams STATE (the jiggler card is live).
-    @Published private(set) var mirrorAvailable = false
-    private var jigScale = 0
-
-    // Device mirror (firmware 1.7.0+)
-    @Published private(set) var fullMirror = false
-    @Published private(set) var mirrorModel = UiModel.rp2040Rect
-    @Published private(set) var mirrorImage: CGImage?
-    private var mirror: MirrorState?
-    private var mirrorFramePending = false
-    private(set) var rendererError: String?
-
-    // Firmware install and new boards
-    @Published private(set) var newBoard: NewBoard?
-    @Published private(set) var newBoardModels: [BoardModel] = []
-    @Published var selectedModel: BoardModel? { didSet { refreshUpdateOffer() } }
-    @Published private(set) var updateText = ""
-    @Published private(set) var canUpdate = false
-    @Published private(set) var busy = false { didSet { refreshUpdateOffer() } }
+    // Boards
+    /// Every attached board, one tab each, in the order they appeared.
+    @Published private(set) var boards: [BoardController] = []
+    /// The board the window shows; the placeholder ("No board") while none is attached.
+    @Published private(set) var selected: BoardController!
+    private var placeholder: BoardController!
+    /// The menu bar icon's view of all boards: connected if one is, bad if one has a problem.
+    @Published private(set) var health = Health.idle
+    /// The board being installed; the others keep working, but wait to be installed.
+    @Published private(set) var installing: BoardController? {
+        didSet { boards.forEach { $0.refreshUpdateOffer(); $0.refreshFeedOffer() } }
+    }
     private var scanningNewBoards = false
 
     // Updates
     @Published private(set) var appUpdateText = "Not checked yet"
-    @Published private(set) var firmwareUpdateText = ""
     @Published private(set) var canInstallApp = false
-    @Published private(set) var canInstallFirmware = false
     @Published private(set) var checkingUpdates = false
+    /// The last verified feed: each board's firmware offer is worked out from it.
+    private(set) var lastFeed: UpdateFeed?
+    /// What a board's Firmware line says while there is no feed.
+    private(set) var feedNote = ""
     private var lastChoice: UpdateChoice?
     private var checkedOnce = false
 
@@ -92,22 +71,24 @@ final class AppController: ObservableObject {
             scan: DeviceScanner.scan,
             openTransport: { PosixSerialTransport(device: $0) },
             makeSession: { DeviceSession(transport: $0, injector: Injector(sink: sink), keyboard: keyboard, selection: selection) })
-        manager.preferredPort = settings.preferredPort
+        // The placeholder needs `self`, so `selected` (implicitly unwrapped) is set once it exists.
+        placeholder = BoardController(app: self, key: "", port: nil)
+        selected = placeholder
 
         sink.dryRunEvent = { [weak self] e in Task { @MainActor in self?.addLog("dry run: \(e)") } }
-        manager.onStateChanged = { [weak self] s in Task { @MainActor in self?.applyState(s) } }
-        manager.onSessionStarted = { [weak self] s in self?.hookSession(s) }
+        manager.onSlotChanged = { [weak self] port, s in Task { @MainActor in self?.board(port, port: port).applyState(s) } }
+        manager.onSlotRemoved = { [weak self] port in Task { @MainActor in self?.removeBoard(port) } }
+        manager.onSessionStarted = { [weak self] port, s in self?.hookSession(port, s) }
         history.changed = { [weak self] in Task { @MainActor in self?.historyItems = self?.history.items ?? [] } }
-        applyState(.searching)
     }
 
     func start() {
         _ = TargetApp.shared                      // starts tracking the app COPY reads from
         manager.start()
-        // The board mirror: known once the session has either seen STATE or given up waiting.
+        // The board mirrors: known once a session has either seen STATE or given up waiting.
         timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshMirror()
+                self?.boards.forEach { $0.refreshMirror() }
                 self?.accessibilityTrusted = AccessibilityPermission.isTrusted
             }
         })
@@ -140,73 +121,92 @@ final class AppController: ObservableObject {
         bundled.isEmpty ? "none" : bundled.map { "\($0.board) \($0.version)" }.joined(separator: ", ")
     }
 
-    // MARK: link
+    // MARK: boards
 
-    private func applyState(_ s: LinkState) {
-        let was = state
-        state = s
-        isConnected = s.status == .connected
-        if !isConnected { jigConfig = nil }
-        port = s.device?.port ?? ""
-        boardName = s.device.map { BoardKinds.displayName($0.kind, board: s.firmware?.board) } ?? "No board"
-        firmwareVersion = s.firmware.map { $0.known ? "\($0.version)  (\($0.board))" : "unknown (older than 1.5.0)" } ?? ""
-        firmwareBuild = s.firmware.flatMap { $0.known ? $0.build : nil } ?? ""
-        switch s.status {
-        case .connected: (health, statusText) = (.ok, "Connected")
-        case .portBusy: (health, statusText) = (.bad, "\(port) is in use by another program")
-        case .notResponding: (health, statusText) = (.bad, "\(port) doesn't answer. Is it running Touch Deck firmware?")
-        case .searching: (health, statusText) = (.idle, "Looking for a Touch Deck...")
-        }
-        if !settings.diagnostics || !isConnected { diagnostics = [] }
-        if !isConnected { resetMirror() }
-        refreshUpdateOffer()
+    /// The tab strip and the log filter appear once there is more than one board.
+    var showTabs: Bool { boards.count > 1 }
+    var anyConnected: Bool { boards.contains { $0.isConnected } }
 
-        if s.status == was.status && s.device == was.device { return }
-        if isConnected {
-            addLog("Connected: \(boardName) on \(port), firmware \(firmwareVersion)")
-            Notifier.post("Touch Deck connected", "\(boardName) on \(port), firmware \(s.firmware?.version ?? "?")")
-            if settings.preferredPort != port { update { $0.preferredPort = self.port } }
-        } else if was.status == .connected {
-            addLog("Disconnected")
-            if !busy { Notifier.post("Touch Deck disconnected", "Plug it back in; the app reconnects by itself.") }
-        } else if s.status != .searching {
-            addLog(statusText)
-        }
+    func find(_ key: String) -> BoardController? { boards.first { $0.key == key } }
+
+    func select(_ b: BoardController) {
+        let next = boards.contains { $0 === b } ? b : (boards.first ?? placeholder!)
+        if next === selected { return }
+        selected.isSelected = false
+        selected = next
+        selected.isSelected = !selected.isPlaceholder
+        if !selected.port.isEmpty, settings.preferredPort != selected.port { update { $0.preferredPort = self.selected.port } }
+    }
+
+    @discardableResult
+    private func board(_ key: String, port: String?, newBoard: NewBoard? = nil) -> BoardController {
+        if let b = find(key) { return b }
+        let b = BoardController(app: self, key: key, port: port)
+        if let newBoard { b.setNewBoard(newBoard) }
+        boards.append(b)
+        reselect(added: key)
+        boardsChanged()
+        return b
+    }
+
+    private func removeBoard(_ key: String) {
+        guard let b = find(key), installing !== b else { return }   // being installed: its port comes and goes
+        b.detached = true
+        boards.removeAll { $0 === b }
+        if b === selected { selected.isSelected = false }
+        reselect(added: nil)
+        boardsChanged()
+    }
+
+    private func reselect(added: String?) {
+        let current = selected.isPlaceholder || !boards.contains(where: { $0 === selected }) ? nil : selected.key
+        let key = BoardSelection.next(boards.map(\.key), current: current, added: added, preferred: settings.preferredPort)
+        select(key.flatMap { find($0) } ?? placeholder!)
+    }
+
+    private func boardsChanged() {
+        if !showTabs { onlySelectedLog = false }
+        refreshHealth()
+    }
+
+    /// Called by a board when its link or name changes.
+    func refreshHealth() {
+        health = boards.contains { $0.isConnected } ? .ok : boards.contains { $0.health == .bad } ? .bad : .idle
+    }
+
+    /// A board's notification names the board once there is more than one.
+    func notifyBoard(_ b: BoardController, _ title: String, _ text: String) {
+        refreshHealth()
+        Notifier.post(title, showTabs ? "\(b.label): \(text)" : text)
     }
 
     /// Runs on the manager's thread, before the session reads anything.
-    nonisolated private func hookSession(_ s: DeviceSession) {
-        let model = UiModel.for(s.kind, board: s.firmware?.board)   // both RP boards are CAFE:4011
-        Task { @MainActor in
-            s.diagnosticsEnabled = self.settings.diagnostics
-            self.startMirror(MirrorState(model: model))
+    nonisolated private func hookSession(_ port: String, _ s: DeviceSession) {
+        let mirror = MirrorState(model: UiModel.for(s.kind, board: s.firmware?.board))   // both RP boards are CAFE:4011
+        Task { @MainActor in self.board(port, port: port).attach(s, mirror: mirror) }
+        // A closing session's late events must not touch the board's next session.
+        @MainActor func live() -> BoardController? {
+            guard let b = self.find(port), b.session === s else { return nil }
+            return b
         }
-        s.onLog = { [weak self] t in Task { @MainActor in self?.addLog("board: \(t)") } }
-        // A closing session's late events must not touch the next board's view.
-        s.onDiagnostics = { [weak self] d in
+        s.onLog = { t in Task { @MainActor in live()?.log("board: \(t)") } }
+        s.onDiagnostics = { d in Task { @MainActor in live()?.showDiagnostics(d) } }
+        s.onState = { st in
             Task { @MainActor in
-                guard let self, self.manager.session === s else { return }
-                self.diagnostics = d.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+                guard let b = live() else { return }
+                b.applyBoardState(st)
+                b.applyMirror(mirror, .state(st))
             }
         }
-        s.onState = { [weak self] st in
-            Task { @MainActor in
-                guard let self, self.manager.session === s else { return }
-                self.applyBoardState(st)
-                self.applyMirror(.state(st))
-            }
-        }
-        s.onText = { [weak self] k, v in
-            Task { @MainActor in if let self, self.manager.session === s { self.applyMirror(.text(key: k, value: v)) } }
-        }
-        s.onClipText = { [weak self] b in
-            Task { @MainActor in if let self, self.manager.session === s { self.applyMirror(.clipText(b)) } }
-        }
+        s.onText = { k, v in Task { @MainActor in live()?.applyMirror(mirror, .text(key: k, value: v)) } }
+        s.onClipText = { bytes in Task { @MainActor in live()?.applyMirror(mirror, .clipText(bytes)) } }
         s.onClipSent = { [weak self] text, src, lost in
             Task { @MainActor in
-                self?.history.add(text)
+                guard let self else { return }
+                self.history.add(text)
                 let note = lost > 0 ? ", \(lost) non-ASCII characters as '?'" : ""
-                self?.addLog("Sent \(text.count) characters from \(Self.sourceName(src))\(note)")
+                let line = "Sent \(text.count) characters from \(Self.sourceName(src))\(note)"
+                if let b = live() { b.log(line) } else { self.addLog(line) }
             }
         }
     }
@@ -221,13 +221,9 @@ final class AppController: ObservableObject {
 
     // MARK: actions
 
-    func sendText(_ text: String) {
-        if let s = manager.session, !text.isEmpty { s.sendText(text) }
-    }
-
-    /// The global hotkey: the same as tapping COPY on the board.
+    /// The global hotkey: the same as tapping COPY on the selected board.
     func sendSelection() {
-        guard let s = manager.session else {
+        guard let s = selected.session else {
             Notifier.post("Touch Deck", "No board connected.")
             return
         }
@@ -249,211 +245,96 @@ final class AppController: ObservableObject {
         return one.count <= 60 ? one : String(one.prefix(57)) + "..."
     }
 
-    func swipe(left: Bool) { manager.session?.swipe(left: left) }
-    func tap(x: Int, y: Int) { manager.session?.tap(x: x, y: y) }
-    func toggleJiggler() { manager.session?.setJiggler(!jigOn) }
-    func cycleScale() { manager.session?.setScale((jigScale + 1) % 3) }
-    func clearBoardClip() { manager.session?.clearClip() }
-    func animate(_ on: Bool) { manager.session?.animate(on) }
-    func pressButton(long: Bool) { manager.session?.pressButton(long: long) }
-
-    /// Restarts the board as its UF2 drive (Bootloader button, after the user confirms).
-    func rebootToBootloader() {
-        guard let s = manager.session else { return }
-        addLog("Rebooting the board into its bootloader")
-        s.requestBootloader()
-    }
-
-    /// Jiggler settings: send the change; the controls follow what the board reports back.
-    func setJigConfig(_ c: JigConfig) {
-        guard let s = manager.session, jigConfig != nil else { return }
-        var n = c
-        n.openS = min(max(c.openS, 0), JigConfig.maxSeconds)
-        n.pauseS = min(max(c.pauseS, 0), JigConfig.maxSeconds)
-        s.setJigConfig(menuOn: n.menuOn, f15: n.f15, openS: n.openS, pauseS: n.pauseS)
-        addLog(n.describe())
-    }
-
     func copyToPasteboard(_ text: String) {
         if Pasteboard.write(text) { addLog("Copied a recent clip to the clipboard") }
     }
 
     func clearHistory() { history.clear() }
 
-    func copyLog() { Pasteboard.write(logLines.joined(separator: "\n")) }
-
-    func sendInfo(_ text: String) -> String { ClipMessage.sendInfo(text, connected: isConnected) }
-
-    // MARK: board state
-
-    private func applyBoardState(_ st: StateReport) {
-        jigOn = st.jigOn
-        jigLetter = st.letter
-        jigScale = st.scale
-        jigScaleText = JigView.scaleText(st.scale)
-        jigStatus = JigView.status(st)
-        boardClipText = JigView.clipText(st)
-        canClearBoardClip = JigView.canClear(st)
-        jigConfig = JigView.config(st)
-        mirrorAvailable = true               // the fallback text comes from refreshMirror (once a second)
+    /// The log as shown: everything, or the selected board's lines and the app's own.
+    var shownLog: [LogEntry] {
+        let tag = selected.logTag
+        return logLines.filter { $0.shows(selected: tag, onlySelected: onlySelectedLog) }
     }
 
-    private func refreshMirror() {
-        guard isConnected, let supported = manager.session?.mirrorSupported else {
-            if !isConnected {
-                // A new board must not inherit the last one's jiggler state or screen.
-                resetMirror()
-                mirrorAvailable = false
-                mirrorFallbackText = ""
-                jigOn = false
-                jigLetter = "O"
-                jigStatus = ""
-                boardClipText = ""
-                canClearBoardClip = false
-            }
-            return
-        }
-        mirrorAvailable = supported
-        if fullMirror { mirrorFallbackText = "" }
-        else if !supported { mirrorFallbackText = "This board's firmware is older than 1.6.0. Use Install firmware below to see and control its jiggler here." }
-        else if rendererError != nil { mirrorFallbackText = "The device view couldn't load, so only the jiggler is shown." }
-        else if let v = state.firmware?.semVer, v < SemVer(1, 7, 0) { mirrorFallbackText = "Install firmware 1.7.0 or later (below) to see and use the whole device here." }
-        else { mirrorFallbackText = "" }
-    }
+    /// Copies what the log shows (with "Only selected board", that board's lines).
+    func copyLog() { Pasteboard.write(shownLog.map(\.line).joined(separator: "\n")) }
 
-    private func startMirror(_ m: MirrorState) {
-        mirror = m
-        mirrorModel = m.model
-        fullMirror = false
-        mirrorImage = nil
-        rendererError = NativeUi.unavailableReason(m.model)
-        if let e = rendererError { addLog("Device view unavailable: \(e)") }
-    }
+    // MARK: new boards (no Touch Deck firmware)
 
-    private func applyMirror(_ message: BoardMessage) {
-        guard let m = mirror, m.apply(message), m.complete, rendererError == nil else { return }
-        if !fullMirror {
-            fullMirror = true
-            refreshMirror()
-        }
-        // Lines arrive in bursts (TEXT, CLIPTEXT, STATE): draw once when the burst is applied.
-        guard !mirrorFramePending else { return }
-        mirrorFramePending = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.mirrorFramePending = false
-            guard let m = self.mirror, self.fullMirror, let px = NativeUi.render(m.model, m.state) else { return }
-            self.mirrorImage = NativeUi.image(px, width: m.model.size.width, height: m.model.size.height)
-        }
-    }
-
-    private func resetMirror() {
-        guard mirror != nil || fullMirror else { return }
-        mirror = nil
-        fullMirror = false
-        mirrorImage = nil
-    }
-
-    // MARK: firmware
-
-    private func updateCandidate() -> BundledFirmware? {
-        if state.device?.kind == .esp32c3 { return nil }               // flashed with PlatformIO, not UF2
-        let board = state.firmware.flatMap { $0.known ? $0.board : nil } ?? "rp2040-169"   // pre-VER boards were all the 1.69
-        return BundledFirmware.for(bundled, board: board)
-    }
-
-    private func refreshUpdateOffer() {
-        if busy { canUpdate = false; return }
-        if !isConnected {
-            if let nb = newBoard {
-                if let m = selectedModel, let fw = BundledFirmware.for(bundled, board: m.board) {
-                    (canUpdate, updateText) = (true, "Found an \(nb.describe()). Install Touch Deck \(fw.version) for the \(m.name)?")
-                } else {
-                    (canUpdate, updateText) = (false, "Found an \(nb.describe()), but this app has no firmware for it.")
-                }
-            } else {
-                (canUpdate, updateText) = (false, "")
-            }
-        } else if state.device?.kind == .esp32c3 {
-            (canUpdate, updateText) = (false, "ESP32-C3 firmware is updated with PlatformIO.")
-        } else if let fw = updateCandidate() {
-            canUpdate = true
-            updateText = fw.isNewer(than: state.firmware) ? "Firmware \(fw.version) is available." : "Up to date (bundled \(fw.version))."
-        } else {
-            (canUpdate, updateText) = (false, "")
-        }
-    }
-
-    var updateIsUpgrade: Bool { updateCandidate()?.isNewer(than: state.firmware) ?? false }
-
-    /// Every 2 s while no Touch Deck is connected: a Raspberry Pi board on its factory firmware or
-    /// in its bootloader (by USB ID).
+    /// Every 2 s: Raspberry Pi boards on their factory firmware or in their bootloader (by USB ID),
+    /// each its own tab. Paused while an install runs: the board being flashed passes through its
+    /// bootloader.
     private func checkNewBoards() {
-        if busy || isConnected {
-            if newBoard != nil { newBoard = nil; refreshUpdateOffer() }
-            return
-        }
-        guard !scanningNewBoards else { return }
+        guard installing == nil, !scanningNewBoards else { return }
         scanningNewBoards = true
         Task.detached {
             let found = NewBoards.scan()
             await MainActor.run {
                 self.scanningNewBoards = false
-                guard !self.busy, !self.isConnected else { return }
-                let board = found.first
-                if board == self.newBoard { return }
-                self.newBoard = board
-                self.newBoardModels = board.map { BoardModels.for($0.chip) } ?? []
-                self.selectedModel = self.newBoardModels.first { BundledFirmware.for(self.bundled, board: $0.board) != nil } ?? self.newBoardModels.first
-                if let board { self.addLog("Found an \(board.describe())") }
-                self.refreshUpdateOffer()
+                guard self.installing == nil else { return }
+                var keys = Set<String>()
+                for nb in found {
+                    let key = Self.newBoardKey(nb)
+                    keys.insert(key)
+                    let b = self.board(key, port: nb.port, newBoard: nb)
+                    if !b.isConnected { b.setNewBoard(nb) }
+                }
+                for b in self.boards where b.newBoard != nil && !keys.contains(b.key) {
+                    if self.manager.session(for: b.key) != nil { b.setNewBoard(nil) }   // its port runs Touch Deck now
+                    else { self.removeBoard(b.key) }
+                }
             }
         }
     }
 
-    func updateFirmware() async {
-        guard !busy else { return }
-        if !isConnected {
-            guard let nb = newBoard, let model = selectedModel, let fw = BundledFirmware.for(bundled, board: model.board) else { return }
-            // A stock program reboots at 1200 baud; a board already in its bootloader needs nothing.
-            let reboot: () -> Void = nb.state == .stockFirmware && nb.port != nil ? { _ = NewBoards.rebootToBootloader(nb.port!) } : {}
-            _ = await flash(firmwareDir.appendingPathComponent(fw.file), label: "\(fw.version) (\(fw.file)) on a new \(model.name)",
-                            model: model, enterBootloader: reboot)
-            return
-        }
-        guard let fw = updateCandidate(), let m = BoardModels.find(fw.board) else { return }
-        _ = await flash(firmwareDir.appendingPathComponent(fw.file), label: "\(fw.version) (\(fw.file))", model: m)
-    }
+    nonisolated private static func newBoardKey(_ nb: NewBoard) -> String { nb.port ?? "boot:\(nb.chip)" }
 
-    /// Installs a UF2 (bundled, or downloaded and verified) for `model`: chip and model are checked
-    /// before the board is touched.
-    private func flash(_ uf2: URL, label: String, model: BoardModel, enterBootloader: (() -> Void)? = nil) async -> Bool {
-        guard !busy else { return false }
-        busy = true
-        manager.requiredBoard = model.board       // another RP board (also CAFE:4011) must not take the session
-        let old = manager.session
+    // MARK: firmware installs (one at a time)
+
+    /// Installs a UF2 (bundled, or downloaded and verified) for `model` on `board`: chip and model are
+    /// checked before the board is touched. Success is a session that wasn't there before reporting
+    /// the model, so another board of the same model can't be mistaken for it.
+    func flash(_ board: BoardController, _ uf2: URL, label: String, model: BoardModel, enterBootloader: @escaping () -> Void,
+               progress: @escaping @MainActor (String) -> Void) async -> Bool {
+        guard installing == nil else { return false }
+        installing = board
         let manager = self.manager
-        addLog("Installing firmware \(label)")
+        let before = manager.sessions.map(ObjectIdentifier.init)
+        let fresh = FreshSession()
+        board.log("Installing firmware \(label)")
         let steps = UpdateSteps(
-            enterBootloader: enterBootloader ?? { old?.requestBootloader() },
+            enterBootloader: enterBootloader,
             findBootDrive: { Uf2.findBootDrive(Uf2.mountedVolumes(), chip: model.chip) },
             copyImage: { try Uf2.copy($0, toDrive: $1) },
-            // Only a new session counts: the old one may not have noticed the reboot yet.
-            readRunningFirmware: { manager.session.flatMap { $0 !== old ? $0.firmware : nil } },
+            readRunningFirmware: {
+                let s = manager.sessions.first { !before.contains(ObjectIdentifier($0)) && $0.firmware?.board == model.board }
+                fresh.session = s
+                return s?.firmware
+            },
             bootloaderChip: {
                 if Uf2.findBootDrive(Uf2.mountedVolumes(), chip: .rp2350) != nil { return .rp2350 }
                 if Uf2.findBootDrive(Uf2.mountedVolumes(), chip: .rp2040) != nil { return .rp2040 }
                 return nil
             })
-        let result = await FirmwareUpdater.install(uf2, model: model, steps: steps) { [weak self] m in
-            Task { @MainActor in self?.addLog(m); self?.updateText = m }
+        let result = await FirmwareUpdater.install(uf2, model: model, steps: steps) { [weak board] m in
+            Task { @MainActor in board?.log(m); progress(m) }
         }
-        addLog(result.message)
-        Notifier.post(result.ok ? "Firmware updated" : "Firmware update failed", result.message)
-        manager.requiredBoard = nil
-        busy = false
+        board.log(result.message)
+        notifyBoard(board, result.ok ? "Firmware updated" : "Firmware update failed", result.message)
+        installing = nil
+        // The installed board's tab is the one to show: its port may be new (a new board gets one).
+        if let s = fresh.session, let port = manager.links.first(where: { $0.session === s })?.port, port != board.key {
+            let now = self.board(port, port: port)
+            if !board.isConnected && manager.session(for: board.key) == nil { removeBoard(board.key) }
+            select(now)
+        } else if manager.session(for: board.key) == nil && board.newBoard == nil && !board.isConnected {
+            removeBoard(board.key)                    // gone and not back: drop the tab
+        }
         return result.ok
     }
+
+    func downloadFirmware(_ p: FirmwarePackage) async throws -> URL { try await updates.downloadFirmware(p, progress: nil) }
 
     // MARK: updates
 
@@ -467,43 +348,37 @@ final class AppController: ObservableObject {
 
     @discardableResult
     func checkForUpdates(manual: Bool) async -> UpdateCheckOutcome {
-        if checkingUpdates { return UpdateCheckOutcome(choice: lastChoice, nothingPublished: false, error: nil) }
+        if checkingUpdates { return UpdateCheckOutcome(choice: lastChoice, nothingPublished: false, error: nil, feed: lastFeed) }
         checkingUpdates = true
         defer { checkingUpdates = false }
-        if manual { (appUpdateText, firmwareUpdateText) = ("Checking...", "") }
-        let device = isConnected ? state.firmware : nil
+        if manual { (appUpdateText, feedNote) = ("Checking...", "") }
+        let device = selected.isConnected ? selected.state.firmware : nil
         let outcome = await updates.check(currentApp: SemVer(Self.appVersion) ?? SemVer(0, 0, 0), device: device)
         checkedOnce = true
         update { $0.lastUpdateCheck = Date() }
-        applyOutcome(outcome, device: device)
+        applyOutcome(outcome)
         return outcome
     }
 
-    private func applyOutcome(_ o: UpdateCheckOutcome, device: FirmwareInfo?) {
+    private func applyOutcome(_ o: UpdateCheckOutcome) {
         lastChoice = o.choice
         if let err = o.error {
-            (appUpdateText, firmwareUpdateText, canInstallApp, canInstallFirmware) = ("Couldn't check: \(err)", "", false, false)
+            (appUpdateText, canInstallApp, feedNote) = ("Couldn't check: \(err)", false, "")
             addLog("Update check failed: \(err)")
-            return
-        }
-        if o.nothingPublished {
-            (appUpdateText, firmwareUpdateText, canInstallApp, canInstallFirmware) = ("No updates published yet", "", false, false)
-            return
-        }
-        let app = o.choice?.app
-        appUpdateText = app.map { "\($0.version) available" } ?? "Up to date"
-        canInstallApp = app != nil
-        // The app flashes the RP boards (UF2); the ESP32-C3 is updated with PlatformIO.
-        let fw = o.choice?.firmware.flatMap { BoardModels.find($0.board) != nil ? $0 : nil }
-        if let device, device.known {
-            firmwareUpdateText = BoardModels.find(device.board) == nil ? "This board is updated with PlatformIO"
-                : fw.map { "\($0.version) available" } ?? "Up to date"
+        } else if o.nothingPublished {
+            (appUpdateText, canInstallApp, feedNote, lastFeed) = ("No updates published yet", false, "", nil)
         } else {
-            firmwareUpdateText = "Connect a board to check its firmware"
+            lastFeed = o.feed
+            let app = o.choice?.app
+            appUpdateText = app.map { "\($0.version) available" } ?? "Up to date"
+            canInstallApp = app != nil
+            if let app { Notifier.post("Touch Deck update", "Version \(app.version) is available. Open Settings to install it.") }
         }
-        canInstallFirmware = fw != nil && device != nil
-        if let app { Notifier.post("Touch Deck update", "Version \(app.version) is available. Open Settings to install it.") }
-        if let fw { addLog("Firmware \(fw.version) is available for \(fw.board)") }
+        for b in boards {
+            b.refreshFeedOffer()
+            if b.canInstallFirmware { b.log("Firmware \(b.firmwareUpdateText) on the update feed") }
+        }
+        placeholder.refreshFeedOffer()
     }
 
     func installAppUpdate() async {
@@ -522,24 +397,6 @@ final class AppController: ObservableObject {
             appUpdateText = "Update failed: \(Self.describe(error))"
             canInstallApp = true
             addLog(appUpdateText)
-        }
-    }
-
-    func installFirmwareUpdate() async {
-        guard let p = lastChoice?.firmware, let dev = state.firmware, dev.known, dev.board == p.board,
-              let model = BoardModels.find(p.board), canInstallFirmware else { return }
-        canInstallFirmware = false
-        firmwareUpdateText = "Downloading..."
-        do {
-            let uf2 = try await updates.downloadFirmware(p, progress: nil)
-            firmwareUpdateText = "Installing..."
-            let ok = await flash(uf2, label: "\(p.version) (downloaded, verified)", model: model)
-            firmwareUpdateText = ok ? "Updated to \(p.version)" : "Install failed: see the activity log"
-            canInstallFirmware = !ok
-        } catch {
-            firmwareUpdateText = "Update failed: \(Self.describe(error))"
-            canInstallFirmware = true
-            addLog(firmwareUpdateText)
         }
     }
 
@@ -562,9 +419,9 @@ final class AppController: ObservableObject {
     var diagnosticsEnabled: Bool {
         get { settings.diagnostics }
         set {
-            manager.session?.diagnosticsEnabled = newValue
+            manager.sessions.forEach { $0.diagnosticsEnabled = newValue }
             update { $0.diagnostics = newValue }
-            if !newValue { diagnostics = [] }
+            if !newValue { boards.forEach { $0.clearDiagnostics() } }
         }
     }
 
@@ -599,10 +456,13 @@ final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
-    func addLog(_ text: String) {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        logLines.append("\(f.string(from: Date()))  \(text)")
+    func addLog(_ text: String, board: String? = nil) {
+        logLines.append(LogEntry(port: board, text: text))
         if logLines.count > Self.logLimit { logLines.removeFirst(logLines.count - Self.logLimit) }
     }
+}
+
+/// The session an install found coming back (set from the updater's thread, read after it returns).
+private final class FreshSession: @unchecked Sendable {
+    var session: DeviceSession?
 }

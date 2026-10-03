@@ -54,17 +54,20 @@ public enum NewBoards {
         fromRegistry(devices: UsbRegistry.usbDevices(), ports: UsbRegistry.serialPorts())
     }
 
-    /// The pure part of `scan`: one entry per board kind, with its serial port when it has one.
+    /// The pure part of `scan`: one entry per board. Two stock boards share a USB ID, so they are
+    /// told apart by their serial ports; a bootloader has no port, so one entry per chip.
     public static func fromRegistry(devices: [UsbId], ports: [SerialPortInfo]) -> [NewBoard] {
         var found: [NewBoard] = []
         for id in Set(devices) {
             guard let (chip, state) = fromUsb(id) else { continue }
             if found.contains(where: { $0.chip == chip && $0.state == state }) { continue }
-            let port = ports.filter { $0.usb == id }.map(\.path).sorted().first
-            found.append(NewBoard(chip: chip, state: state, port: port))
+            let paths = ports.filter { $0.usb == id }.map(\.path).sorted()
+            if paths.isEmpty { found.append(NewBoard(chip: chip, state: state, port: nil)) }
+            for p in paths { found.append(NewBoard(chip: chip, state: state, port: p)) }
         }
         return found.sorted {
-            ($0.chip == .rp2350 ? 1 : 0, $0.state == .bootloader ? 1 : 0) < ($1.chip == .rp2350 ? 1 : 0, $1.state == .bootloader ? 1 : 0)
+            ($0.chip == .rp2350 ? 1 : 0, $0.state == .bootloader ? 1 : 0, $0.port ?? "")
+                < ($1.chip == .rp2350 ? 1 : 0, $1.state == .bootloader ? 1 : 0, $1.port ?? "")
         }
     }
 

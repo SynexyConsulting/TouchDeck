@@ -138,6 +138,34 @@ final class Uf2Tests: XCTestCase {
                                 NewBoard(chip: .rp2350, state: .bootloader, port: nil)])
     }
 
+    func testTwoStockBoardsAreTwoNewBoards() {
+        let stock = UsbId(vid: 0x2E8A, pid: 0x000A)
+        let boards = NewBoards.fromRegistry(devices: [stock, stock],
+                                            ports: [SerialPortInfo(path: "/dev/cu.usbmodem12", usb: stock),
+                                                    SerialPortInfo(path: "/dev/cu.usbmodem9", usb: stock)])
+        XCTAssertEqual(boards.map(\.port), ["/dev/cu.usbmodem12", "/dev/cu.usbmodem9"])
+    }
+
+    func testBoardSelectionRules() {
+        XCTAssertNil(BoardSelection.next([], current: nil, added: nil, preferred: nil))
+        XCTAssertEqual(BoardSelection.next(["a"], current: nil, added: "a", preferred: nil), "a")
+        XCTAssertEqual(BoardSelection.next(["a", "b"], current: "a", added: "b", preferred: nil), "a")
+        XCTAssertEqual(BoardSelection.next(["a", "b"], current: "a", added: "b", preferred: "b"), "b")
+        XCTAssertEqual(BoardSelection.next(["b", "c"], current: "a", added: nil, preferred: nil), "b")
+    }
+
+    func testTabsAndLogLines() {
+        XCTAssertEqual(BoardLabels.tab(BoardLabels.model(.rp2040, board: "rp2350-128"), port: "/dev/cu.usbmodem1101"),
+                       "RP2350 1.28 · usbmodem1101")
+        XCTAssertEqual(BoardLabels.tab(BoardLabels.model(NewBoard(chip: .rp2040, state: .bootloader, port: nil)), port: nil),
+                       "RP2040 bootloader")
+        let mine = LogEntry(port: "usbmodem1", text: "a"), other = LogEntry(port: "usbmodem2", text: "b"), app = LogEntry(port: nil, text: "c")
+        XCTAssertTrue(mine.shows(selected: "usbmodem1", onlySelected: true))
+        XCTAssertFalse(other.shows(selected: "usbmodem1", onlySelected: true))
+        XCTAssertTrue(app.shows(selected: "usbmodem1", onlySelected: true))
+        XCTAssertTrue(mine.line.hasSuffix("usbmodem1: a"))
+    }
+
     func testSettingsLoadOlderFilesWithDefaults() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
         try Data("{\"dryRun\": true}".utf8).write(to: url)

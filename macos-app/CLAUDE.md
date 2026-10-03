@@ -20,7 +20,8 @@ python tools/make_xcodeproj.py                  # only when targets or build set
 
 - **`TouchDeckCore` (framework, no UI)** mirrors `TouchDeck.Core`, folder for folder. Its public API is what the app uses; tests use `@testable import`.
   - `Session/DeviceSession` is single-threaded: `run(shouldStop:)` owns the transport on its own thread, and other threads only queue requests. `run`'s `defer` always calls `injector.releaseAll()`; keep it that way. Lines read while waiting for a handshake reply are held, never dropped. Only CR/LF are trimmed, so TEXT values keep their spaces.
-  - `Session/DeviceManager` scans every 2 s on a thread and runs one session at a time. While `requiredBoard` is set (a firmware install), only that model may connect: both RP boards are `CAFE:4011`.
+  - `Session/DeviceManager` scans every 2 s on a thread and keeps **one slot per port**, each with its own session (several boards at once; spec `../docs/superpowers/specs/2026-10-03-multi-board-design.md`). It calls `onSlotChanged`/`onSlotRemoved`/`onSessionStarted` per port on background threads; `links`, `sessions` and `session(for:)` read it. An install recognises its board as a *new* session reporting the target model.
+  - `App/Boards.swift`: `LogEntry` (board-tagged log lines), `BoardSelection` (which tab is selected) and `BoardLabels` (tab text, short `/dev/cu.` ports), as in `Boards.cs`.
   - `Input/Injector` maps HID usages to **macOS virtual key codes** (kVK), not PS/2 scancodes. The HID GUI modifier maps to Command. `CGEventSink` sets each key event's flags from the modifiers the board holds. `SwitchableSink` releases real held input when dry run turns on mid-paste, and dry-run text never names the key.
   - `Mirror/UiState` is `ui_state_t` as raw bytes with fixed offsets (1264 bytes). A test checks the size against `tdui_state_size()`. **When `src/ui_state.h` grows, update the offsets here**, along with `windows-app/.../UiState.cs` and `tools/tests/tdui_host.py`.
   - `Selection/` reads COPY's text from the app in use (`TargetApp`: the frontmost app, or the last one when Touch Deck is in front): Accessibility first, then ⌘C with the clipboard restored (`CopyCommandSelection`, only when Accessibility can't tell), then the clipboard.
@@ -32,7 +33,8 @@ python tools/make_xcodeproj.py                  # only when targets or build set
     - sizes are capped and SHA-256 is checked while streaming;
     - `clearDownloads` removes only its own file names and refuses a symlink.
 - **App (`TouchDeck/`).**
-  - `AppController` (`@MainActor ObservableObject`) is the port of the Windows `AppController`. Core callbacks arrive on background threads and hop to the main actor.
+  - `AppController` (`@MainActor ObservableObject`) is the port of the Windows `AppController`: the app-wide side plus `boards` and `selected`. Core callbacks arrive on background threads and hop to the main actor.
+  - `BoardController` (`@MainActor ObservableObject`) is one tab, as `BoardController.cs`. **Views observe the selected board directly** (`MainBody`, `SettingsBody`, `DeviceMirrorView`, `JigglerCard` take `@ObservedObject var board`): `@Published boards` doesn't pass on changes inside a board. The tab strip (`BoardTab` pills) and the log's "Only selected board" switch appear with two or more boards.
   - `TouchDeckApp` declares the `MenuBarExtra` (template image `MenuBarIcon` when connected, `MenuBarIconIdle` while looking, `MenuBarIconBad` when the port is busy or the board doesn't answer), the `main` window and `Settings`. `AppDelegate` keeps one copy running (a second launch posts a distributed notification and exits; `--quit` asks the running copy to quit) and shows the window on reopen or a clicked notification.
   - Text uses `Theme.ui/head/mono` (Barlow, JetBrains Mono from `Fonts/`, system fonts as fallback).
   - `LSUIElement` is on, so there's no Dock icon.

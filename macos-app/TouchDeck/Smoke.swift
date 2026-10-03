@@ -24,7 +24,7 @@ enum Smoke {
     private static func run(_ app: AppController, dir: URL, steps: Bool, updates: Bool) async {
         AppDelegate.showMainWindow()
         let deadline = Date().addingTimeInterval(10)
-        while !app.isConnected && Date() < deadline { try? await Task.sleep(for: .milliseconds(200)) }
+        while !app.anyConnected && Date() < deadline { try? await Task.sleep(for: .milliseconds(200)) }
         try? await Task.sleep(for: .milliseconds(2500))      // one heartbeat: the first diagnostics arrive
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if steps { await runSteps(app, dir) }
@@ -40,24 +40,26 @@ enum Smoke {
             updateLines = ["update_error=\(o.error ?? "")", "update_nothing=\(o.nothingPublished)",
                            "offer_app=\(o.choice?.app.map { "\($0.version)" } ?? "")",
                            "offer_fw=\(o.choice?.firmware.map { "\($0.board) \($0.version)" } ?? "")",
-                           "app_text=\(app.appUpdateText)", "fw_text=\(app.firmwareUpdateText)"]
+                           "app_text=\(app.appUpdateText)", "fw_text=\(app.selected.firmwareUpdateText)"]
         }
         let lines = [
             "app=\(AppController.appVersion)",
-            "status=\(app.state.status)",
-            "board=\(app.state.firmware?.board ?? "")",
-            "port=\(app.port)",
-            "firmware=\(app.state.firmware?.version ?? "")",
-            "mirror=\(app.mirrorAvailable)",
-            "fullmirror=\(app.fullMirror)",
+            "boards=\(app.boards.count)",
+            "board_tabs=\(app.boards.map(\.label).joined(separator: ", "))",
+            "status=\(app.selected.state.status)",
+            "board=\(app.selected.state.firmware?.board ?? "")",
+            "port=\(app.selected.port)",
+            "firmware=\(app.selected.state.firmware?.version ?? "")",
+            "mirror=\(app.selected.mirrorAvailable)",
+            "fullmirror=\(app.selected.fullMirror)",
             "mirrorpng=\(mirrorSaved)",
             "windowpng=\(windowSaved)",
-            "jig=\(app.jigOn)",
-            "letter=\(app.jigLetter)",
-            "boardclip=\(app.boardClipText)",
+            "jig=\(app.selected.jigOn)",
+            "letter=\(app.selected.jigLetter)",
+            "boardclip=\(app.selected.boardClipText)",
             "bundled=\(app.bundledSummary)",
-            "newboard=\(app.newBoard?.describe() ?? "")",
-            "offer=\(app.updateText)",
+            "newboard=\(app.selected.newBoard?.describe() ?? "")",
+            "offer=\(app.selected.updateText)",
             "accessibility=\(app.accessibilityTrusted)",
             "exe=\(Bundle.main.executablePath ?? "")",
         ] + updateLines
@@ -65,22 +67,22 @@ enum Smoke {
     }
 
     private static func runSteps(_ app: AppController, _ dir: URL) async {
-        let clipPage = app.mirrorModel.clipPage
+        let clipPage = app.selected.mirrorModel.clipPage
         func go(_ page: Int) async {
-            for _ in 0..<4 { app.swipe(left: false) }
-            for _ in 0..<page { app.swipe(left: true) }
+            for _ in 0..<4 { app.selected.swipe(left: false) }
+            for _ in 0..<page { app.selected.swipe(left: true) }
             try? await Task.sleep(for: .milliseconds(1500))
         }
         await go(clipPage + 1)
         _ = saveMirror(app, dir.appendingPathComponent("mirror-jig.png"))
-        app.animate(true)
+        app.selected.animate(true)
         try? await Task.sleep(for: .milliseconds(800))
         _ = saveMirror(app, dir.appendingPathComponent("mirror-anim1.png"))
         try? await Task.sleep(for: .milliseconds(400))
         _ = saveMirror(app, dir.appendingPathComponent("mirror-anim2.png"))
-        app.animate(false)
+        app.selected.animate(false)
         await go(clipPage)
-        app.sendText("Smoke test: sent from the app,\nshown by the board and its mirror.")
+        app.selected.sendText("Smoke test: sent from the app,\nshown by the board and its mirror.")
         try? await Task.sleep(for: .milliseconds(3300))       // the board's "Copied" message lasts 2.5 s
         _ = saveMirror(app, dir.appendingPathComponent("mirror-clip.png"))
     }
@@ -95,7 +97,7 @@ enum Smoke {
     }
 
     private static func saveMirror(_ app: AppController, _ url: URL) -> Bool {
-        guard app.fullMirror, let img = app.mirrorImage else { return false }
+        guard app.selected.fullMirror, let img = app.selected.mirrorImage else { return false }
         return writePNG(img, url)
     }
 

@@ -15,6 +15,14 @@ struct SettingsView: View {
 struct SettingsContent: View {
     @EnvironmentObject private var app: AppController
 
+    var body: some View { SettingsBody(board: app.selected) }
+}
+
+/// The board parts (its firmware, its Jiggler settings) are the selected board's.
+private struct SettingsBody: View {
+    @EnvironmentObject private var app: AppController
+    @ObservedObject var board: BoardController
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             versions
@@ -38,7 +46,7 @@ struct SettingsContent: View {
     private var versions: some View {
         Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 4) {
             GridRow { Text("App Version"); Text(AppController.appVersion).font(.system(.body, design: .monospaced)) }
-            GridRow { Text("Device Firmware"); Text(app.firmwareVersion.isEmpty ? "—" : app.firmwareVersion).font(.system(.body, design: .monospaced)) }
+            GridRow { Text("Device Firmware"); Text(board.firmwareVersion.isEmpty ? "—" : board.firmwareVersion).font(.system(.body, design: .monospaced)) }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -61,9 +69,9 @@ struct SettingsContent: View {
                 if app.canInstallApp { Button("Install") { Task { await app.installAppUpdate() } }.buttonStyle(PillButtonStyle(primary: true)) }
             }
             HStack {
-                (Text("Firmware: ").foregroundStyle(Theme.text) + Text(app.firmwareUpdateText).foregroundStyle(Theme.dim)).font(.callout)
+                (Text("Firmware: ").foregroundStyle(Theme.text) + Text(board.firmwareUpdateText).foregroundStyle(Theme.dim)).font(.callout)
                 Spacer()
-                if app.canInstallFirmware { Button("Install") { Task { await app.installFirmwareUpdate() } }.buttonStyle(PillButtonStyle(primary: true)) }
+                if board.canInstallFirmware { Button("Install") { Task { await board.installFirmwareUpdate() } }.buttonStyle(PillButtonStyle(primary: true)) }
             }
         }
     }
@@ -73,23 +81,23 @@ struct SettingsContent: View {
     private var jigglerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             CardTitle(text: "Jiggler")
-            Text(app.jigConfig == nil ? (app.isConnected ? "This board's firmware has no Jiggler settings (1.8.0 or later)." : "Connect a board to change its Jiggler settings.")
+            Text(board.jigConfig == nil ? (board.isConnected ? "This board's firmware has no Jiggler settings (1.8.0 or later)." : "Connect a board to change its Jiggler settings.")
                                       : "Saved on the board. Also on the board: the cog on its Jiggler page.")
                 .font(.caption).foregroundStyle(Theme.faint)
-            let c = app.jigConfig ?? JigConfig(menuOn: false, f15: false, openS: 0, pauseS: 0)
+            let c = board.jigConfig ?? JigConfig(menuOn: false, f15: false, openS: 0, pauseS: 0)
             Group {
-                Toggle("Right-click context menu", isOn: Binding(get: { c.menuOn }, set: { on in app.setJigConfig(with(c) { $0.menuOn = on }) }))
+                Toggle("Right-click context menu", isOn: Binding(get: { c.menuOn }, set: { on in board.setJigConfig(with(c) { $0.menuOn = on }) }))
                     .toggleStyle(PillSwitchStyle())
                 HStack {
                     Text("Key")
                     Spacer()
-                    ChoiceSwitch(left: "Esc", right: "F15", isRight: c.f15) { f15 in app.setJigConfig(with(c) { $0.f15 = f15 }) }
+                    ChoiceSwitch(left: "Esc", right: "F15", isRight: c.f15) { f15 in board.setJigConfig(with(c) { $0.f15 = f15 }) }
                 }
                 stepper("Menu open", value: c.openS) { $0.openS = $1 }
                     .disabled(!c.menuOn)
                 stepper("Pause before next letter", value: c.pauseS) { $0.pauseS = $1 }
             }
-            .disabled(app.jigConfig == nil)
+            .disabled(board.jigConfig == nil)
         }
     }
 
@@ -104,9 +112,9 @@ struct SettingsContent: View {
     }
 
     private func send(_ set: (inout JigConfig, Int) -> Void, _ v: Int) {
-        guard var c = app.jigConfig else { return }
+        guard var c = board.jigConfig else { return }
         set(&c, v)
-        app.setJigConfig(c)
+        board.setJigConfig(c)
     }
 
     private func with(_ c: JigConfig, _ change: (inout JigConfig) -> Void) -> JigConfig {
