@@ -129,7 +129,7 @@
                     <WrapPanel>
                         <Button Content="&#x25C0;  Page" Click="OnSwipeRight" Margin="0,0,6,6" Padding="11,6" ToolTip="Previous page (swipe right)" />
                         <Button Content="Page  &#x25B6;" Click="OnSwipeLeft" Margin="0,0,6,6" Padding="11,6" ToolTip="Next page (swipe left)" />
-                        <StackPanel x:Name="BootButtons" Orientation="Horizontal">
+                        <StackPanel Orientation="Horizontal">
                             <Button Content="BOOT" Click="OnButton" Margin="0,0,6,6" Padding="11,6"
                                     ToolTip="Press BOOT: start/pause the stopwatch, or change the jiggler size" />
                             <Button Content="Hold BOOT" Click="OnLongButton" Margin="0,0,6,6" Padding="11,6" ToolTip="Hold BOOT: reset the stopwatch" />

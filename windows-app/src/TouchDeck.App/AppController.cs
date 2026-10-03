@@ -167,6 +167,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             AddLog($"Connected: {BoardName} on {Port}, firmware {FirmwareVersion}");
             Notify?.Invoke("Touch Deck connected", $"{BoardName} on {Port}, firmware {s.Firmware?.Version}");
             if (settings.PreferredPort != Port) SaveSettings(settings with { PreferredPort = Port });
+            // The daily check may have run with no board, or another one; this board's offer would then wait a day.
+            if (CheckForUpdates && checkedOnce && !CheckingUpdates && s.Firmware is { } fw && UpdateRecheck.OnConnect(checkedFor, fw))
+                _ = CheckForUpdatesAsync(manual: false);
         }
         else if (was.Status == LinkStatus.Connected)
         {
@@ -598,6 +601,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private readonly UpdateService updates;
     private UpdateChoice? lastChoice;
     private bool checkedOnce;
+    private FirmwareInfo? checkedFor;           // the board the last check chose firmware for
     private DispatcherTimer? updateTimer;
     public bool UpdateSourceIsTest { get; }
 
@@ -636,6 +640,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var device = IsConnected ? State.Firmware : null;
             var outcome = await Task.Run(() => updates.CheckAsync(new Version(AppVersion), device, CancellationToken.None));
             checkedOnce = true;
+            checkedFor = device;
             SaveSettings(settings with { LastUpdateCheck = DateTime.UtcNow });
             ApplyOutcome(outcome, device);
             return outcome;

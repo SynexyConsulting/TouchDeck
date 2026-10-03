@@ -60,4 +60,30 @@ public class SelectionTests
     [Fact]
     public void Uia_read_does_not_throw_whatever_has_focus() =>
         _ = new TimeBoxedSource(new UiaSelection(), TimeSpan.FromSeconds(2)).Read();
+
+    [SkippableFact]
+    public void With_Touch_Deck_in_front_reads_the_control_last_focused_in_another_app()
+    {
+        Skip.If(Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is not null, "needs an interactive desktop");
+        var tracker = FocusTracker.Shared;                   // watching before the other app takes focus
+        using var other = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe",
+            "-NoProfile -Command \"Add-Type -A System.Windows.Forms; $f = New-Object Windows.Forms.Form; " +
+            "$t = New-Object Windows.Forms.TextBox; $t.Text = 'hello focus test'; $f.Controls.Add($t); " +
+            "$f.Add_Shown({ $f.Activate(); $t.Focus(); $t.SelectAll() }); [Windows.Forms.Application]::Run($f)\"")
+            { CreateNoWindow = true, UseShellExecute = false })!;
+        try
+        {
+            string? text = null;
+            for (var sw = System.Diagnostics.Stopwatch.StartNew(); sw.Elapsed < TimeSpan.FromSeconds(15) && text != "hello focus test";)
+            {
+                Thread.Sleep(200);
+                text = new UiaSelection(tracker, ownWindowInFront: () => true).Read();
+            }
+            Assert.Equal("hello focus test", text);
+        }
+        finally
+        {
+            other.Kill();
+        }
+    }
 }

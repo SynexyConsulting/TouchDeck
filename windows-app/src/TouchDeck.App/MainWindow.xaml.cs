@@ -230,7 +230,6 @@ public partial class MainWindow : Window
         MirrorHint.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
         LegacyJiggler.Visibility = legacy ? Visibility.Visible : Visibility.Collapsed;
         MirrorFallback.Visibility = string.IsNullOrEmpty(app.MirrorFallbackText) ? Visibility.Collapsed : Visibility.Visible;
-        BootButtons.Visibility = app.IsConnected && app.MirrorModel == UiModel.Esp32Round ? Visibility.Collapsed : Visibility.Visible;
         if (Mirror.Model != app.MirrorModel) Mirror.SetModel(app.MirrorModel);
         if (!full || app.MirrorFrame is null)
             Mirror.Placeholder = !app.IsConnected ? "Connect a Touch Deck"
