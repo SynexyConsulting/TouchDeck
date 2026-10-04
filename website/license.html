@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Touch Deck licence</title>
+<meta name="description" content="Touch Deck is free software under GPL-3.0-or-later. What that means, in plain words, plus the third-party components and their licences.">
+<meta name="theme-color" content="#07090D">
+<link rel="icon" href="assets/img/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html" aria-label="Touch Deck home"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
+    <nav class="nav-links" aria-label="Site">
+      <a href="index.html#screens">Screens</a>
+      <a href="index.html#boards">Boards</a>
+      <a href="index.html#apps">Apps</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+    <a class="pill pill-amber pill-sm" href="index.html#download">Download</a>
+  </div>
+</header>
+
+<main id="main" class="doc">
+  <div class="wrap">
+    <h1>Touch Deck licence</h1>
+    <p class="lede">Copyright &copy; 2026 <a href="https://github.com/SynexyConsulting">Synexy Consulting</a>.</p>
+    <p>Touch Deck (the firmware, the Windows and macOS apps, the host renderers and the tools in its repository) is free software, licensed under the <strong>GNU General Public License, version 3 or (at your option) any later version</strong> (GPL-3.0-or-later). The full licence text is in the <a href="https://github.com/SynexyConsulting/TouchDeck/blob/main/LICENSE"><code>LICENSE</code></a> file and at <a href="https://www.gnu.org/licenses/gpl-3.0.html">gnu.org/licenses/gpl-3.0.html</a>. Third-party components keep their own licences (see <a href="#third-party">below</a>).</p>
+
+    <div class="plain">
+      <h2>In plain words</h2>
+      <p class="muted">This summary isn&rsquo;t part of the licence; the licence text is what counts.</p>
+      <ul>
+        <li><strong>You may</strong> use Touch Deck for anything, for free: at home, at work, in a school or a business.</li>
+        <li><strong>You may</strong> study it, change it and share it, changed or not.</li>
+        <li><strong>If you share it</strong> (the firmware, an app, or a board with Touch Deck on it), you must also share the source code of that version, including your changes, under this same licence, and keep the copyright notices. Nobody may turn it into a closed, secret product.</li>
+        <li><strong>You may charge</strong> for copies, boards or support, but the people who get it from you get the same rights: they can see the source, change it and share it too.</li>
+        <li><strong>Donations are welcome</strong> and don&rsquo;t change any of this.</li>
+        <li>It comes <strong>as is</strong>, with no warranty.</li>
+      </ul>
+    </div>
+
+    <h2>Notice</h2>
+    <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
+    <p>This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.</p>
+    <p>You should have received a copy of the GNU General Public License along with this program. If not, see <a href="https://www.gnu.org/licenses/">gnu.org/licenses</a>.</p>
+
+    <h2>Contributions</h2>
+    <p>Contributions (for example pull requests) are accepted under the same licence, GPL-3.0-or-later. By submitting one, you confirm that you have the right to license it this way.</p>
+
+    <h2>Where the source is</h2>
+    <p>The complete source for every release is in the public repository <a href="https://github.com/SynexyConsulting/TouchDeck">github.com/SynexyConsulting/TouchDeck</a>. Each release is tagged there (<code>app-vX.Y.Z</code> for the apps, <code>fw-vX.Y.Z</code> for firmware), and the release files in <a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">SynexyConsulting/TouchDeckUpdates</a> are built from those tags.</p>
+
+    <h2 id="third-party">Third-party components</h2>
+    <p>These components are included in, or used to build, Touch Deck. Each stays under its own licence, and all of them can be combined with GPL-3.0 software. Their licence texts and notices must be kept with any copy.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Component</th><th>Used in</th><th>Licence</th></tr></thead>
+        <tbody>
+          <tr><td>Raspberry Pi Pico SDK</td><td>RP2040 / RP2350 firmware</td><td>BSD 3-Clause</td></tr>
+          <tr><td>TinyUSB (via the Pico SDK)</td><td>RP2040 / RP2350 firmware</td><td>MIT</td></tr>
+          <tr><td>Arduino-ESP32 core 2.0.17 (Espressif)</td><td>ESP32-C3 firmware</td><td>LGPL 2.1 or later (parts Apache 2.0)</td></tr>
+          <tr><td>ESP-IDF components (via Arduino-ESP32)</td><td>ESP32-C3 firmware</td><td>Apache 2.0</td></tr>
+          <tr><td>LovyanGFX 1.2.30</td><td>ESP32-C3 firmware</td><td>FreeBSD (BSD 2-Clause); bundled fonts under their own licences</td></tr>
+          <tr><td>NimBLE-Arduino 1.4.3</td><td>ESP32-C3 firmware</td><td>Apache 2.0</td></tr>
+          <tr><td>Panel init register values from Waveshare&rsquo;s demo code (<code>LCD_1in28.c</code>, <code>LCD_1in69.c</code>)</td><td><code>src/lcd.c</code></td><td>Those two files carry no licence header (Waveshare&rsquo;s other demo files use the MIT licence); only the panels&rsquo; register settings were taken, not the code</td></tr>
+          <tr><td>Barlow (Jeremy Tribby)</td><td>apps, firmware fonts, this website</td><td>SIL Open Font License 1.1</td></tr>
+          <tr><td>JetBrains Mono (JetBrains)</td><td>apps, firmware fonts, this website</td><td>SIL Open Font License 1.1</td></tr>
+          <tr><td>DSEG (keshikan)</td><td>firmware fonts</td><td>SIL Open Font License 1.1</td></tr>
+          <tr><td>System.IO.Ports, System.Management (Microsoft)</td><td>Windows app</td><td>MIT</td></tr>
+          <tr><td>GSAP and ScrollTrigger (GreenSock)</td><td>this website&rsquo;s scroll animations, loaded from a CDN</td><td>GSAP Standard License (free to use)</td></tr>
+          <tr><td>pyserial, Pillow, cryptography, pytest, PlatformIO</td><td>development tools (not shipped)</td><td>BSD 3-Clause, MIT-CMU (HPND), Apache 2.0 / BSD, MIT, Apache 2.0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:20px"><strong>Fonts.</strong> The font files, and the bitmap fonts generated from them for the firmware, stay under the SIL Open Font License 1.1, not the GPL. The OFL allows them to be bundled and distributed with any software, including this one. Their reserved font names apply to changed versions of the fonts.</p>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
+      <p style="margin-top:14px">Free software under GPL-3.0-or-later.</p>
+      <p>&copy; 2026 Synexy Consulting</p>
+    </div>
+    <div>
+      <h4>Get it</h4>
+      <ul>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">Latest release</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">All versions</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeck">Source code</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Site</h4>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

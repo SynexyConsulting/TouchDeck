@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Touch Deck: a little touch screen that types for you</title>
+<meta name="description" content="Touch Deck is free, open-source firmware that turns a $15-25 touch-screen board into a desk companion: an analog watch, a clipboard that types, and a mouse jiggler. Plain USB, no drivers. GPL-3.0.">
+<meta name="theme-color" content="#07090D">
+<meta property="og:title" content="Touch Deck">
+<meta property="og:description" content="Open-source firmware for cheap touch-screen boards: a watch, a clipboard that types, and a mouse jiggler. Plain USB, no drivers.">
+<meta property="og:image" content="assets/img/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="Touch Deck home"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#screens">Screens</a>
+      <a href="#boards">Boards</a>
+      <a href="#apps">Apps</a>
+      <a href="#open-source">Open source</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="pill pill-amber pill-sm" href="#download">Download</a>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ Hero ============ -->
+<section class="hero" id="top">
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="hero-copy">
+      <h1>A little touch screen that types for you.</h1>
+      <p class="lede">Touch Deck is free firmware for a $15&ndash;25 touch-screen board. Plug it in over USB and it becomes a keyboard and mouse with three screens: an analog watch, a clipboard that types, and a jiggler that keeps your computer awake.</p>
+      <div class="cta-row">
+        <a class="pill pill-amber" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
+          Download for Windows or Mac</a>
+        <a class="pill pill-ghost" href="https://github.com/SynexyConsulting/TouchDeck">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>
+          Read the source</a>
+      </div>
+      <p class="hero-note">No drivers. No account. Open source under GPL-3.0. Apps for Windows and macOS.</p>
+    </div>
+    <div class="hero-stage" aria-hidden="true">
+      <div class="board round" data-parallax="-18">
+        <div class="board-body"><div class="screen"><img src="assets/screens/round-jiggler-anim.webp" alt="" width="240" height="240"></div><span class="port"></span><span class="bootbtn"></span></div>
+      </div>
+      <div class="board rect" data-parallax="-8">
+        <div class="board-body"><div class="screen"><img src="assets/screens/rect-watch-anim.webp" alt="" width="240" height="280"></div><span class="port"></span><span class="bootbtn"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Problems ============ -->
+<section class="section" id="why">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Small annoyances deserve a small fix.</h2>
+      <p class="lede">None of these will ruin your week. All of them add up. Touch Deck clears them off your desk.</p>
+    </div>
+    <div class="problems">
+      <ul class="pain-list">
+        <li class="pain">
+          <h3>&ldquo;Paste is disabled for this session.&rdquo;</h3>
+          <p>Remote desktops, virtual machines, KVM consoles and BIOS screens often refuse a paste. Touch Deck doesn&rsquo;t paste. It types your text as real keystrokes, so it works anywhere a keyboard does.</p>
+        </li>
+        <li class="pain">
+          <h3>Retyping that 40-character token. Again.</h3>
+          <p>Copy a command, a serial number or a long password once. It stays on the board until you clear it, so the next time is one tap.</p>
+        </li>
+        <li class="pain">
+          <h3>The laptop went to sleep mid-render.</h3>
+          <p>Switch on the jiggler and your machine stays awake through long renders, downloads, backups and slide decks. The mouse drifts a few pixels and always stays near where it started.</p>
+        </li>
+        <li class="pain">
+          <h3>Another gadget, another driver install.</h3>
+          <p>The board is a standard USB keyboard and mouse. Your computer already knows what to do with it, even when you can&rsquo;t install software.</p>
+        </li>
+        <li class="pain">
+          <h3>Closed hardware that only likes one OS.</h3>
+          <p>Touch Deck runs on boards sold by lots of shops, and every line of code is open. If you stop using it, the board is still yours to reuse.</p>
+        </li>
+      </ul>
+      <div class="console-col">
+        <div class="console" id="console">
+          <div class="console-bar"><i></i><i></i><i></i><span>Remote console: build-vm-02</span></div>
+<pre aria-live="polite"><span>build-vm-02 login: deploy
+Password:
+Last login: Fri Oct  2 22:14 from 10.0.4.1
+deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="caret"></span>
+<span class="toast" id="toast">Ctrl+V: paste is disabled for this session</span></pre>
+        </div>
+        <div class="console-caption">
+          <button class="mini-board" id="replay" type="button" aria-label="Paste: type the line into the console again" aria-controls="console">
+            <span class="mini-body"><span class="rect-glass"><img src="assets/screens/rect-clipboard.png" alt="" width="240" height="280"></span><span class="mini-paste" aria-hidden="true">Paste</span></span>
+          </button>
+          <p>The board types the line for you, one keystroke at a time. <strong>Tap Paste on the little board to run it again.</strong></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ How it works ============ -->
+<section class="section" id="how" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Plug it in. That&rsquo;s the setup.</h2>
+      <p class="lede">Over USB the board introduces itself as a keyboard and a mouse, the two devices every computer has supported for decades. There&rsquo;s nothing to install for that part.</p>
+    </div>
+    <svg class="wire" id="wire" viewBox="0 0 1100 270" role="img" aria-label="The board connects to the computer with one USB cable and appears as a keyboard, a mouse and a serial port for the app.">
+      <!-- One coordinate space for board, cable and laptop, so the cable stays attached at every width.
+           Board: 130 wide at (40, 30); its body is 130 x 148.4, so the USB port (bottom centre) is at (105, 178.4). -->
+      <foreignObject x="40" y="30" width="130" height="160">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="board rect wire-board"><div class="board-body"><div class="screen"><img src="assets/screens/rect-clipboard.png" alt="" width="240" height="280"/></div><span class="port"></span></div></div>
+      </foreignObject>
+      <!-- cable: from below the board's port, under and clear of the board, into the laptop's side port at (612, 223) -->
+      <path id="cable" d="M105 186 C105 246, 260 258, 400 246 S 560 223, 610 223" fill="none" stroke="#4A5366" stroke-width="7" stroke-linecap="round"/>
+      <path id="cable-glow" d="M105 186 C105 246, 260 258, 400 246 S 560 223, 610 223" fill="none" stroke="#F2A33A" stroke-width="3" stroke-linecap="round" stroke-dasharray="0 1000" />
+      <!-- laptop -->
+      <rect x="650" y="34" width="300" height="182" rx="14" fill="#10151E" stroke="#1C2432" stroke-width="2"/>
+      <rect x="664" y="48" width="272" height="154" rx="6" fill="#07090D"/>
+      <rect x="620" y="216" width="360" height="15" rx="5" fill="#1C2432"/>
+      <!-- the laptop's side USB port, where the cable plugs in -->
+      <rect x="606" y="218.5" width="16" height="9" rx="2" fill="#59626f"/>
+      <g class="wire-labels" font-size="20" font-weight="600">
+        <g class="wl"><circle cx="694" cy="88" r="6" fill="#3CCB7F"/><text x="712" y="95" fill="#E8ECF2">Keyboard</text><text x="804" y="95" fill="#8A94A6" font-weight="400">types your clip</text></g>
+        <g class="wl"><circle cx="694" cy="128" r="6" fill="#3CCB7F"/><text x="712" y="135" fill="#E8ECF2">Mouse</text><text x="776" y="135" fill="#8A94A6" font-weight="400">for the jiggler</text></g>
+        <g class="wl"><circle cx="694" cy="168" r="6" fill="#F2A33A"/><text x="712" y="175" fill="#E8ECF2">Serial</text><text x="772" y="175" fill="#8A94A6" font-weight="400">talks to the app</text></g>
+      </g>
+    </svg>
+    <ol class="steps3" style="list-style:none;padding:0">
+      <li class="step3">
+        <h3>Get a board</h3>
+        <p>Pick one of three supported boards. They cost about as much as lunch and ship from the usual electronics shops.</p>
+      </li>
+      <li class="step3">
+        <h3>Install Touch Deck</h3>
+        <p>Open the app on Windows or Mac and plug in the board. It spots the factory firmware and offers <em>Install Touch Deck</em>. One click, no buttons to hold.</p>
+      </li>
+      <li class="step3">
+        <h3>Swipe and tap</h3>
+        <p>Swipe between the watch, the clipboard and the jiggler. Your settings are saved on the board and survive updates.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ Screens (pinned) ============ -->
+<section class="screens-sec" id="screens">
+  <div class="wrap">
+    <div class="section-head" style="margin-bottom:0">
+      <h2>Three screens, one swipe apart.</h2>
+      <p class="lede">These are the boards&rsquo; real screens, drawn by the firmware&rsquo;s own code.</p>
+    </div>
+    <div class="scrolly">
+      <div class="stage-col">
+        <div class="stage" aria-hidden="true">
+          <div class="stage-tilt">
+            <div class="board rect" id="stage-rect">
+              <div class="board-body"><div class="screen">
+                <img class="layer on" data-i="0" src="assets/screens/rect-watch-anim.webp" alt="" width="240" height="280">
+                <img class="layer" data-i="1" src="assets/screens/rect-clipboard.png" alt="" width="240" height="280" loading="lazy">
+                <img class="layer" data-i="2" src="assets/screens/rect-jiggler-anim.webp" alt="" width="240" height="280" loading="lazy">
+              </div><span class="port"></span><span class="bootbtn"></span></div>
+            </div>
+            <div class="board round" id="stage-round">
+              <div class="board-body"><div class="screen">
+                <img class="layer on" data-i="0" src="assets/screens/round-watch.png" alt="" width="240" height="240">
+                <img class="layer" data-i="1" src="assets/screens/round-clipboard.png" alt="" width="240" height="240" loading="lazy">
+                <img class="layer" data-i="2" src="assets/screens/round-jiggler-anim.webp" alt="" width="240" height="240" loading="lazy">
+              </div><span class="port"></span></div>
+            </div>
+          </div>
+          <div class="stage-dots"><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="steps">
+        <article class="step" data-step="0">
+          <span class="step-name">Watch</span>
+          <h3>An analog watch that actually ticks.</h3>
+          <p>The second hand lands exactly on the second, driven by a hardware timer. On the 1.69&Prime; board a tiny speaker ticks along with it. One tap mutes the tick.</p>
+          <ul>
+            <li>Press the BOOT button for a stopwatch, hold it to reset.</li>
+            <li>The app sets the time the moment you plug in.</li>
+          </ul>
+        </article>
+        <article class="step" data-step="1">
+          <span class="step-name">Clipboard</span>
+          <h3>A clipboard that types.</h3>
+          <p>Select text on your computer and tap <strong>Copy</strong>. Later, anywhere, tap <strong>Paste</strong> and the board types it out as keystrokes. It even allows for Caps Lock.</p>
+          <ul>
+            <li>Works where paste is blocked: remote desktops, VMs, consoles, login prompts.</li>
+            <li>The clip lives on the board, not on your PC&rsquo;s clipboard. The trash can wipes it.</li>
+            <li>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> in any app to send your selection to the board.</li>
+          </ul>
+        </article>
+        <article class="step" data-step="2">
+          <span class="step-name">Jiggler</span>
+          <h3>A jiggler with good handwriting.</h3>
+          <p>Switch it on and a dot drives through letter-shaped lanes, O, W, M, Z and friends, while the mouse follows a few pixels at a time. Your computer stays awake for the long render, the big download or the slide deck.</p>
+          <ul>
+            <li>The pointer always stays in the small area where it started.</li>
+            <li>Every minute or two it opens and closes a right-click menu, then picks a new letter. You can tune or turn that off.</li>
+            <li>Three sizes. Turn it on and off with a tap.</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Boards ============ -->
+<section class="section" id="boards">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Bring your own board.</h2>
+      <p class="lede">Touch Deck isn&rsquo;t a gadget you have to buy from us. It&rsquo;s firmware for popular boards you can order today, from whichever shop you like.</p>
+    </div>
+    <div class="boards">
+      <article class="board-card">
+        <div class="board rect" aria-hidden="true"><div class="board-body"><div class="screen"><img src="assets/screens/rect-clipboard.png" alt="" width="240" height="280" loading="lazy"></div><span class="port"></span><span class="bootbtn"></span></div></div>
+        <h3>Waveshare RP2040-Touch-LCD-1.69</h3>
+        <div class="price">about $20&ndash;25 <small>the full set</small></div>
+        <ul class="specs">
+          <li><span>Screen</span><span>1.69&Prime; rectangle, 240&times;280</span></li>
+          <li><span>Connects by</span><span>USB keyboard and mouse</span></li>
+          <li><span>Screens</span><span>Watch, Clipboard, Jiggler</span></li>
+          <li><span>Extras</span><span>Speaker for the tick</span></li>
+        </ul>
+        <p>The original. The only one with a ticking watch.</p>
+      </article>
+      <article class="board-card">
+        <div class="board round" aria-hidden="true"><div class="board-body"><div class="screen"><img src="assets/screens/round-jiggler.png" alt="" width="240" height="240" loading="lazy"></div><span class="port"></span></div></div>
+        <h3>Waveshare RP2350-Touch-LCD-1.28</h3>
+        <div class="price">about $20&ndash;25 <small>round</small></div>
+        <ul class="specs">
+          <li><span>Screen</span><span>1.28&Prime; round, 240&times;240</span></li>
+          <li><span>Connects by</span><span>USB keyboard and mouse</span></li>
+          <li><span>Screens</span><span>Watch, Clipboard, Jiggler</span></li>
+          <li><span>Extras</span><span>Draws about 10&times; faster</span></li>
+        </ul>
+        <p>Round and quick. Its watch is silent; BOOT runs the stopwatch.</p>
+      </article>
+      <article class="board-card">
+        <div class="board round esp" aria-hidden="true"><div class="board-body"><div class="screen"><img src="assets/screens/esp32-clipboard-bt.png" alt="" width="240" height="240" loading="lazy"></div><span class="port"></span></div></div>
+        <h3>ESP32-2424S012C (ESP32-C3)</h3>
+        <div class="price">about $12&ndash;18 <small>round</small></div>
+        <ul class="specs">
+          <li><span>Screen</span><span>1.28&Prime; round, 240&times;240</span></li>
+          <li><span>Connects by</span><span>Bluetooth LE, or USB via the app</span></li>
+          <li><span>Screens</span><span>Watch, Clipboard, Jiggler, Settings</span></li>
+          <li><span>Extras</span><span>Types over Bluetooth</span></li>
+        </ul>
+        <p>The budget pick. Pair it over Bluetooth with an on-screen code, or let the app type for it over USB.</p>
+        <p class="note">Flash it from source with PlatformIO for now. A ready-made download follows once it has been through release testing.</p>
+      </article>
+    </div>
+    <p class="fineprint">Prices are rough street prices at the time of writing and change by shop and region. Touch Deck isn&rsquo;t affiliated with Waveshare or any board maker.</p>
+  </div>
+</section>
+
+<!-- ============ Apps ============ -->
+<section class="section" id="apps" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>A companion app on your computer.</h2>
+      <p class="lede">The board works on its own as a keyboard and mouse. The app adds the bits that need your computer: grabbing the selected text for Copy, setting the clock, and keeping the firmware up to date.</p>
+    </div>
+    <div class="apps">
+      <article class="app-row">
+        <div class="app-text">
+          <span class="chip">Windows 10 and 11</span>
+          <h3>Touch Deck for Windows</h3>
+          <ul class="feature-list">
+            <li>A live copy of the board&rsquo;s screen. Click it to tap, drag to swipe.</li>
+            <li>Installs Touch Deck on a new board with one click, and updates it later.</li>
+            <li>Connect several boards at once, each in its own tab.</li>
+            <li>Recent clips kept in memory only. Nothing written to disk.</li>
+            <li>Per-user installer: no admin rights, no .NET to install. Updates are signed and checked.</li>
+          </ul>
+        </div>
+        <figure class="app-fig">
+          <img style="--native:984px" src="assets/img/app-windows-live.png" alt="The Touch Deck Windows app with a live mirror of a round board's watch screen, remote controls, recent clips and the activity log." width="984" height="841" loading="lazy">
+          <figcaption>The live mirror: the board&rsquo;s own screen, drawn by its own firmware code. Click it to tap.</figcaption>
+        </figure>
+      </article>
+      <article class="app-row">
+        <div class="app-text">
+          <span class="chip">macOS 14 and later</span>
+          <h3>Touch Deck for macOS</h3>
+          <p>A menu bar app with the same features as the Windows one: the live mirror, Copy from any app, firmware installs and signed updates. It runs on Apple silicon and Intel Macs.</p>
+          <ul class="feature-list">
+            <li>Lives in the menu bar, out of the Dock.</li>
+            <li>Finds a new board on its factory firmware and offers to install Touch Deck.</li>
+            <li>Copy reads your selection in any app once you allow Accessibility.</li>
+          </ul>
+        </div>
+        <figure class="app-fig">
+          <img style="--native:900px" src="assets/img/app-macos.png" alt="The Touch Deck Mac app has found a new RP2350 board on its factory firmware and offers an Install Touch Deck button." width="1800" height="1624" loading="lazy">
+          <figcaption>One-click install on a new board: the Mac app spots a fresh RP2350 and offers <em>Install Touch Deck</em>.</figcaption>
+        </figure>
+      </article>
+      <p class="muted app-linux">Linux: the board works as a keyboard and mouse there too. There&rsquo;s no app yet, so Copy needs Windows or macOS.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Open source / BYOD ============ -->
+<section class="section" id="open-source" style="padding-top:0">
+  <div class="wrap open">
+    <div>
+      <h2>Your board. Your code.</h2>
+      <p class="lede" style="margin-top:20px">Touch Deck is free software under the GPL. You can read it, change it, and put it on as many boards as you like.</p>
+      <ul class="open-points">
+        <li><strong>No lock-in</strong>The boards are general-purpose hardware. Flash something else on them tomorrow if you want to.</li>
+        <li><strong>No cloud, no account</strong>Your clip goes from your computer to the board over a USB cable. That&rsquo;s the whole journey.</li>
+        <li><strong>Every OS speaks USB</strong>A standard keyboard and mouse works on Windows, macOS, Linux and most things with a USB port.</li>
+        <li><strong>Built in the open</strong>Firmware, apps and tools live in one public repo, tested on real hardware. Pull requests welcome.</li>
+      </ul>
+    </div>
+    <div class="compare">
+      <table>
+        <caption class="visually-hidden">How Touch Deck compares with a typical closed desk gadget</caption>
+        <thead><tr><th scope="col"></th><th scope="col">Typical desk gadget</th><th scope="col">Touch Deck</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Hardware</th><td>Made by one vendor</td><td>Off-the-shelf boards, about $15&ndash;25</td></tr>
+          <tr><th scope="row">Software</th><td>Closed firmware</td><td>Open source, GPL-3.0-or-later</td></tr>
+          <tr><th scope="row">Setup</th><td>Drivers or a vendor app</td><td>None for keyboard and mouse</td></tr>
+          <tr><th scope="row">Computers</th><td>Often one OS</td><td>Anything with USB; apps for Windows and macOS</td></tr>
+          <tr><th scope="row">If the maker disappears</th><td>So do the updates</td><td>The code is public. Build it yourself.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Download ============ -->
+<section class="section" id="download" style="padding-top:0">
+  <div class="wrap">
+    <div class="download">
+      <div>
+        <h2>Get Touch Deck.</h2>
+        <p class="lede" style="margin-top:18px">The apps include the firmware for the RP2040 and RP2350 boards and install it for you. The firmware files are there too, if you&rsquo;d rather drop one onto the board yourself.</p>
+      </div>
+      <div class="dl-list">
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
+          <div><strong>Windows</strong><span>Latest release: installer (.msi) and firmware (.uf2)</span></div>
+        </a>
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
+          <div><strong>macOS</strong><span>Same releases page. The .pkg arrives with the next release.</span></div>
+        </a>
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <div><strong>All versions</strong><span>Every app and firmware release</span></div>
+        </a>
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeck">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>
+          <div><strong>Source code</strong><span>Firmware, apps and tools on GitHub</span></div>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section" id="faq" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head"><h2>Questions</h2></div>
+    <div class="faq">
+      <details>
+        <summary>Do I need to install drivers?</summary>
+        <div class="answer"><p>No. The RP2040 and RP2350 boards show up as a standard USB keyboard and mouse, which every major operating system supports out of the box. The ESP32-C3 board pairs as a Bluetooth keyboard and mouse. The app is optional, and the Windows installer doesn&rsquo;t need admin rights.</p></div>
+      </details>
+      <details>
+        <summary>Will Paste work in my remote desktop or VM?</summary>
+        <div class="answer"><p>If the window accepts typing, yes. The board sends real keystrokes, so to the remote machine it looks like you typed it. It types with a US keyboard layout. On a computer set to a different layout, a few symbols may come out as different characters, and the app swaps accented letters for plain ones before sending.</p></div>
+      </details>
+      <details>
+        <summary>Where does my clipboard text go?</summary>
+        <div class="answer"><p>From your computer to the board, over the cable, and nowhere else. The board doesn&rsquo;t put it on your computer&rsquo;s clipboard, and the app keeps its list of recent clips in memory only. There&rsquo;s no cloud service and no account.</p></div>
+      </details>
+      <details>
+        <summary>What is the jiggler for?</summary>
+        <div class="answer"><p>Keeping a computer awake while it works on something long: a render, a big download, a backup, a presentation. Please use it within your workplace&rsquo;s rules.</p></div>
+      </details>
+      <details>
+        <summary>Does it work on a Mac or Linux?</summary>
+        <div class="answer"><p>The board works on both as a keyboard and mouse, so Paste and the jiggler work anywhere. Filling the clipboard from your computer&rsquo;s selection needs the app. The apps run on Windows 10 and 11 and on macOS 14 and later.</p></div>
+      </details>
+      <details>
+        <summary>How much does it cost?</summary>
+        <div class="answer"><p>Touch Deck is free. You only buy the board, which is roughly $12&ndash;25 depending on the model and the shop.</p></div>
+      </details>
+      <details>
+        <summary>How do updates work?</summary>
+        <div class="answer"><p>The app checks for new versions of itself and the firmware and offers them separately. Each update list is signed, and every download is checked against its fingerprint before anything runs. Settings on the board survive firmware updates.</p></div>
+      </details>
+      <details>
+        <summary>Can I use it in my product, or change it?</summary>
+        <div class="answer"><p>Yes. You may use, change and share Touch Deck, and even sell boards with it. If you share it, share the source of your version under the same licence. The <a href="license.html">licence page</a> explains it in plain words.</p></div>
+      </details>
+      <details>
+        <summary>My board isn&rsquo;t on the list. Can I add it?</summary>
+        <div class="answer"><p>Probably. The firmware is split into page drawing, touch, display and USB layers, and the round pages are already shared between two chips. <a href="https://github.com/SynexyConsulting/TouchDeck">Open an issue or a pull request</a>.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="#top"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
+      <p style="margin-top:14px">Free software under the GNU General Public License, version 3 or later. You may use it, study it, change it and share it. <a href="license.html">The licence in plain words</a>.</p>
+      <p>&copy; 2026 Synexy Consulting</p>
+    </div>
+    <div>
+      <h4>Get it</h4>
+      <ul>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">Latest release</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">All versions</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeck">Source code</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>On this page</h4>
+      <ul>
+        <li><a href="#screens">Screens</a></li>
+        <li><a href="#boards">Boards</a></li>
+        <li><a href="#apps">Apps</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="license.html">Licence</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="assets/js/site.js" defer></script>
+</body>
+</html>
