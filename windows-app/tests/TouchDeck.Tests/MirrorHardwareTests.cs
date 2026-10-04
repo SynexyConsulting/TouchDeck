@@ -20,10 +20,11 @@ public class MirrorHardwareTests
         Skip.If(DeviceScanner.Scan().Count == 0, "no Touch Deck connected");
         using var m = DeviceManager.CreateDefault(new FakeSelection("", "select"), new RecordingSink());
         m.Tick();
-        Skip.If(m.State.Status == LinkStatus.PortBusy, "port busy (Touch Deck app running?)");
-        Skip.If(m.State.Firmware?.SemVer is not { } v || v < new Version(1, 7, 0), "firmware older than 1.7.0");
-        var s = m.Session!;
-        var kind = UiModels.For(m.State.Device!.Kind, m.State.Firmware?.Board);
+        var link = HardwareLinks.First(m);
+        Skip.If(link.State.Status == LinkStatus.PortBusy, "port busy (Touch Deck app running?)");
+        Skip.If(link.State.Firmware?.SemVer is not { } v || v < new Version(1, 7, 0), "firmware older than 1.7.0");
+        var s = link.Session!;
+        var kind = UiModels.For(link.State.Device!.Kind, link.State.Firmware?.Board);
         var mirror = new MirrorState(kind);
         var gate = new object();
         string? crc = null;

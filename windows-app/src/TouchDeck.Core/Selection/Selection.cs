@@ -14,7 +14,7 @@ public interface ITextSource
 public sealed class SelectionProvider(ITextSource selection, ITextSource clipboard) : ISelectionProvider
 {
     public static SelectionProvider CreateDefault() =>
-        new(new TimeBoxedSource(new UiaSelection(), TimeSpan.FromMilliseconds(1500)), new Win32Clipboard());
+        new(new TimeBoxedSource(new UiaSelection(FocusTracker.Shared), TimeSpan.FromMilliseconds(1500)), new Win32Clipboard());
 
     public (string Text, string Source) Grab()
     {
@@ -37,14 +37,20 @@ public sealed class TimeBoxedSource(ITextSource inner, TimeSpan limit) : ITextSo
     }
 }
 
-/// <summary>Selected text of the focused control via UI Automation's TextPattern.</summary>
-public sealed class UiaSelection : ITextSource
+/// <summary>
+/// Selected text of the focused control via UI Automation's TextPattern. When Touch Deck itself is
+/// in front (the user clicked the mirror), it reads the control last focused in another app instead.
+/// </summary>
+public sealed class UiaSelection(FocusTracker? tracker = null, Func<bool>? ownWindowInFront = null) : ITextSource
 {
     public string? Read()
     {
         try
         {
-            var element = AutomationElement.FocusedElement;
+            AutomationElement? element;
+            if (!(ownWindowInFront ?? FocusTracker.OwnWindowInFront)()) element = AutomationElement.FocusedElement;
+            else if (tracker?.LastFocus is { } hwnd && FocusTracker.IsWindow(hwnd)) element = AutomationElement.FromHandle(hwnd);
+            else return null;                                    // never Touch Deck's own text
             var walker = TreeWalker.ControlViewWalker;
             for (int level = 0; level < 4 && element is not null; level++)   // focus is sometimes on a child
             {
@@ -53,7 +59,7 @@ public sealed class UiaSelection : ITextSource
                 element = walker.GetParent(element);
             }
         }
-        catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException or COMException)
+        catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException or COMException or ArgumentException)
         {
             // UIA errors are app-specific: treat as unsupported.
         }

@@ -6,7 +6,7 @@ import TouchDeckCore
 /// the board, as the Windows DeviceMirror: RP2040 a 240x280 panel with 44 px corners, round
 /// boards a circle. A click is TAP x y, a sideways drag SWIPE L|R (MirrorInput).
 struct DeviceMirrorView: View {
-    @EnvironmentObject private var app: AppController
+    @ObservedObject var board: BoardController
     /// Text over the dark panel (no board, or nothing to show yet); nil shows the frame.
     var placeholder: String?
 
@@ -15,14 +15,14 @@ struct DeviceMirrorView: View {
     private static let bezelPad: CGFloat = 14
 
     var body: some View {
-        let model = app.mirrorModel
+        let model = board.mirrorModel
         let (w, h) = model.size
         let pw = CGFloat(w) * Self.scale, ph = CGFloat(h) * Self.scale
         let r = model.isRound ? pw / 2 : 44 * Self.scale
         let glass = model.isRound ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: r, style: .continuous))
         ZStack {
             Color(hex: 0x07090D)
-            if placeholder == nil, let image = app.mirrorImage {
+            if placeholder == nil, let image = board.mirrorImage {
                 Image(decorative: image, scale: 1)
                     .interpolation(.high)
                     .resizable()
@@ -36,8 +36,8 @@ struct DeviceMirrorView: View {
                 MirrorClickLayer { x0, y0, x1, y1 in
                     switch MirrorInput.classify(x0: x0 / Self.scale, y0: y0 / Self.scale,
                                                 x1: x1 / Self.scale, y1: y1 / Self.scale, width: w, height: h) {
-                    case .tap(let x, let y)?: app.tap(x: x, y: y)
-                    case .swipe(let left)?: app.swipe(left: left)
+                    case .tap(let x, let y)?: board.tap(x: x, y: y)
+                    case .swipe(let left)?: board.swipe(left: left)
                     case nil: break
                     }
                 }

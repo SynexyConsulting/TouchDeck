@@ -184,14 +184,30 @@ final class ManagerTests: XCTestCase {
         let m = DeviceManager(scan: { [self.rp] }, openTransport: { _ in t },
                               makeSession: { DeviceSession(transport: $0, injector: Injector(sink: RecordingSink()), keyboard: FakeKeyboard(), selection: FakeSelection()) })
         m.tick()
-        XCTAssertEqual(m.state.status, .portBusy)
+        XCTAssertEqual(m.links.first?.state.status, .portBusy)
     }
 
     func testSilentPortIsNotResponding() {
         let m = DeviceManager(scan: { [self.rp] }, openTransport: { _ in FakeTransport() },
                               makeSession: { DeviceSession(transport: $0, injector: Injector(sink: RecordingSink()), keyboard: FakeKeyboard(), selection: FakeSelection()) })
         m.tick()
-        XCTAssertEqual(m.state.status, .notResponding)
+        XCTAssertEqual(m.links.first?.state.status, .notResponding)
+        XCTAssertNil(m.session(for: rp.port))
+    }
+
+    func testEveryPortIsItsOwnSlot() {
+        let esp = DeviceCandidate(port: "/dev/cu.usbmodem9", kind: .esp32c3, usb: UsbId(vid: 0x303A, pid: 0x1001))
+        var present = [rp, esp]
+        var removed: [String] = []
+        let m = DeviceManager(scan: { present }, openTransport: { _ in FakeTransport() },
+                              makeSession: { DeviceSession(transport: $0, injector: Injector(sink: RecordingSink()), keyboard: FakeKeyboard(), selection: FakeSelection()) })
+        m.onSlotRemoved = { removed.append($0) }
+        m.tick()
+        XCTAssertEqual(m.links.map(\.port), [rp.port, esp.port])
+        present = [esp]
+        m.tick()
+        XCTAssertEqual(removed, [rp.port])
+        XCTAssertEqual(m.links.map(\.port), [esp.port])
     }
 
     func testScannerKeepsTouchDecksRpFirst() {

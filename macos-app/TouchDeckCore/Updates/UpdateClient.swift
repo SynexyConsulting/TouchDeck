@@ -136,10 +136,13 @@ public struct UpdateCheckOutcome: Equatable {
     public var choice: UpdateChoice?
     public var nothingPublished: Bool
     public var error: String?
-    public init(choice: UpdateChoice?, nothingPublished: Bool, error: String?) {
+    /// The verified feed, kept so each attached board's firmware offer is worked out without fetching it again.
+    public var feed: UpdateFeed?
+    public init(choice: UpdateChoice?, nothingPublished: Bool, error: String?, feed: UpdateFeed? = nil) {
         self.choice = choice
         self.nothingPublished = nothingPublished
         self.error = error
+        self.feed = feed
     }
 }
 
@@ -160,7 +163,8 @@ public final class UpdateService {
     public func check(currentApp: SemVer, device: FirmwareInfo?) async -> UpdateCheckOutcome {
         do {
             guard let feed = try await client.fetchFeed() else { return UpdateCheckOutcome(choice: nil, nothingPublished: true, error: nil) }
-            return UpdateCheckOutcome(choice: UpdateSelector.select(feed, currentApp: currentApp, device: device), nothingPublished: false, error: nil)
+            return UpdateCheckOutcome(choice: UpdateSelector.select(feed, currentApp: currentApp, device: device), nothingPublished: false,
+                                      error: nil, feed: feed)
         } catch {
             return UpdateCheckOutcome(choice: nil, nothingPublished: false, error: "\(error)")
         }

@@ -2,7 +2,7 @@ import Foundation
 
 public enum LinkStatus: Equatable { case searching, portBusy, notResponding, connected }
 
-/// What the app shows about the board link.
+/// What the app shows about one board's link.
 public struct LinkState: Equatable {
     public var status: LinkStatus
     public var device: DeviceCandidate?
@@ -13,38 +13,43 @@ public struct LinkState: Equatable {
     public static let searching = LinkState(.searching)
 }
 
-/// Finds a Touch Deck and keeps one `DeviceSession` running on it. When the board goes away
-/// the session ends (releasing any held input) and scanning resumes. Port of DeviceManager.cs.
+/// One port the manager knows: its link state and, while connected, its session.
+public struct BoardLink {
+    public var port: String
+    public var state: LinkState
+    public var session: DeviceSession?
+}
+
+/// Keeps one `DeviceSession` running on every Touch Deck that is plugged in: one slot per port.
+/// A board that goes away ends its own session (releasing any held input); the others carry on.
+/// A port that is busy or doesn't answer is a slot too, so the app can say why.
+/// Port of DeviceManager.cs.
 public final class DeviceManager: @unchecked Sendable {
+    private final class Slot {
+        var device: DeviceCandidate
+        var state = LinkState.searching
+        var session: DeviceSession?
+        var running = false
+        var stop = false
+        var done: DispatchSemaphore?
+        init(_ device: DeviceCandidate) { self.device = device }
+    }
+
     private let scan: () -> [DeviceCandidate]
     private let openTransport: (DeviceCandidate) -> SerialTransport
     private let makeSession: (SerialTransport) -> DeviceSession
 
     private let lock = NSLock()
     private var stopped = true
-    private var sessionRunning = false
-    private var sessionStop = false
-    private var sessionDone: DispatchSemaphore?
-    private var stateValue = LinkState.searching
-    private var sessionValue: DeviceSession?
+    private var slots: [String: Slot] = [:]
+    private var order: [String] = []                      // ports in the order they were first seen
 
-    /// A port to prefer when several boards are plugged in (e.g. the last one used).
-    public var preferredPort: String?
-    /// While set (during a firmware install), only a board whose VER reports this model is connected:
-    /// both RP boards are CAFE:4011, and the manager must not settle on the other one.
-    public var requiredBoard: String? {
-        get { lock.withLock { requiredBoardValue } }
-        set { lock.withLock { requiredBoardValue = newValue } }
-    }
-    private var requiredBoardValue: String?
-
-    /// Raised on a background thread.
-    public var onStateChanged: ((LinkState) -> Void)?
-    /// A new session is up: hook its events here (before it starts reading).
-    public var onSessionStarted: ((DeviceSession) -> Void)?
-
-    public var state: LinkState { lock.withLock { stateValue } }
-    public var session: DeviceSession? { lock.withLock { sessionValue } }
+    /// A port's link changed (raised on a background thread). A new port is announced this way too.
+    public var onSlotChanged: ((String, LinkState) -> Void)?
+    /// A port went away and has no session left.
+    public var onSlotRemoved: ((String) -> Void)?
+    /// A new session is up on a port: hook its events here (before it starts reading).
+    public var onSessionStarted: ((String, DeviceSession) -> Void)?
 
     public init(scan: @escaping () -> [DeviceCandidate],
                 openTransport: @escaping (DeviceCandidate) -> SerialTransport,
@@ -53,6 +58,15 @@ public final class DeviceManager: @unchecked Sendable {
         self.openTransport = openTransport
         self.makeSession = makeSession
     }
+
+    /// Every known port, in the order they were first seen.
+    public var links: [BoardLink] {
+        lock.withLock { order.compactMap { p in slots[p].map { BoardLink(port: p, state: $0.state, session: $0.session) } } }
+    }
+
+    public var sessions: [DeviceSession] { lock.withLock { order.compactMap { slots[$0]?.session } } }
+
+    public func session(for port: String) -> DeviceSession? { lock.withLock { slots[port]?.session } }
 
     public func start(pollEvery: TimeInterval = 2) {
         lock.withLock { stopped = false }
@@ -66,96 +80,100 @@ public final class DeviceManager: @unchecked Sendable {
         t.start()
     }
 
-    /// One scan-and-connect attempt, if no session is running.
+    /// One scan: connect every port without a session, drop the ports that are gone.
     public func tick() {
-        if lock.withLock({ sessionRunning }) { return }
         let found = scan()
-        guard let device = found.first(where: { $0.port == preferredPort }) ?? found.first else {
-            publish(.searching)
-            return
-        }
-        if let required = requiredBoard {
-            // Only the board being flashed may connect: try each candidate, keep the one whose VER matches.
-            for d in found.sorted(by: { ($0.port == preferredPort ? 0 : 1) < ($1.port == preferredPort ? 0 : 1) }) {
-                if tryConnect(d, required: required) { return }
+        for device in found {
+            let slot: Slot? = lock.withLock {
+                let s: Slot
+                if let existing = slots[device.port] { s = existing } else {
+                    s = Slot(device)
+                    slots[device.port] = s
+                    order.append(device.port)
+                }
+                if s.running { return nil }
+                s.device = device
+                return s
             }
-            publish(.searching)
-            return
+            if let slot { tryConnect(slot) }
         }
-        _ = tryConnect(device, required: nil)
+
+        let present = Set(found.map(\.port))
+        let gone: [String] = lock.withLock {
+            let g = order.filter { !present.contains($0) && slots[$0]?.running == false }
+            for p in g { slots[p] = nil }
+            order.removeAll { g.contains($0) }
+            return g
+        }
+        for p in gone { onSlotRemoved?(p) }
     }
 
-    private func tryConnect(_ device: DeviceCandidate, required: String?) -> Bool {
+    private func tryConnect(_ slot: Slot) {
+        let device = slot.device
         let transport = openTransport(device)
         do {
             try transport.open()
         } catch {
             transport.close()                 // another program holds it
-            if required == nil { publish(LinkState(.portBusy, device: device)) }
-            return false
+            publish(slot, LinkState(.portBusy, device: device))
+            return
         }
         let session = makeSession(transport)
         session.kind = device.kind
         guard (try? session.handshake()) == true else {
             transport.close()
-            if required == nil { publish(LinkState(.notResponding, device: device)) }
-            return false
-        }
-        if let required, session.firmware?.board != required {
-            transport.close()                 // another board: leave it for after the install
-            return false
+            publish(slot, LinkState(.notResponding, device: device))
+            return
         }
         let done = DispatchSemaphore(value: 0)
         lock.withLock {
-            sessionValue = session
-            sessionRunning = true
-            sessionStop = false
-            sessionDone = done
+            slot.session = session
+            slot.running = true
+            slot.stop = false
+            slot.done = done
         }
-        onSessionStarted?(session)
-        publish(LinkState(.connected, device: device, firmware: session.firmware))
+        onSessionStarted?(device.port, session)
+        publish(slot, LinkState(.connected, device: device, firmware: session.firmware))
         let t = Thread { [weak self] in
             do {
-                try session.run { self?.lock.withLock { self?.sessionStop ?? true } ?? true }
+                try session.run { self?.lock.withLock { slot.stop } ?? true }
             } catch {
                 // unplugged: run's defer released held input
             }
             transport.close()
             guard let self else { done.signal(); return }
             let cancelled = self.lock.withLock { () -> Bool in
-                self.sessionValue = nil
-                self.sessionRunning = false
-                return self.sessionStop
+                slot.session = nil
+                slot.running = false
+                return slot.stop
             }
-            if !cancelled { self.publish(.searching) }
+            if !cancelled { self.publish(slot, LinkState(.searching, device: device)) }
             done.signal()
         }
-        t.name = "TouchDeck session"
+        t.name = "TouchDeck session \(device.port)"
         t.start()
-        return true
     }
 
-    /// Ends the current session (e.g. before flashing firmware) and waits for it.
-    public func disconnect() {
-        let done: DispatchSemaphore? = lock.withLock {
-            sessionStop = true
-            return sessionRunning ? sessionDone : nil
+    private func publish(_ slot: Slot, _ state: LinkState) {
+        let changed: Bool = lock.withLock {
+            if slot.state == state { return false }
+            slot.state = state
+            return true
         }
-        _ = done?.wait(timeout: .now() + 2)
-        publish(.searching)
+        if changed { onSlotChanged?(slot.device.port, state) }
+    }
+
+    /// Ends every session and waits for them (each releases its held input).
+    public func disconnectAll() {
+        let waits: [DispatchSemaphore] = lock.withLock {
+            for s in slots.values { s.stop = true }
+            return slots.values.compactMap { $0.running ? $0.done : nil }
+        }
+        for d in waits { _ = d.wait(timeout: .now() + 2) }
     }
 
     public func stop() {
         lock.withLock { stopped = true }
-        disconnect()
-    }
-
-    private func publish(_ state: LinkState) {
-        let changed: Bool = lock.withLock {
-            if stateValue == state { return false }
-            stateValue = state
-            return true
-        }
-        if changed { onStateChanged?(state) }
+        disconnectAll()
     }
 }

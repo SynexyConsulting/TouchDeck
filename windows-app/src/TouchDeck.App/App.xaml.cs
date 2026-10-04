@@ -78,8 +78,10 @@ public partial class App : Application
         controller.Start();
         if (!e.Args.Contains("--minimized")) ShowWindow();
 
-        int smoke = Array.IndexOf(e.Args, "--smoke");
-        if (smoke >= 0 && smoke + 1 < e.Args.Length) _ = RunSmokeAsync(e.Args[smoke + 1], e.Args.Contains("--smoke-steps"));
+        int smoke = Array.IndexOf(e.Args, "--smoke"), smokeBoard = Array.IndexOf(e.Args, "--smoke-board");
+        if (smoke >= 0 && smoke + 1 < e.Args.Length)
+            _ = RunSmokeAsync(e.Args[smoke + 1], e.Args.Contains("--smoke-steps"),
+                              smokeBoard >= 0 && smokeBoard + 1 < e.Args.Length ? e.Args[smokeBoard + 1] : null);
 #if UPDATE_TEST_HOOKS
         int smokeUpdate = Array.IndexOf(e.Args, "--smoke-update");
         if (smokeUpdate >= 0 && smokeUpdate + 1 < e.Args.Length) _ = RunSmokeUpdateAsync(e.Args[smokeUpdate + 1]);
@@ -94,7 +96,7 @@ public partial class App : Application
     private async Task RunSmokeUpdateAsync(string dir)
     {
         var deadline = DateTime.UtcNow.AddSeconds(8);
-        while (!controller!.IsConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
+        while (!controller!.AnyConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
         var outcome = await controller.CheckForUpdatesAsync(manual: true);
         Directory.CreateDirectory(dir);
         File.WriteAllLines(Path.Combine(dir, "update.txt"),
@@ -114,14 +116,36 @@ public partial class App : Application
 
     /// <summary>
     /// --smoke DIR: wait for a board (up to 10 s), then write DIR\smoke.png (the window),
-    /// DIR\mirror.png (the device view at 1:1, firmware 1.7.0+) and
+    /// DIR\mirror.png (the selected board's device view at 1:1, firmware 1.7.0+) and
     /// DIR\smoke.txt (what the app detected), and quit. Used by build.ps1 and the installer check.
+    /// --smoke-board PORT selects that board first (for --smoke-steps with several attached).
     /// </summary>
-    private async Task RunSmokeAsync(string dir, bool steps)
+    private async Task RunSmokeAsync(string dir, bool steps, string? port)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!controller!.IsConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
-        await Task.Delay(2500);                     // one heartbeat: the first diagnostics arrive
+        while (!controller!.AnyConnected && DateTime.UtcNow < deadline) await Task.Delay(200);
+        await Task.Delay(2500);                     // one heartbeat: the first diagnostics arrive, and the other boards
+#if DEBUG
+        if (Environment.GetCommandLineArgs().Contains("--smoke-demo-boards"))
+        {
+            Directory.CreateDirectory(dir);
+            controller.AddDemoBoards();
+            await Task.Delay(300);
+            window!.SaveSnapshot(Path.Combine(dir, "smoke-tabs.png"));
+            controller.Show(controller.Boards[^1]);      // the busy port's tab
+            controller.OnlySelectedLog = true;
+            await Task.Delay(300);
+            window.SaveSnapshot(Path.Combine(dir, "smoke-tab-busy.png"));
+            controller.Show(controller.Boards[1]);       // the bootloader's tab
+            await Task.Delay(300);
+            window.SaveSnapshot(Path.Combine(dir, "smoke-tab-new.png"));
+            controller.OnlySelectedLog = false;
+            controller.Show(controller.Boards[0]);
+            await Task.Delay(300);
+        }
+#endif
+        if (port is not null && controller.Find(port) is { } chosen) controller.Show(chosen);
+        var b = controller.Selected;
         Directory.CreateDirectory(dir);
         if (steps) await RunSmokeStepsAsync(dir);
         window!.SaveSnapshot(Path.Combine(dir, "smoke.png"));
@@ -134,19 +158,21 @@ public partial class App : Application
         File.WriteAllLines(Path.Combine(dir, "smoke.txt"),
         [
             $"app={AppController.AppVersion}",
-            $"status={controller.State.Status}",
-            $"board={controller.State.Firmware?.Board}",
-            $"port={controller.Port}",
-            $"firmware={controller.State.Firmware?.Version}",
-            $"mirror={controller.MirrorAvailable}",
-            $"fullmirror={controller.FullMirror}",
+            $"boards={controller.Boards.Count}",
+            $"board_tabs={string.Join(", ", controller.Boards.Select(x => x.Label))}",
+            $"status={b.State.Status}",
+            $"board={b.State.Firmware?.Board}",
+            $"port={b.Port}",
+            $"firmware={b.State.Firmware?.Version}",
+            $"mirror={b.MirrorAvailable}",
+            $"fullmirror={b.FullMirror}",
             $"mirrorpng={mirrorSaved}",
-            $"jig={controller.JigOn}",
-            $"letter={controller.JigLetter}",
-            $"boardclip={controller.BoardClipText}",
+            $"jig={b.JigOn}",
+            $"letter={b.JigLetter}",
+            $"boardclip={b.BoardClipText}",
             $"bundled={controller.BundledSummary}",
-            $"newboard={controller.NewBoard?.Describe()}",
-            $"offer={controller.UpdateText}",
+            $"newboard={b.NewBoard?.Describe()}",
+            $"offer={b.UpdateText}",
             $"exe={Environment.ProcessPath}",
         ]);
         Quit();
@@ -160,7 +186,7 @@ public partial class App : Application
     /// </summary>
     private async Task RunSmokeStepsAsync(string dir)
     {
-        var c = controller!;
+        var c = controller!.Selected;
         int clipPage = Core.Mirror.UiModels.ClipPage(c.MirrorModel);
         async Task Go(int page)
         {
