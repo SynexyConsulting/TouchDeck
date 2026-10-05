@@ -27,12 +27,18 @@ Opening `index.html` straight from disk mostly works too, but a server is closer
 
 ## Deploy
 
-Upload the contents of `website/` to any static host: GitHub Pages, Cloudflare Pages, Netlify, S3, or a plain web server. There's nothing to build. Leave out `README.md` and `tools/` if you like; the page doesn't use them.
+The live site is https://touchdeck.synexyconsulting.com. A push to `main` that touches `website/` runs `.github/workflows/website.yml`, which builds `Dockerfile` (unprivileged nginx with `nginx.conf`, port 8080) and pushes `ghcr.io/synexyconsulting/touchdeck-website` tagged `latest` and `sha-<commit>`. Going live is a manual redeploy of the stack (Re-pull image); the stack itself is kept outside this repo.
 
-- **GitHub Pages:** publish from a branch with the site at the root, or use an Actions workflow that uploads `website/` as the Pages artifact.
-- **Cloudflare Pages / Netlify:** set the build command to none and the output directory to `website`.
+To check the image locally:
 
-After deploying, set `og:image` in `index.html` to the absolute URL of `assets/img/og.png` (for example `https://touchdeck.example/assets/img/og.png`). Link previews in chat apps need an absolute URL.
+```bash
+docker build -t touchdeck-website website
+docker run --rm -p 8080:8080 touchdeck-website   # open http://localhost:8080
+```
+
+The image holds only `index.html`, `license.html` and `assets/`. It is still a plain static site, so any static host works too.
+
+`og:image` and `og:url` in `index.html` are absolute URLs on the live domain (link previews in chat apps need that). Change them if the domain changes.
 
 ## Rectangular board mockups
 
