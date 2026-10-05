@@ -1,0 +1,22 @@
+# Weekly update PRs for the website's nginx base image and for the actions the
+# workflows pin by commit SHA (Dependabot keeps the "# vN" comments in step).
+# A merged website/Dockerfile update rebuilds the image (website.yml); it goes live
+# on the next Portainer redeploy (Update the stack > Re-pull image and redeploy).
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /website
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Website"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]     # one PR for all action bumps
+    commit-message:
+      prefix: "CI"
