@@ -1,0 +1,55 @@
+# Builds the website image (website/Dockerfile) and pushes it to
+# ghcr.io/synexyconsulting/touchdeck-website, tagged `latest` and `sha-<commit>`.
+#
+#   push to main touching website/   -> build + push
+#   Actions > Website > Run workflow -> the same, on demand
+#
+# Deploying is manual and lives outside this repo (stack file: SynexyConsulting/websites, private):
+# in Portainer, Update the stack > Re-pull image. To roll back, pin an older sha-<commit> tag.
+# The package must be public (Package settings > Change visibility) so the VPS pulls without a login.
+# Actions are pinned to commit SHAs, the runner image to an exact version.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["website/**", ".github/workflows/website.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write           # push to this org's GHCR with GITHUB_TOKEN
+
+concurrency:
+  group: website
+  cancel-in-progress: false # let a push finish; the next run tags the newer commit
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/synexyconsulting/touchdeck-website
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: website
+          platforms: linux/amd64   # the VPS is x86_64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
