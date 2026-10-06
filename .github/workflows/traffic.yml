@@ -1,0 +1,58 @@
+# Saves GitHub's traffic numbers for this repo every day (views, clones, referrers,
+# popular pages), because GitHub itself keeps only 14 days. tools/github_traffic.py
+# writes them as CSV files to the `traffic` branch, which shares no history with main.
+#
+#   daily at 03:17 UTC               -> fetch, commit to `traffic` if anything changed
+#   Actions > Traffic > Run workflow -> the same, on demand
+#
+# Needs the repo secret TRAFFIC_TOKEN: a fine-grained personal access token for this
+# repository with "Administration: Read-only" (the Actions GITHUB_TOKEN can't read
+# traffic). GITHUB_TOKEN only pushes the branch.
+# GitHub turns off scheduled workflows after 60 days without repository activity;
+# re-enable it under Actions if that happens.
+name: Traffic
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write           # push to the traffic branch
+
+concurrency:
+  group: traffic
+  cancel-in-progress: false
+
+jobs:
+  save:
+    if: github.repository == 'SynexyConsulting/TouchDeck'   # not on forks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Check out the traffic branch into data/
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin traffic; then
+            git worktree add --detach data FETCH_HEAD
+          else
+            # First run: an empty branch with no history (works on any git version).
+            git worktree add --detach data
+            git -C data checkout --quiet --orphan traffic
+            git -C data rm -r --quiet --force .
+          fi
+
+      - name: Save today's traffic
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: python3 tools/github_traffic.py "$GITHUB_REPOSITORY" data
+
+      - name: Commit and push
+        working-directory: data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git commit --quiet -m "Traffic $(date -u +%F)"
+          git push origin HEAD:traffic
