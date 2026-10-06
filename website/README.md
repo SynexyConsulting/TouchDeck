@@ -8,6 +8,7 @@ A static brochure site: plain HTML, CSS and JavaScript, no build step.
 | `license.html` | The licence in plain words (adapted from `docs/license.md`) |
 | `assets/css/site.css` | All styles. Colours come from the Windows app (`App.xaml`) |
 | `assets/js/site.js` | Scroll behaviour: screen switching, the console demo, GSAP scroll effects |
+| `assets/js/analytics.js` | GA4 events: downloads, outbound and in-page links, FAQ, sections seen (see Analytics) |
 | `assets/screens/` | The boards' screens, rendered from the firmware's own page code |
 | `assets/img/` | Logo, Open Graph image, Windows and macOS app screenshots |
 | `tools/render_screens.py` | Re-renders `assets/screens/` |
@@ -39,6 +40,27 @@ docker run --rm -p 8080:8080 touchdeck-website   # open http://localhost:8080
 The image holds only `index.html`, `license.html` and `assets/`. It is still a plain static site, so any static host works too.
 
 `og:image` and `og:url` in `index.html` are absolute URLs on the live domain (link previews in chat apps need that). Change them if the domain changes.
+
+## Analytics
+
+Both pages load the Google tag (GA4, `G-07TPQJ6MLL`) at the top of `<head>`. Only the live hostname reports, so local previews and the Docker check don't add test visits. To watch hits arrive in GA4's DebugView, add `?ga_debug=1` to a live URL.
+
+`assets/js/analytics.js` adds these events to the page views. It sorts links by where they point, so new links need no extra markup:
+
+| Event | Sent when | Parameters |
+|---|---|---|
+| `download_click` | a link to the TouchDeckUpdates releases is clicked | `link_text`, `link_url`, `section` |
+| `outbound_click` | any other link off the site is clicked | `link_domain`, `link_url`, `link_text`, `section` |
+| `nav_click` | an in-page anchor or another page of the site is clicked | `link_text`, `target`, `section` |
+| `faq_open` | an FAQ answer is opened | `question` |
+| `demo_replay` | the console demo is replayed | |
+| `section_view` | a section reaches the middle of the window (once per page load) | `section` |
+
+`section` is the id of the `<section>` the element is in, or `header`, `main` or `footer`. A download card's `link_text` is its title (Windows, macOS, All versions). To use `link_text`, `section`, `question` and the other parameters as report dimensions, register each as a custom dimension (event scope) in GA4 under Admin > Custom definitions. Until then, GA4 still counts the events.
+
+The Google tag has no Subresource Integrity hash, unlike GSAP: Google serves a different, frequently updated `gtag.js` for each measurement ID.
+
+The GitHub repo's own traffic (views, clones, referrers) is saved separately, by `.github/workflows/traffic.yml`, to the `traffic` branch.
 
 ## Rectangular board mockups
 
