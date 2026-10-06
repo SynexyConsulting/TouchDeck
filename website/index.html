@@ -3,6 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Google tag (gtag.js). Events: assets/js/analytics.js. Only the live site reports;
+     add ?ga_debug=1 to a URL to see its hits in GA4's DebugView. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-07TPQJ6MLL"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  if (location.hostname !== 'touchdeck.synexyconsulting.com') window['ga-disable-G-07TPQJ6MLL'] = true;
+  gtag('js', new Date());
+  gtag('config', 'G-07TPQJ6MLL', /[?&]ga_debug=1/.test(location.search) ? { debug_mode: true } : {});
+</script>
 <title>Touch Deck: a little touch screen that types for you</title>
 <meta name="description" content="Touch Deck is free, open-source firmware that turns a $15-25 touch-screen board into a desk companion: an analog watch, a clipboard that types, and a mouse jiggler. Plain USB, no drivers. GPL-3.0.">
 <meta name="theme-color" content="#07090D">
@@ -457,5 +467,6 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <script src="assets/js/site.js" defer></script>
+<script src="assets/js/analytics.js" defer></script>
 </body>
 </html>
