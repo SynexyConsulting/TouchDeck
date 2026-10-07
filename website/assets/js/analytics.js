@@ -1,6 +1,8 @@
 // Touch Deck website: GA4 events on top of the page view the Google tag in <head> sends.
 // Links are classified by where they go, so new links are tracked without extra markup:
 //   download_click  links to the TouchDeckUpdates releases
+//   affiliate_click shop links (rel="sponsored"); `board` is the row's board in Where to buy
+//   donate_click    links to Ko-fi
 //   outbound_click  any other link off this site
 //   nav_click       in-page anchors and the other pages of this site
 // plus faq_open, demo_replay and section_view (each section once per page load).
@@ -38,6 +40,12 @@
     if (url.host !== location.host) {
       if (/\/TouchDeckUpdates\/releases/.test(url.pathname)) {
         track("download_click", { link_text: text, link_url: url.href, section: section });
+      } else if (/\bsponsored\b/.test(a.getAttribute("rel") || "")) {
+        var row = a.closest("tr");
+        var board = row && row.querySelector("th") ? clean(row.querySelector("th").textContent) : "";
+        track("affiliate_click", { board: board, shop: text, link_domain: url.hostname, section: section });
+      } else if (/(^|\.)ko-fi\.com$/.test(url.hostname)) {
+        track("donate_click", { link_text: text, section: section });
       } else {
         track("outbound_click", { link_domain: url.hostname, link_url: url.href, link_text: text, section: section });
       }
