@@ -9,6 +9,7 @@ A static brochure site: plain HTML, CSS and JavaScript, no build step.
 | `assets/css/site.css` | All styles. Colours come from the Windows app (`App.xaml`) |
 | `assets/js/site.js` | Scroll behaviour: screen switching, the console demo, GSAP scroll effects |
 | `assets/js/analytics.js` | GA4 events: downloads, outbound and in-page links, FAQ, sections seen (see Analytics) |
+| `assets/js/consent.js` | Cookie consent banner and the footer's Cookie settings (see Analytics) |
 | `assets/screens/` | The boards' screens, rendered from the firmware's own page code |
 | `assets/img/` | Logo, Open Graph image, Windows and macOS app screenshots |
 | `tools/render_screens.py` | Re-renders `assets/screens/` |
@@ -61,6 +62,20 @@ Both pages load the Google tag (GA4, `G-07TPQJ6MLL`) at the top of `<head>`. Onl
 `section` is the id of the `<section>` the element is in, or `header`, `main` or `footer`. A download card's `link_text` is its title (Windows, macOS, All versions). To use `link_text`, `section`, `question` and the other parameters as report dimensions, register each as a custom dimension (event scope) in GA4 under Admin > Custom definitions. Until then, GA4 still counts the events.
 
 The Google tag has no Subresource Integrity hash, unlike GSAP: Google serves a different, frequently updated `gtag.js` for each measurement ID.
+
+### Consent
+
+The tag runs in Consent Mode v2. The defaults are set in each page's `<head>`, before `config`:
+
+- **No ads:** ad storage, ad user data and ad personalisation are always denied.
+- **EEA, UK and Switzerland:** analytics cookies are denied until the visitor accepts. The country list is the `region` array in `<head>`; Google applies it by the visitor's location.
+- **Everywhere else:** analytics cookies are granted until the visitor declines.
+
+`assets/js/consent.js` shows the banner to anyone who hasn't chosen yet. It saves the choice in `localStorage` (`td-consent`: `granted` or `denied`), and `<head>` applies the saved choice on every later page load. Declining also deletes existing `_ga` cookies. A `[data-consent-open]` button reopens the banner: Cookie settings in each footer, and in the licence page's Privacy section (`license.html#privacy`), which the banner links to. Keep that section accurate if what the site collects changes.
+
+## Links
+
+Every link to another site opens in a new tab (`target="_blank" rel="noopener"`; affiliate links keep `sponsored` as well). Links within the site open in the same tab. Do the same for new links. The navigation has Donate (Ko-fi, grey `pill-ghost`) next to Download. On narrow phones the brand shows only the logo, so both buttons fit.
 
 The GitHub repo's own traffic (views, clones, referrers) is saved separately, by `.github/workflows/traffic.yml`, to the `traffic` branch.
 

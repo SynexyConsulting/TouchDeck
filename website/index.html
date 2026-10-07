@@ -3,12 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Google tag (gtag.js). Events: assets/js/analytics.js. Only the live site reports;
-     add ?ga_debug=1 to a URL to see its hits in GA4's DebugView. -->
+<!-- Google tag (gtag.js). Events: assets/js/analytics.js, consent banner: assets/js/consent.js.
+     Only the live site reports; add ?ga_debug=1 to a URL to see its hits in GA4's DebugView. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-07TPQJ6MLL"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  // Consent Mode v2. No ads, so ad storage is always off. Analytics cookies wait for "Accept"
+  // in the EEA, UK and Switzerland (Google applies `region` by the visitor's location) and are
+  // on elsewhere until "Decline". A choice made in the banner is applied here on every page.
+  gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'granted' });
+  gtag('consent', 'default', { analytics_storage: 'denied', wait_for_update: 500, region: [
+    'AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL',
+    'PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH'] });
+  try { var tdc = localStorage.getItem('td-consent'); if (tdc === 'granted' || tdc === 'denied') gtag('consent', 'update', { analytics_storage: tdc }); } catch (e) {}
   if (location.hostname !== 'touchdeck.synexyconsulting.com') window['ga-disable-G-07TPQJ6MLL'] = true;
   gtag('js', new Date());
   gtag('config', 'G-07TPQJ6MLL', /[?&]ga_debug=1/.test(location.search) ? { debug_mode: true } : {});
@@ -41,7 +49,10 @@
       <a href="#open-source">Open source</a>
       <a href="#faq">FAQ</a>
     </nav>
-    <a class="pill pill-amber pill-sm" href="#download">Download</a>
+    <div class="nav-cta">
+      <a class="pill pill-ghost pill-sm" href="https://ko-fi.com/synexyconsulting" target="_blank" rel="noopener">Donate</a>
+      <a class="pill pill-amber pill-sm" href="#download">Download</a>
+    </div>
   </div>
 </header>
 
@@ -55,10 +66,10 @@
       <h1>A little touch screen that types for you.</h1>
       <p class="lede">Touch Deck is free firmware for a $15&ndash;25 touch-screen board. Plug it in over USB and it becomes a keyboard and mouse with three screens: an analog watch, a clipboard that types, and a jiggler that keeps your computer awake.</p>
       <div class="cta-row">
-        <a class="pill pill-amber" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+        <a class="pill pill-amber" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
           Download for Windows or Mac</a>
-        <a class="pill pill-ghost" href="https://github.com/SynexyConsulting/TouchDeck">
+        <a class="pill pill-ghost" href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>
           Read the source</a>
       </div>
@@ -290,15 +301,15 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
         <tbody>
           <tr>
             <th scope="row">Waveshare RP2040-Touch-LCD-1.69</th><td>1.69&Prime; rectangle</td><td>USB</td><td>Ready-made</td>
-            <td><a href="https://www.amazon.com/dp/B0DFG3TC9D?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=58388b2c36e3fd19167fd18a604782d1&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener">Amazon</a></td>
+            <td><a href="https://www.amazon.com/dp/B0DFG3TC9D?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=58388b2c36e3fd19167fd18a604782d1&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener" target="_blank">Amazon</a></td>
           </tr>
           <tr>
             <th scope="row">Waveshare RP2350-Touch-LCD-1.28</th><td>1.28&Prime; round</td><td>USB</td><td>Ready-made</td>
-            <td><a href="https://www.amazon.com/dp/B0DMV68KJW?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=08acfafa280e82de00384d43ef90ba2e&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener">Amazon</a></td>
+            <td><a href="https://www.amazon.com/dp/B0DMV68KJW?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=08acfafa280e82de00384d43ef90ba2e&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener" target="_blank">Amazon</a></td>
           </tr>
           <tr>
             <th scope="row">ESP32-2424S012C (ESP32-C3)</th><td>1.28&Prime; round</td><td>Bluetooth LE or USB</td><td>From source (PlatformIO)</td>
-            <td><a href="https://www.amazon.com/dp/B0DRYNWBV2?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=cafe35f6aa80be160ea86b983ac6a1fc&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener">Amazon</a></td>
+            <td><a href="https://www.amazon.com/dp/B0DRYNWBV2?linkCode=ll2&amp;tag=thecronjob-20&amp;linkId=cafe35f6aa80be160ea86b983ac6a1fc&amp;language=en_US&amp;ref_=as_li_ss_tl" rel="sponsored noopener" target="_blank">Amazon</a></td>
           </tr>
         </tbody>
       </table>
@@ -391,23 +402,23 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
         <p class="lede" style="margin-top:18px">The apps include the firmware for the RP2040 and RP2350 boards and install it for you. The firmware files are there too, if you&rsquo;d rather drop one onto the board yourself.</p>
       </div>
       <div class="dl-list">
-        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
           <div><strong>Windows</strong><span>Latest release: installer (.msi) and firmware (.uf2)</span></div>
         </a>
-        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
           <div><strong>macOS</strong><span>Same releases page. The .pkg arrives with the next release.</span></div>
         </a>
-        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
           <div><strong>All versions</strong><span>Every app and firmware release</span></div>
         </a>
-        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeck">
+        <a class="dl" href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>
           <div><strong>Source code</strong><span>Firmware, apps and tools on GitHub</span></div>
         </a>
-        <a class="dl" href="https://ko-fi.com/synexyconsulting">
+        <a class="dl" href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
           <div><strong>Support Touch Deck</strong><span>Free for everyone. A tip on Ko-fi keeps it going</span></div>
         </a>
@@ -455,7 +466,7 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       </details>
       <details>
         <summary>My board isn&rsquo;t on the list. Can I add it?</summary>
-        <div class="answer"><p>Probably. The firmware is split into page drawing, touch, display and USB layers, and the round pages are already shared between two chips. <a href="https://github.com/SynexyConsulting/TouchDeck">Open an issue or a pull request</a>.</p></div>
+        <div class="answer"><p>Probably. The firmware is split into page drawing, touch, display and USB layers, and the round pages are already shared between two chips. <a href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">Open an issue or a pull request</a>.</p></div>
       </details>
     </div>
   </div>
@@ -469,15 +480,16 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
       <a class="brand" href="#top"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
       <p style="margin-top:14px">Free software under the GNU General Public License, version 3 or later. You may use it, study it, change it and share it. <a href="license.html">The licence in plain words</a>.</p>
       <p>&copy; 2026 Synexy Consulting</p>
+      <p><button type="button" class="link-button" data-consent-open>Cookie settings</button></p>
     </div>
     <div>
       <h4>Get it</h4>
       <ul>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">Latest release</a></li>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">All versions</a></li>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeck">Source code</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest" rel="noopener" target="_blank">Latest release</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases" rel="noopener" target="_blank">All versions</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">Source code</a></li>
         <li><a href="#buy">Where to buy a board</a></li>
-        <li><a href="https://ko-fi.com/synexyconsulting">Support on Ko-fi</a></li>
+        <li><a href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">Support on Ko-fi</a></li>
       </ul>
     </div>
     <div>
@@ -496,6 +508,7 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <script src="assets/js/site.js" defer></script>
+<script src="assets/js/consent.js" defer></script>
 <script src="assets/js/analytics.js" defer></script>
 </body>
 </html>

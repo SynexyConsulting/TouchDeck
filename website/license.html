@@ -3,12 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Google tag (gtag.js). Events: assets/js/analytics.js. Only the live site reports;
-     add ?ga_debug=1 to a URL to see its hits in GA4's DebugView. -->
+<!-- Google tag (gtag.js). Events: assets/js/analytics.js, consent banner: assets/js/consent.js.
+     Only the live site reports; add ?ga_debug=1 to a URL to see its hits in GA4's DebugView. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-07TPQJ6MLL"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  // Consent Mode v2. No ads, so ad storage is always off. Analytics cookies wait for "Accept"
+  // in the EEA, UK and Switzerland (Google applies `region` by the visitor's location) and are
+  // on elsewhere until "Decline". A choice made in the banner is applied here on every page.
+  gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'granted' });
+  gtag('consent', 'default', { analytics_storage: 'denied', wait_for_update: 500, region: [
+    'AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL',
+    'PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH'] });
+  try { var tdc = localStorage.getItem('td-consent'); if (tdc === 'granted' || tdc === 'denied') gtag('consent', 'update', { analytics_storage: tdc }); } catch (e) {}
   if (location.hostname !== 'touchdeck.synexyconsulting.com') window['ga-disable-G-07TPQJ6MLL'] = true;
   gtag('js', new Date());
   gtag('config', 'G-07TPQJ6MLL', /[?&]ga_debug=1/.test(location.search) ? { debug_mode: true } : {});
@@ -33,15 +41,18 @@
       <a href="index.html#apps">Apps</a>
       <a href="index.html#faq">FAQ</a>
     </nav>
-    <a class="pill pill-amber pill-sm" href="index.html#download">Download</a>
+    <div class="nav-cta">
+      <a class="pill pill-ghost pill-sm" href="https://ko-fi.com/synexyconsulting" target="_blank" rel="noopener">Donate</a>
+      <a class="pill pill-amber pill-sm" href="index.html#download">Download</a>
+    </div>
   </div>
 </header>
 
 <main id="main" class="doc">
   <div class="wrap">
     <h1>Touch Deck licence</h1>
-    <p class="lede">Copyright &copy; 2026 <a href="https://github.com/SynexyConsulting">Synexy Consulting</a>.</p>
-    <p>Touch Deck (the firmware, the Windows and macOS apps, the host renderers and the tools in its repository) is free software, licensed under the <strong>GNU General Public License, version 3 or (at your option) any later version</strong> (GPL-3.0-or-later). The full licence text is in the <a href="https://github.com/SynexyConsulting/TouchDeck/blob/main/LICENSE"><code>LICENSE</code></a> file and at <a href="https://www.gnu.org/licenses/gpl-3.0.html">gnu.org/licenses/gpl-3.0.html</a>. Third-party components keep their own licences (see <a href="#third-party">below</a>).</p>
+    <p class="lede">Copyright &copy; 2026 <a href="https://github.com/SynexyConsulting" rel="noopener" target="_blank">Synexy Consulting</a>.</p>
+    <p>Touch Deck (the firmware, the Windows and macOS apps, the host renderers and the tools in its repository) is free software, licensed under the <strong>GNU General Public License, version 3 or (at your option) any later version</strong> (GPL-3.0-or-later). The full licence text is in the <a href="https://github.com/SynexyConsulting/TouchDeck/blob/main/LICENSE" rel="noopener" target="_blank"><code>LICENSE</code></a> file and at <a href="https://www.gnu.org/licenses/gpl-3.0.html" rel="noopener" target="_blank">gnu.org/licenses/gpl-3.0.html</a>. Third-party components keep their own licences (see <a href="#third-party">below</a>).</p>
 
     <div class="plain">
       <h2>In plain words</h2>
@@ -51,7 +62,7 @@
         <li><strong>You may</strong> study it, change it and share it, changed or not.</li>
         <li><strong>If you share it</strong> (the firmware, an app, or a board with Touch Deck on it), you must also share the source code of that version, including your changes, under this same licence, and keep the copyright notices. Nobody may turn it into a closed, secret product.</li>
         <li><strong>You may charge</strong> for copies, boards or support, but the people who get it from you get the same rights: they can see the source, change it and share it too.</li>
-        <li><strong><a href="https://ko-fi.com/synexyconsulting">Donations</a> are welcome</strong> and don&rsquo;t change any of this.</li>
+        <li><strong><a href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">Donations</a> are welcome</strong> and don&rsquo;t change any of this.</li>
         <li>It comes <strong>as is</strong>, with no warranty.</li>
       </ul>
     </div>
@@ -59,13 +70,18 @@
     <h2>Notice</h2>
     <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
     <p>This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.</p>
-    <p>You should have received a copy of the GNU General Public License along with this program. If not, see <a href="https://www.gnu.org/licenses/">gnu.org/licenses</a>.</p>
+    <p>You should have received a copy of the GNU General Public License along with this program. If not, see <a href="https://www.gnu.org/licenses/" rel="noopener" target="_blank">gnu.org/licenses</a>.</p>
 
     <h2>Contributions</h2>
     <p>Contributions (for example pull requests) are accepted under the same licence, GPL-3.0-or-later. By submitting one, you confirm that you have the right to license it this way.</p>
 
     <h2>Where the source is</h2>
-    <p>The complete source for every release is in the public repository <a href="https://github.com/SynexyConsulting/TouchDeck">github.com/SynexyConsulting/TouchDeck</a>. Each release is tagged there (<code>app-vX.Y.Z</code> for the apps, <code>fw-vX.Y.Z</code> for firmware), and the release files in <a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">SynexyConsulting/TouchDeckUpdates</a> are built from those tags.</p>
+    <p>The complete source for every release is in the public repository <a href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">github.com/SynexyConsulting/TouchDeck</a>. Each release is tagged there (<code>app-vX.Y.Z</code> for the apps, <code>fw-vX.Y.Z</code> for firmware), and the release files in <a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases" rel="noopener" target="_blank">SynexyConsulting/TouchDeckUpdates</a> are built from those tags.</p>
+
+    <h2 id="privacy">Privacy</h2>
+    <p>This website uses Google Analytics 4 to count visits and to learn which parts help people: which sections are read, which downloads and links are clicked, and which FAQ answers are opened. There are no ads, and nothing is sold. Google processes this data under <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">its own privacy policy</a>.</p>
+    <p>In the EU, the UK and Switzerland, analytics cookies are set only after you choose Accept. Elsewhere they are on unless you choose Decline. You can change your choice at any time with <button type="button" class="link-button inline" data-consent-open>Cookie settings</button>, also at the bottom of every page.</p>
+    <p>The Touch Deck apps and the board firmware collect no usage data. The apps go online only to check GitHub for updates. Shop links lead to Amazon and donations to Ko-fi; those sites have their own privacy policies.</p>
 
     <h2 id="third-party">Third-party components</h2>
     <p>These components are included in, or used to build, Touch Deck. Each stays under its own licence, and all of them can be combined with GPL-3.0 software. Their licence texts and notices must be kept with any copy.</p>
@@ -99,15 +115,16 @@
       <a class="brand" href="index.html"><img src="assets/img/logo.svg" alt="" width="30" height="30">Touch Deck</a>
       <p style="margin-top:14px">Free software under GPL-3.0-or-later.</p>
       <p>&copy; 2026 Synexy Consulting</p>
+      <p><button type="button" class="link-button" data-consent-open>Cookie settings</button></p>
     </div>
     <div>
       <h4>Get it</h4>
       <ul>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest">Latest release</a></li>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases">All versions</a></li>
-        <li><a href="https://github.com/SynexyConsulting/TouchDeck">Source code</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest" rel="noopener" target="_blank">Latest release</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeckUpdates/releases" rel="noopener" target="_blank">All versions</a></li>
+        <li><a href="https://github.com/SynexyConsulting/TouchDeck" rel="noopener" target="_blank">Source code</a></li>
         <li><a href="index.html#buy">Where to buy a board</a></li>
-        <li><a href="https://ko-fi.com/synexyconsulting">Support on Ko-fi</a></li>
+        <li><a href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">Support on Ko-fi</a></li>
       </ul>
     </div>
     <div>
@@ -119,6 +136,7 @@
     </div>
   </div>
 </footer>
+<script src="assets/js/consent.js" defer></script>
 <script src="assets/js/analytics.js" defer></script>
 </body>
 </html>
