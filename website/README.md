@@ -50,6 +50,8 @@ Both pages load the Google tag (GA4, `G-07TPQJ6MLL`) at the top of `<head>`. Onl
 | Event | Sent when | Parameters |
 |---|---|---|
 | `download_click` | a link to the TouchDeckUpdates releases is clicked | `link_text`, `link_url`, `section` |
+| `affiliate_click` | a shop link (`rel="sponsored"`) is clicked | `board` (its row in Where to buy), `shop`, `link_domain`, `section` |
+| `donate_click` | a Ko-fi link is clicked | `link_text`, `section` |
 | `outbound_click` | any other link off the site is clicked | `link_domain`, `link_url`, `link_text`, `section` |
 | `nav_click` | an in-page anchor or another page of the site is clicked | `link_text`, `target`, `section` |
 | `faq_open` | an FAQ answer is opened | `question` |
@@ -85,4 +87,15 @@ It needs a C compiler (Visual Studio's C++ tools on Windows, `cc` on macOS/Linux
 - Downloads: https://github.com/SynexyConsulting/TouchDeckUpdates/releases/latest and /releases
 - Source: https://github.com/SynexyConsulting/TouchDeck
 - When the macOS .pkg is published, update its line in the Download section of `index.html`.
-- When the ESP32-C3 firmware is published, drop the PlatformIO note on its board card.
+- When the ESP32-C3 firmware is published, drop the PlatformIO note on its board card and set its Firmware cell in Where to buy to "Ready-made".
+- Donations: https://ko-fi.com/synexyconsulting (Download section, footer of both pages, "Donations are welcome" on the licence page).
+
+## Where to buy (affiliate links)
+
+The table under the board cards (`#buy` in `index.html`) has one row per board. A compatible board can have a row without having a card.
+
+- **Add a board:** copy a `<tr>`. The board name goes in the row's `<th>`, because analytics reports it as `board`.
+- **Add a shop:** put another link in the last cell, with the shop's name as its text, for example `<a href="…" rel="sponsored noopener">AliExpress</a>`.
+- **Keep `rel="sponsored"` on every affiliate link.** It tells search engines the link is paid, and analytics uses it to send `affiliate_click` instead of `outbound_click`.
+- **Amazon links:** keep them short, as `https://www.amazon.com/dp/<ASIN>?linkCode=ll2&tag=thecronjob-20&linkId=…`. Leave out the search-session parameters (`crid`, `dib`, `qid`, `keywords`), and write `&` as `&amp;` in HTML.
+- **Disclosure:** the fine print under the table carries the Amazon Associates statement that the programme requires. Keep it, and name any new affiliate programme there too.

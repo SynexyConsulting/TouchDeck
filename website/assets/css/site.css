@@ -296,6 +296,22 @@ main { overflow-x: clip; }
 .board-card p { font-size: 16px; color: var(--clip); margin: 0; }
 .board-card .note { margin-top: auto; padding-top: 18px; font-size: 14px; color: var(--dim); }
 .fineprint { margin-top: 26px; font-size: 15px; color: var(--dim); max-width: 60em; }
+/* Where to buy: a plain table under the cards; boards without a card get a row here */
+.buy-head { margin: 56px 0 18px; font-size: 26px; }
+.buy-table { border-radius: var(--radius-l); border: 1px solid #1d2533; background: linear-gradient(180deg, var(--surf) 0%, var(--inner) 100%); padding: 6px 10px; }
+.buy-table table { width: 100%; border-collapse: collapse; font-size: 16px; min-width: 640px; }
+.buy-table th, .buy-table td { text-align: left; padding: 14px 12px; vertical-align: middle; }
+.buy-table thead th { font-size: 15px; color: var(--dim); font-weight: 600; }
+.buy-table tbody th, .buy-table tbody td { border-top: 1px solid var(--surf2); }
+.buy-table tbody th { color: var(--text); font-weight: 600; }
+.buy-table td { color: var(--clip); }
+.buy-table td a { color: var(--accent); font-weight: 600; }
+/* Phones: drop Screen and Connects by (the cards show them) so the shop column stays in view */
+@media (max-width: 700px) {
+  .buy-table table { min-width: 0; font-size: 15px; }
+  .buy-table th:nth-child(2), .buy-table td:nth-child(2), .buy-table th:nth-child(3), .buy-table td:nth-child(3) { display: none; }
+  .buy-table th, .buy-table td { padding: 12px 8px; }
+}
 @media (max-width: 980px) { .boards { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; } .board-card .board { width: 46%; } .board-card .board.round { width: 52%; } }
 
 /* apps: one full-width row per app, screenshots scaled proportionally */
