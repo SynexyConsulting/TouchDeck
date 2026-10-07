@@ -11,7 +11,7 @@ A static brochure site: plain HTML, CSS and JavaScript, no build step.
 | `assets/js/analytics.js` | GA4 events: downloads, outbound and in-page links, FAQ, sections seen (see Analytics) |
 | `assets/js/consent.js` | Cookie consent banner and the footer's Cookie settings (see Analytics) |
 | `assets/screens/` | The boards' screens, rendered from the firmware's own page code |
-| `assets/img/` | Logo, Open Graph image, Windows and macOS app screenshots |
+| `assets/img/` | Logo, Open Graph image, Windows and macOS app screenshots, the donation card's picture (`donate-hero.webp`) |
 | `tools/render_screens.py` | Re-renders `assets/screens/` |
 
 External resources: Barlow and JetBrains Mono from Google Fonts, and GSAP 3.12.5 + ScrollTrigger from cdnjs (pinned with Subresource Integrity hashes). Without GSAP the page still works: screens switch and the console types, only the scrubbed tilt, zoom and parallax are missing. With `prefers-reduced-motion: reduce` those effects are off.
@@ -75,7 +75,7 @@ The tag runs in Consent Mode v2. The defaults are set in each page's `<head>`, b
 
 ## Links
 
-Every link to another site opens in a new tab (`target="_blank" rel="noopener"`; affiliate links keep `sponsored` as well). Links within the site open in the same tab. Do the same for new links. The navigation has Donate (Ko-fi, grey `pill-ghost`) next to Download. On narrow phones the brand shows only the logo, so both buttons fit.
+Every link to another site opens in a new tab (`target="_blank" rel="noopener"`; affiliate links keep `sponsored` as well). Links within the site open in the same tab. Do the same for new links. The navigation has **Tip on Ko-fi** (amber outline `pill-line` with a cup icon, `.nav-tip`) next to Download. On narrow phones the brand shows only the logo, and below 380 px the tip button shows just the cup (its label stays for screen readers).
 
 The GitHub repo's own traffic (views, clones, referrers) is saved separately, by `.github/workflows/traffic.yml`, to the `traffic` branch.
 
@@ -103,7 +103,15 @@ It needs a C compiler (Visual Studio's C++ tools on Windows, `cc` on macOS/Linux
 - Source: https://github.com/SynexyConsulting/TouchDeck
 - When the macOS .pkg is published, update its line in the Download section of `index.html`.
 - When the ESP32-C3 firmware is published, drop the PlatformIO note on its board card and set its Firmware cell in Where to buy to "Ready-made".
-- Donations: https://ko-fi.com/synexyconsulting (Download section, footer of both pages, "Donations are welcome" on the licence page).
+- Donations: https://ko-fi.com/synexyconsulting (nav Tip on Ko-fi on both pages, the donation card in Download, both footers, "Donations are welcome" on the licence page).
+
+## Donation card
+
+Under "Get Touch Deck." in the Download section (`aside.donate`). It comes after the download list in the HTML, so on one column (phones) the downloads come first; on wide screens the grid puts it under the heading. The picture sits in a glass-style frame with concentric corners (card 30px = frame 20px + 10px padding) and keeps its own 7:4 shape.
+
+`assets/img/donate-hero.webp` was made with Adobe Firefly (Firefly Image 5, Widescreen 16:9, 1K, which comes out at 1344x768) and converted to WebP at quality 82 (27 KB). The prompt, to make a variant:
+
+> Cozy still life on a dark walnut desk at night. A small glossy ceramic piggy bank, side view, with a US five-dollar bill folded lengthwise and tucked halfway into the coin slot on its back, the rest of the bill sticking up out of the slot. Next to it, a simple ceramic cup of black coffee with a light wisp of steam. In front, a small folded white card standing like a tent, handwritten "Thank you" on it. Warm amber lamp light from one side, soft shadows, deep navy-black background, shallow depth of field, product photography, uncluttered, no coins
 
 ## Where to buy (affiliate links)
 
