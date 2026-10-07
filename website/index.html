@@ -50,7 +50,9 @@
       <a href="#faq">FAQ</a>
     </nav>
     <div class="nav-cta">
-      <a class="pill pill-ghost pill-sm" href="https://ko-fi.com/synexyconsulting" target="_blank" rel="noopener">Donate</a>
+      <a class="pill pill-line pill-sm nav-tip" href="https://ko-fi.com/synexyconsulting" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 9h1.5a2.5 2.5 0 0 1 0 5H16M8 3v2M11 3v2M14 3v2"/></svg>
+        <span class="nav-tip-label">Tip on Ko-fi</span></a>
       <a class="pill pill-amber pill-sm" href="#download">Download</a>
     </div>
   </div>
@@ -418,11 +420,18 @@ deploy@build-vm-02:~$ </span><span class="typed" id="typed"></span><span class="
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>
           <div><strong>Source code</strong><span>Firmware, apps and tools on GitHub</span></div>
         </a>
-        <a class="dl" href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
-          <div><strong>Support Touch Deck</strong><span>Free for everyone. A tip on Ko-fi keeps it going</span></div>
-        </a>
       </div>
+      <!-- Donation card. The picture is framed like a board's glass (see .donate-hero in site.css). -->
+      <aside class="donate" aria-labelledby="donate-title">
+        <div class="donate-hero"><img src="assets/img/donate-hero.webp" alt="" width="1344" height="768" loading="lazy"></div>
+        <div class="donate-body">
+          <h3 id="donate-title">Keep the jiggler jiggling.</h3>
+          <p>Touch Deck has no ads, no account and no price tag. Tips pay for test boards and the next release.</p>
+          <a class="pill pill-line pill-sm" href="https://ko-fi.com/synexyconsulting" rel="noopener" target="_blank">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 9h1.5a2.5 2.5 0 0 1 0 5H16M8 3v2M11 3v2M14 3v2"/></svg>
+            Tip on Ko-fi</a>
+        </div>
+      </aside>
     </div>
   </div>
 </section>
