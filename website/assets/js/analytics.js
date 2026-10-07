@@ -9,10 +9,9 @@
   "use strict";
   if (typeof window.gtag !== "function") return;
 
+  // GA4's gtag already sends with sendBeacon, so a hit survives the click navigating away.
   function track(name, params) {
-    params = params || {};
-    params.transport_type = "beacon"; // still sent when the click navigates away
-    window.gtag("event", name, params);
+    window.gtag("event", name, params || {});
   }
 
   function clean(text) {
