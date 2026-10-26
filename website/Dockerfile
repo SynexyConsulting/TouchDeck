@@ -3,7 +3,7 @@
 # The stack that runs it behind Traefik lives in the private SynexyConsulting/websites repo.
 #
 #   docker build -t touchdeck-website website && docker run --rm -p 8080:8080 touchdeck-website
-FROM nginxinc/nginx-unprivileged:1.31.6-alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Only what the page uses: README.md and tools/ stay out of the image.
